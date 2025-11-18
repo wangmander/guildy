@@ -22,10 +22,10 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={`${inter.variable} antialiased`}>
-      <body className="bg-gray-50">
+    <html lang="en" className={`${inter.variable} antialiased h-screen overflow-hidden`}>
+      <body className="bg-gray-50 h-screen overflow-hidden">
         <TopNav />
-        <main>{children}</main>
+        <main className="h-[calc(100vh-64px)] overflow-hidden">{children}</main>
       </body>
     </html>
   )

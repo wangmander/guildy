@@ -73,24 +73,26 @@ export default function PipelinesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl min-h-screen flex flex-col">
-      <div className="flex flex-col lg:flex-row flex-1 border-x border-gray-300">
+    <div className="mx-auto max-w-7xl h-[calc(100vh-64px)] flex flex-col overflow-hidden">
+      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
         {/* Left Panel - Pipeline Cards */}
-        <div className="w-full lg:w-1/2 border-r-0 lg:border-r border-gray-200 border-b lg:border-b-0 flex flex-col">
-          <div className="p-4 sm:p-6 lg:p-8 flex flex-col">
-            <div className="mb-4 lg:mb-6">
+        <div className="w-full lg:w-1/2 border-b lg:border-b-0 flex flex-col overflow-y-auto custom-scrollbar">
+          <div className="p-4 sm:p-6 lg:p-8 flex flex-col min-h-full">
+            <div className="mb-4 lg:mb-6 flex-shrink-0">
               <h1 className="text-xl lg:text-2xl font-bold text-gray-900">Interview Pipelines</h1>
               <p className="text-sm text-gray-600 mt-1">
                 Everything gets auto-found and organized—so you can focus on winning, not tracking.
               </p>
             </div>
 
-            <PipelineCardList jobs={jobs} onSelect={handleSelectJob} selectedJobId={selectedJob?.id} />
+            <div className="flex-1">
+              <PipelineCardList jobs={jobs} onSelect={handleSelectJob} selectedJobId={selectedJob?.id} />
+            </div>
           </div>
         </div>
 
         {/* Right Panel - Job Details (Desktop Only) */}
-        <div className="hidden lg:block w-1/2">
+        <div className="hidden lg:block w-1/2 overflow-y-auto bg-white custom-scrollbar">
           <JobDetailPanel job={selectedJob} onSaveNotes={handleSaveNotes} />
         </div>
 

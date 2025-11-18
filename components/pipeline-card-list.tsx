@@ -38,14 +38,14 @@ export function PipelineCardList({ jobs, onSelect, selectedJobId }: PipelineCard
   })
 
   return (
-    <div className="flex flex-col">
-      <div className="space-y-4 mb-6">
+    <div className="flex flex-col min-h-full">
+      <div className="space-y-4 flex-1">
         {sortedJobs.map((job) => (
           <PipelineCard key={job.id} job={job} onClick={() => onSelect(job)} isSelected={job.id === selectedJobId} />
         ))}
       </div>
       
-      <div className="border-t border-gray-200 pt-4 mt-6">
+      <div className="border-t border-gray-200 pt-4 mt-6 flex-shrink-0">
         <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-gray-500">
           <Link href="/privacy" className="hover:text-gray-900 transition-colors">
             Privacy Policy
