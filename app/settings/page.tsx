@@ -1,4 +1,5 @@
 "use client"
+
 export const dynamic = "force-dynamic"
 
 import { GoogleConnectionCard } from "@/components/GoogleConnectionCard"
@@ -8,15 +9,14 @@ import { useSession } from "next-auth/react"
 
 export default function SettingsPage() {
   const sessionResult = useSession()
-
   const session = sessionResult?.data
   const status = sessionResult?.status
 
   const connectedEmail = session?.user?.email ?? "Not connected"
 
   const handleDeleteAccount = () => {
-    if (confirm("Are you sure you want to delete your account? This action cannot be undone.")) {
-      alert("Account deletion requested. In production, this would fully delete the account.")
+    if (confirm("Are you sure you want to delete your account? This cannot be undone.")) {
+      alert("Account deletion requested.")
     }
   }
 
@@ -26,7 +26,6 @@ export default function SettingsPage() {
 
       <div className="space-y-6">
 
-        {/* REAL Google Connect / Disconnect */}
         <Card>
           <CardHeader>
             <CardTitle>Email Connection</CardTitle>
@@ -41,7 +40,6 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Profile */}
         <Card>
           <CardHeader>
             <CardTitle>Profile</CardTitle>
@@ -57,7 +55,6 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Delete Account */}
         <Card className="border-red-200">
           <CardHeader>
             <CardTitle className="text-red-600">Delete Account</CardTitle>
@@ -66,12 +63,9 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-900">Delete Account</p>
-                <p className="text-sm text-gray-500">Permanently delete your account and all associated data.</p>
+                <p className="text-sm text-gray-500">Permanently delete your account and all data.</p>
               </div>
-              <Button 
-                variant="destructive"
-                onClick={handleDeleteAccount}
-              >
+              <Button variant="destructive" onClick={handleDeleteAccount}>
                 Delete Account
               </Button>
             </div>
