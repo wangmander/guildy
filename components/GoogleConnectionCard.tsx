@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button"
 import { FcGoogle } from "react-icons/fc"
 
 export function GoogleConnectionCard() {
-  const { data: session, status } = useSession()
+  const { data: session } = useSession()
 
   const isConnected = !!session?.user?.email
+  const email = session?.user?.email ?? ""
 
   return (
     <Card>
@@ -29,7 +30,7 @@ export function GoogleConnectionCard() {
 
           <div className="flex flex-col">
             <p className="font-medium">
-              {isConnected ? session.user.email : "Connect Gmail"}
+              {isConnected ? email : "Connect Gmail"}
             </p>
             <p className="text-sm text-gray-600">
               {isConnected
