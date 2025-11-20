@@ -6,9 +6,8 @@ import { Button } from "@/components/ui/button"
 import { useSession } from "next-auth/react"
 
 export default function SettingsPage() {
+  // MUST NOT destructure directly or Vercel build crashes
   const sessionResult = useSession()
-
-  // In build-time SSR, useSession() is undefined → avoid destructuring directly.
   const session = sessionResult?.data
   const status = sessionResult?.status
 
@@ -26,7 +25,7 @@ export default function SettingsPage() {
 
       <div className="space-y-6">
 
-        {/* REAL Google Connect / Disconnect */}
+        {/* ---- Google OAuth REAL CONNECT CARD ---- */}
         <Card>
           <CardHeader>
             <CardTitle>Email Connection</CardTitle>
@@ -37,11 +36,12 @@ export default function SettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {/* This is your real NextAuth connect/disconnect UI */}
             <GoogleConnectionCard />
           </CardContent>
         </Card>
 
-        {/* Profile */}
+        {/* ---- Profile ---- */}
         <Card>
           <CardHeader>
             <CardTitle>Profile</CardTitle>
@@ -57,7 +57,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Delete Account */}
+        {/* ---- Delete Account ---- */}
         <Card className="border-red-200">
           <CardHeader>
             <CardTitle className="text-red-600">Delete Account</CardTitle>
