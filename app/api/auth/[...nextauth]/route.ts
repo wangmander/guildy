@@ -1,5 +1,5 @@
-import NextAuth from "next-auth"
-import GoogleProvider from "next-auth/providers/google"
+import NextAuth from "next-auth";
+import GoogleProvider from "next-auth/providers/google";
 
 const handler = NextAuth({
   providers: [
@@ -8,14 +8,32 @@ const handler = NextAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       authorization: {
         params: {
-          scope: "openid email profile https://www.googleapis.com/auth/gmail.readonly",
+          scope:
+            "openid email profile https://www.googleapis.com/auth/gmail.readonly",
           access_type: "offline",
-          prompt: "consent"
-        }
-      }
-    })
+          prompt: "consent",
+        },
+      },
+    }),
   ],
-  session: { strategy: "jwt" }
-})
 
-export { handler as GET, handler as POST }
+  callbacks: {
+    async session({ session, token }) {
+      if (token?.email) {
+        session.user.email = token.email;
+      }
+      return session;
+    },
+
+    async jwt({ token, account }) {
+      if (account?.provider === "google") {
+        token.email = account.providerAccountId
+          ? token.email
+          : token.email;
+      }
+      return token;
+    },
+  },
+});
+
+export { handler as GET, handler as POST };
