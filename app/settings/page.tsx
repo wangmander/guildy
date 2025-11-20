@@ -6,7 +6,11 @@ import { Button } from "@/components/ui/button"
 import { useSession } from "next-auth/react"
 
 export default function SettingsPage() {
-  const { data: session, status } = useSession()
+  const sessionResult = useSession()
+
+  // In build-time SSR, useSession() is undefined → avoid destructuring directly.
+  const session = sessionResult?.data
+  const status = sessionResult?.status
 
   const connectedEmail = session?.user?.email ?? "Not connected"
 
