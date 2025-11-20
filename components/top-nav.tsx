@@ -27,13 +27,13 @@ export function TopNav() {
             <Link
               href="/pipelines"
               className={cn(
-                "px-3 py-2 text-sm font-medium rounded-md transition-colors",
+                "px-3 py-2 text-xs font-medium rounded-md transition-colors",
                 pathname === "/pipelines"
                   ? "bg-gray-100 text-gray-900"
                   : "text-gray-600 hover:text-gray-900 hover:bg-gray-50",
               )}
             >
-              Pipelines
+              Interview command center
             </Link>
           </div>
 

@@ -1,81 +1,134 @@
 "use client"
 
+import type React from "react"
+
 import type { Job } from "@/types"
 import { Card } from "@/components/ui/card"
+import { Calendar, ChevronRight } from "lucide-react"
+import { formatDistanceToNow } from "date-fns"
 
 interface PipelineCardProps {
   job: Job
   onClick: () => void
+  onActionClick?: (e: React.MouseEvent) => void
   isSelected: boolean
 }
 
-const stageLabels = {
-  APPLIED: "Applied",
-  RECRUITER_SCREEN: "Screening",
-  INTERVIEW: "Interview",
-  OFFER: "Offer",
-}
+const visualStages = ["Screening", "Hiring manager", "Presentation", "Full loop", "Offer discussion"]
 
-const stageOrder = ["APPLIED", "RECRUITER_SCREEN", "INTERVIEW", "OFFER"] as const
-
-export function PipelineCard({ job, onClick, isSelected }: PipelineCardProps) {
-  const currentStageIndex = stageOrder.indexOf(job.stage)
-  const progressPercentage = ((currentStageIndex + 1) / stageOrder.length) * 100
-
-  const getStageColor = (stage: string, index: number) => {
-    if (index < currentStageIndex) return "text-green-600" // Completed
-    if (index === currentStageIndex) return "text-blue-600" // Current
-    return "text-gray-400" // Future
+export function PipelineCard({ job, onClick, onActionClick, isSelected }: PipelineCardProps) {
+  const getVisualStageIndex = (stage: string) => {
+    switch (stage) {
+      case "APPLIED":
+        return 0 // Screening
+      case "RECRUITER_SCREEN":
+        return 1 // Hiring manager
+      case "INTERVIEW":
+        return 3 // Full loop (skipping Presentation for general interview)
+      case "OFFER":
+        return 4 // Offer discussion
+      default:
+        return 0
+    }
   }
 
-  const getStageIcon = (index: number) => {
-    if (index < currentStageIndex) return "●" // Completed
-    if (index === currentStageIndex) return "●" // Current
-    return "○" // Future
+  const currentStageIndex = getVisualStageIndex(job.stage)
+
+  const getMeetingDate = () => {
+    if (job.scheduledMeeting) {
+      const date = new Date(job.scheduledMeeting.date)
+      return {
+        date: date.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" }),
+        time: date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZoneName: "short" }),
+        relative: `In ${formatDistanceToNow(date).replace("about ", "")}`,
+      }
+    }
+    // Fallback for no meeting
+    const date = new Date()
+    date.setDate(date.getDate() + 2) // Fake future date for demo if no meeting
+    return {
+      date: date.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" }),
+      time: "3:00 PM PST",
+      relative: "In 2 days",
+    }
   }
+
+  const meetingInfo = getMeetingDate()
 
   return (
     <Card
-      className={`p-1.5 cursor-pointer transition-all hover:shadow-md ${
-        isSelected ? "ring-2 ring-blue-500" : ""
+      className={`p-3 cursor-pointer transition-all hover:shadow-md border-2 rounded-[3rem] ${
+        isSelected ? "border-blue-500 shadow-md" : "border-transparent hover:border-gray-200"
       }`}
-      style={isSelected ? { backgroundColor: "#EFF5FD" } : undefined}
+      style={isSelected ? { backgroundColor: "#F8FAFF" } : { backgroundColor: "white" }}
       onClick={onClick}
     >
-      <div className="flex items-start gap-1.5 mb-1">
-        <div className="w-6 h-6 bg-gray-100 rounded-lg flex items-center justify-center text-xs font-medium">
-          {job.company.name.charAt(0)}
-        </div>
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-gray-900 truncate text-xs">{job.company.name}</h3>
-          <p className="text-xs text-gray-600 truncate">{job.title}</p>
-          <p className="text-xs text-gray-500">{new Date(job.appliedAt).toLocaleDateString()}</p>
-        </div>
-      </div>
-
-      {/* Progress Bar */}
-      <div className="mb-1">
-        <div className="w-full bg-gray-200 rounded-full h-1">
-          <div
-            className="bg-blue-500 h-1 rounded-full transition-all duration-300"
-            style={{ width: `${progressPercentage}%` }}
-          />
-        </div>
-      </div>
-
-      {/* Stage Indicators */}
-      <div className="flex items-center justify-between text-xs mb-1">
-        {stageOrder.map((stage, index) => (
-          <div key={stage} className="flex flex-col items-center gap-0.5">
-            <span className={`text-xs ${getStageColor(stage, index)}`}>{getStageIcon(index)}</span>
-            <span className={`${getStageColor(stage, index)} font-medium text-xs`}>{stageLabels[stage]}</span>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-sm font-semibold text-gray-700">
+            {job.company.name.charAt(0)}
           </div>
-        ))}
+          <div className="flex items-baseline gap-2">
+            <h3 className="font-bold text-gray-900 text-base">{job.company.name}</h3>
+            <span className="text-gray-500 text-sm">{job.title}</span>
+          </div>
+        </div>
+        <div className="flex gap-1.5">
+          {job.tags?.slice(0, 2).map((tag) => (
+            <span key={tag} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-[10px] rounded-full font-medium">
+              {tag}
+            </span>
+          ))}
+        </div>
       </div>
 
-      {/* Next Step */}
-      <div className="pt-0.5 border-t border-gray-100">
-        <p className="text-xs text-gray-600">Next: {job.nextEtaText}</p>
+      {/* Pipeline Visual */}
+      <div className="bg-gray-100 rounded-lg p-1 flex justify-between mb-1 relative">
+        {visualStages.map((stage, index) => {
+          const isActive = index === currentStageIndex
+          return (
+            <div
+              key={stage}
+              className={`flex-1 py-2.5 px-1 text-center text-[10px] font-medium rounded-md transition-all relative z-10 flex items-center justify-center ${
+                isActive ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
+              }`}
+            >
+              {stage}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* CTA Section */}
+      <div className="flex border border-gray-200 rounded-full overflow-hidden bg-white h-16">
+        <div
+          className={`pl-4 pr-3 py-2 min-w-[110px] border-r border-gray-100 flex flex-col justify-center ${isSelected ? "bg-blue-50/30" : "bg-gray-50/30"}`}
+        >
+          <div className="flex items-center gap-1.5 text-blue-600 mb-0.5">
+            <Calendar className="w-3 h-3" />
+            <span className="text-[10px] font-semibold">{meetingInfo.date}</span>
+          </div>
+          <div className="text-[10px] font-medium text-gray-900 leading-tight">{meetingInfo.time}</div>
+          <div className="text-[10px] text-gray-500 leading-tight">{meetingInfo.relative}</div>
+        </div>
+
+        <div
+          className="flex-1 pl-3 pr-4 flex items-center justify-between hover:bg-gray-50 transition-colors group"
+          onClick={(e) => {
+            if (onActionClick) {
+              e.stopPropagation()
+              onActionClick(e)
+            }
+          }}
+        >
+          <span className="text-blue-700 font-medium text-xs line-clamp-2">
+            {job.scheduledMeeting
+              ? "Prepare for interview with mock questions"
+              : "Review company information and job description"}
+          </span>
+          <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-blue-500 transition-colors flex-shrink-0" />
+        </div>
       </div>
     </Card>
   )

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import type { Job } from "@/types"
 import { sampleJobs } from "@/data/sample-jobs"
 import { storage } from "@/lib/storage"
@@ -14,13 +14,21 @@ export default function PipelinesPage() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false)
+  const rightPanelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const storedJobs = storage.getJobs()
     const jobsToUse = storedJobs || sampleJobs
-    setJobs(jobsToUse)
-    if (jobsToUse.length > 0) {
-      setSelectedJob(jobsToUse[0])
+
+    const sortedJobs = [...jobsToUse].sort((a, b) => {
+      const dateA = a.scheduledMeeting ? new Date(a.scheduledMeeting.date).getTime() : Number.MAX_SAFE_INTEGER
+      const dateB = b.scheduledMeeting ? new Date(b.scheduledMeeting.date).getTime() : Number.MAX_SAFE_INTEGER
+      return dateA - dateB
+    })
+
+    setJobs(sortedJobs)
+    if (sortedJobs.length > 0) {
+      setSelectedJob(sortedJobs[0])
     }
   }, [])
 
@@ -62,6 +70,31 @@ export default function PipelinesPage() {
   const handleSelectJob = (job: Job) => {
     setSelectedJob(job)
     setIsMobileSheetOpen(true)
+    if (rightPanelRef.current) {
+      rightPanelRef.current.scrollTo({ top: 0, behavior: "smooth" })
+    }
+  }
+
+  const handleActionClick = (job: Job) => {
+    setSelectedJob(job)
+    setIsMobileSheetOpen(true)
+
+    // Use setTimeout to allow render to happen first
+    setTimeout(() => {
+      // Determine which section to scroll to based on job state
+      const targetSuffix = job.scheduledMeeting ? "interview-questions" : "company-intel"
+
+      const mobileEl = document.getElementById(`mobile-${targetSuffix}`)
+      const desktopEl = document.getElementById(`desktop-${targetSuffix}`)
+
+      if (mobileEl) {
+        mobileEl.scrollIntoView({ behavior: "smooth", block: "start" })
+      }
+
+      if (desktopEl) {
+        desktopEl.scrollIntoView({ behavior: "smooth", block: "start" })
+      }
+    }, 300) // Increased timeout slightly to ensure mobile sheet is mounted
   }
 
   const handleCloseMobileSheet = () => {
@@ -86,14 +119,19 @@ export default function PipelinesPage() {
             </div>
 
             <div className="flex-1">
-              <PipelineCardList jobs={jobs} onSelect={handleSelectJob} selectedJobId={selectedJob?.id} />
+              <PipelineCardList
+                jobs={jobs}
+                onSelect={handleSelectJob}
+                onActionClick={handleActionClick}
+                selectedJobId={selectedJob?.id}
+              />
             </div>
           </div>
         </div>
 
         {/* Right Panel - Job Details (Desktop Only) */}
-        <div className="hidden lg:block w-1/2 overflow-y-auto bg-white custom-scrollbar">
-          <JobDetailPanel job={selectedJob} onSaveNotes={handleSaveNotes} />
+        <div ref={rightPanelRef} className="hidden lg:block w-1/2 overflow-y-auto bg-white custom-scrollbar">
+          <JobDetailPanel job={selectedJob} onSaveNotes={handleSaveNotes} idPrefix="desktop" />
         </div>
 
         {/* Mobile Bottom Sheet */}

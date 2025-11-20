@@ -7,15 +7,29 @@ export const sampleJobs: Job[] = [
     company: {
       name: "Acme Health",
       logoUrl: "/healthcare-logo.png",
+      glassdoorRating: 4.2,
     },
     location: "Remote",
     industry: "Healthcare",
     jobType: "Design",
+    tags: ["Healthcare", "Design", "Remote"],
     stage: "RECRUITER_SCREEN",
     status: "FEEDBACK_PENDING",
     nextEtaText: "update in ~2-3d",
     appliedAt: "2024-01-15T10:00:00Z",
     postingUrl: "https://example.com/jobs/senior-product-designer",
+    recentNews: [
+      {
+        title: "Acme Health raises Series B to expand patient care platform",
+        url: "https://techcrunch.com",
+        date: "2023-11-15",
+      },
+      {
+        title: "Acme Health named one of the top digital health startups of 2024",
+        url: "https://healthnews.com",
+        date: "2024-01-10",
+      },
+    ],
     lastEmail: {
       fromName: "Sarah Johnson",
       fromEmail: "sarah.johnson@acmehealth.com",
@@ -60,15 +74,29 @@ export const sampleJobs: Job[] = [
     company: {
       name: "FinPeak",
       logoUrl: "/finance-logo.png",
+      glassdoorRating: 3.8,
     },
     location: "New York, NY",
     industry: "Finance",
     jobType: "Data",
+    tags: ["Fintech", "Data", "Hybrid"],
     stage: "INTERVIEW",
     status: "SCHEDULED",
     nextEtaText: "tomorrow 2pm",
     appliedAt: "2024-01-10T09:00:00Z",
     postingUrl: "https://example.com/jobs/data-scientist",
+    recentNews: [
+      {
+        title: "FinPeak launches new AI-driven risk assessment tool",
+        url: "https://bloomberg.com",
+        date: "2023-12-01",
+      },
+      {
+        title: "FinPeak CEO discusses the future of fintech on CNBC",
+        url: "https://cnbc.com",
+        date: "2024-01-05",
+      },
+    ],
     lastEmail: {
       fromName: "Michael Chen",
       fromEmail: "michael.chen@finpeak.com",
@@ -113,15 +141,29 @@ export const sampleJobs: Job[] = [
     company: {
       name: "Nebula Systems",
       logoUrl: "/tech-startup-logo.png",
+      glassdoorRating: 4.5,
     },
     location: "San Francisco, CA",
     industry: "Tech",
     jobType: "PM",
+    tags: ["B2B", "SaaS", "Product"],
     stage: "APPLIED",
     status: "WAITING",
     nextEtaText: "recruiter in ~5-10d",
     appliedAt: "2024-01-20T16:45:00Z",
     postingUrl: "https://example.com/jobs/product-manager-ii",
+    recentNews: [
+      {
+        title: "Nebula Systems secures major funding round",
+        url: "https://venturebeat.com",
+        date: "2023-10-10",
+      },
+      {
+        title: "Nebula Systems expands into European market",
+        url: "https://techcrunch.com",
+        date: "2023-12-12",
+      },
+    ],
     lastEmail: {
       fromName: "Nebula Careers",
       fromEmail: "careers@nebulasystems.com",
@@ -137,15 +179,24 @@ export const sampleJobs: Job[] = [
     company: {
       name: "StreamFlow",
       logoUrl: "/streaming-logo.png",
+      glassdoorRating: 4.0,
     },
     location: "Austin, TX",
     industry: "Media",
     jobType: "Engineering",
+    tags: ["Media", "Streaming", "Frontend"],
     stage: "OFFER",
     status: "NEGOTIATING",
     nextEtaText: "decision by Friday",
     appliedAt: "2024-01-05T14:20:00Z",
     postingUrl: "https://example.com/jobs/senior-frontend-engineer",
+    recentNews: [
+      {
+        title: "StreamFlow hits 10 million subscribers milestone",
+        url: "https://variety.com",
+        date: "2024-01-10",
+      },
+    ],
     lastEmail: {
       fromName: "Jennifer Walsh",
       fromEmail: "jennifer.walsh@streamflow.com",
@@ -189,15 +240,24 @@ export const sampleJobs: Job[] = [
     company: {
       name: "EduTech Pro",
       logoUrl: "/education-logo.png",
+      glassdoorRating: 4.1,
     },
     location: "Remote",
     industry: "Education",
     jobType: "Research",
+    tags: ["EdTech", "Research", "Remote"],
     stage: "INTERVIEW",
     status: "FEEDBACK_PENDING",
     nextEtaText: "waiting for panel feedback",
     appliedAt: "2024-01-12T11:30:00Z",
     postingUrl: "https://example.com/jobs/ux-researcher",
+    recentNews: [
+      {
+        title: "EduTech Pro expands user research team",
+        url: "https://forbes.com",
+        date: "2023-12-25",
+      },
+    ],
     lastEmail: {
       fromName: "David Kim",
       fromEmail: "david.kim@edutechpro.com",
@@ -213,15 +273,24 @@ export const sampleJobs: Job[] = [
     company: {
       name: "CloudScale",
       logoUrl: "/cloud-logo.png",
+      glassdoorRating: 3.9,
     },
     location: "Seattle, WA",
     industry: "Cloud Infrastructure",
     jobType: "Engineering",
+    tags: ["Cloud", "DevOps", "AWS"],
     stage: "RECRUITER_SCREEN",
     status: "SCHEDULED",
     nextEtaText: "call today 3pm",
     appliedAt: "2024-01-18T09:15:00Z",
     postingUrl: "https://example.com/jobs/devops-engineer",
+    recentNews: [
+      {
+        title: "CloudScale partners with AWS for enterprise solutions",
+        url: "https://aws.amazon.com",
+        date: "2023-10-20",
+      },
+    ],
     lastEmail: {
       fromName: "Alex Rodriguez",
       fromEmail: "alex.rodriguez@cloudscale.com",
@@ -243,15 +312,24 @@ export const sampleJobs: Job[] = [
     company: {
       name: "GreenTech Solutions",
       logoUrl: "/sustainability-logo.png",
+      glassdoorRating: 4.7,
     },
     location: "Portland, OR",
     industry: "Sustainability",
     jobType: "Marketing",
+    tags: ["GreenTech", "Marketing"],
     stage: "APPLIED",
     status: "WAITING",
     nextEtaText: "auto-rejection in ~14d",
     appliedAt: "2024-01-08T13:45:00Z",
     postingUrl: "https://example.com/jobs/marketing-manager",
+    recentNews: [
+      {
+        title: "GreenTech Solutions launches new sustainability initiative",
+        url: "https://eco-business.com",
+        date: "2023-11-30",
+      },
+    ],
     lastEmail: {
       fromName: "GreenTech Careers",
       fromEmail: "careers@greentechsolutions.com",
@@ -267,15 +345,24 @@ export const sampleJobs: Job[] = [
     company: {
       name: "TechCorp Inc",
       logoUrl: "/techcorp-logo.png",
+      glassdoorRating: 3.5,
     },
     location: "Remote",
     industry: "Technology",
     jobType: "Engineering",
+    tags: ["Tech", "Full Stack", "Remote"],
     stage: "INTERVIEW",
     status: "SCHEDULED",
     nextEtaText: "final round tomorrow",
     appliedAt: "2024-01-14T10:30:00Z",
     postingUrl: "https://example.com/jobs/full-stack-developer",
+    recentNews: [
+      {
+        title: "TechCorp Inc announces new CTO and strategic direction",
+        url: "https://techcrunch.com",
+        date: "2023-09-15",
+      },
+    ],
     lastEmail: {
       fromName: "Lisa Chen",
       fromEmail: "lisa.chen@techcorp.com",
@@ -320,15 +407,24 @@ export const sampleJobs: Job[] = [
     company: {
       name: "GrowthTech",
       logoUrl: "/growthtech-logo.png",
+      glassdoorRating: 4.8,
     },
     location: "San Diego, CA",
     industry: "SaaS",
     jobType: "Engineering",
+    tags: ["SaaS", "Backend"],
     stage: "RECRUITER_SCREEN",
     status: "FEEDBACK_PENDING",
     nextEtaText: "decision by end of week",
     appliedAt: "2024-01-16T08:45:00Z",
     postingUrl: "https://example.com/jobs/software-engineer",
+    recentNews: [
+      {
+        title: "GrowthTech scales its SaaS platform with new features",
+        url: "https://venturebeat.com",
+        date: "2023-12-05",
+      },
+    ],
     lastEmail: {
       fromName: "Mark Thompson",
       fromEmail: "mark.thompson@growthtech.com",
@@ -344,15 +440,24 @@ export const sampleJobs: Job[] = [
     company: {
       name: "Design Studio",
       logoUrl: "/designstudio-logo.png",
+      glassdoorRating: 4.3,
     },
     location: "Los Angeles, CA",
     industry: "Design Agency",
     jobType: "Design",
+    tags: ["Agency", "Design"],
     stage: "OFFER",
     status: "CONSIDERING",
     nextEtaText: "response due Monday",
     appliedAt: "2024-01-03T15:20:00Z",
     postingUrl: "https://example.com/jobs/product-designer",
+    recentNews: [
+      {
+        title: "Design Studio wins award for innovative design solutions",
+        url: "https://fastcompany.com",
+        date: "2023-12-15",
+      },
+    ],
     lastEmail: {
       fromName: "Emma Rodriguez",
       fromEmail: "emma.rodriguez@designstudio.com",
@@ -374,15 +479,24 @@ export const sampleJobs: Job[] = [
     company: {
       name: "DataFlow Systems",
       logoUrl: "/dataflow-logo.png",
+      glassdoorRating: 3.7,
     },
     location: "Chicago, IL",
     industry: "Data Analytics",
     jobType: "Engineering",
+    tags: ["Data", "Backend"],
     stage: "INTERVIEW",
     status: "SCHEDULED",
     nextEtaText: "technical interview Friday",
     appliedAt: "2024-01-17T12:00:00Z",
     postingUrl: "https://example.com/jobs/backend-engineer",
+    recentNews: [
+      {
+        title: "DataFlow Systems enhances data processing capabilities",
+        url: "https://datamation.com",
+        date: "2023-11-20",
+      },
+    ],
     lastEmail: {
       fromName: "Rachel Park",
       fromEmail: "rachel.park@dataflow.com",
@@ -404,15 +518,24 @@ export const sampleJobs: Job[] = [
     company: {
       name: "InnovateLabs",
       logoUrl: "/innovate-logo.png",
+      glassdoorRating: 4.9,
     },
     location: "Boston, MA",
     industry: "AI/ML",
     jobType: "Engineering",
+    tags: ["AI", "ML", "Research"],
     stage: "RECRUITER_SCREEN",
     status: "WAITING",
     nextEtaText: "recruiter response pending",
     appliedAt: "2024-01-19T14:15:00Z",
     postingUrl: "https://example.com/jobs/ai-ml-engineer",
+    recentNews: [
+      {
+        title: "InnovateLabs receives funding for AI research projects",
+        url: "https://techcrunch.com",
+        date: "2023-11-01",
+      },
+    ],
     lastEmail: {
       fromName: "InnovateLabs Talent",
       fromEmail: "talent@innovatelabs.com",
@@ -428,15 +551,24 @@ export const sampleJobs: Job[] = [
     company: {
       name: "AppCraft Studios",
       logoUrl: "/appcraft-logo.png",
+      glassdoorRating: 4.4,
     },
     location: "Miami, FL",
     industry: "Mobile Apps",
     jobType: "Engineering",
+    tags: ["Mobile", "Consumer"],
     stage: "APPLIED",
     status: "WAITING",
     nextEtaText: "initial review ~1 week",
     appliedAt: "2024-01-21T16:30:00Z",
     postingUrl: "https://example.com/jobs/mobile-developer",
+    recentNews: [
+      {
+        title: "AppCraft Studios releases new app version",
+        url: "https://producthunt.com",
+        date: "2023-12-20",
+      },
+    ],
     lastEmail: {
       fromName: "AppCraft Careers",
       fromEmail: "careers@appcraft.com",

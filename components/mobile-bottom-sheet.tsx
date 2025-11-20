@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { X } from 'lucide-react'
+import { X } from "lucide-react"
 import type { Job } from "@/types"
 import { JobDetailPanel } from "./job-detail-panel"
 
@@ -13,25 +13,33 @@ interface MobileBottomSheetProps {
 }
 
 export function MobileBottomSheet({ isOpen, onClose, job, onSaveNotes }: MobileBottomSheetProps) {
+  const [isRendered, setIsRendered] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
 
   useEffect(() => {
     if (isOpen) {
-      setIsVisible(true)
+      setIsRendered(true)
+      // Double RAF to ensure the component is mounted and reflow has occurred before animating in
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setIsVisible(true)
+        })
+      })
     } else {
-      const timer = setTimeout(() => setIsVisible(false), 300)
+      setIsVisible(false)
+      const timer = setTimeout(() => setIsRendered(false), 300)
       return () => clearTimeout(timer)
     }
   }, [isOpen])
 
-  if (!isVisible) return null
+  if (!isRendered) return null
 
   return (
     <>
       {/* Backdrop */}
       <div
         className={`fixed inset-0 bg-black/50 z-40 lg:hidden transition-opacity duration-300 ${
-          isOpen ? "opacity-100" : "opacity-0"
+          isVisible ? "opacity-100" : "opacity-0"
         }`}
         onClick={onClose}
       />
@@ -39,9 +47,9 @@ export function MobileBottomSheet({ isOpen, onClose, job, onSaveNotes }: MobileB
       {/* Bottom Sheet */}
       <div
         className={`fixed bottom-0 left-0 right-0 bg-white rounded-t-xl z-50 lg:hidden transform transition-transform duration-300 ease-out flex flex-col ${
-          isOpen ? "translate-y-0" : "translate-y-full"
+          isVisible ? "translate-y-0" : "translate-y-full"
         }`}
-        style={{ height: "85vh" }}
+        style={{ height: "92vh" }}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0">
@@ -53,7 +61,7 @@ export function MobileBottomSheet({ isOpen, onClose, job, onSaveNotes }: MobileB
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto min-h-0">
-          <JobDetailPanel job={job} onSaveNotes={onSaveNotes} isMobile />
+          <JobDetailPanel job={job} onSaveNotes={onSaveNotes} isMobile idPrefix="mobile" />
         </div>
       </div>
     </>
