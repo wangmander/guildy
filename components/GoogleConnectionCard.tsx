@@ -1,20 +1,25 @@
-"use client"
+"use client";
 
-import { useSession, signIn, signOut } from "next-auth/react"
-import { useState } from "react"
+import { useSession, signIn, signOut } from "next-auth/react";
+import { useState } from "react";
 
 export function GoogleConnectionCard() {
-  const { data: session, status } = useSession()
-  const [loading, setLoading] = useState(false)
+  const sessionResult = useSession();
+  const session = sessionResult?.data;
+  const status = sessionResult?.status;
 
-  const isConnected = status === "authenticated" && !!session?.user?.email
+  const [loading, setLoading] = useState(false);
 
-  const connect = () => signIn("google")
+  const isConnected = status === "authenticated" && !!session?.user?.email;
 
-  const disconnect = async () => {
-    setLoading(true)
-    await signOut({ callbackUrl: "/" })
-  }
+  const handleConnect = () => {
+    signIn("google");
+  };
+
+  const handleDisconnect = async () => {
+    setLoading(true);
+    await signOut({ callbackUrl: "/" });
+  };
 
   return (
     <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4">
@@ -27,14 +32,16 @@ export function GoogleConnectionCard() {
             {isConnected ? "Google connected" : "Connect Google"}
           </p>
           <p className="text-xs text-gray-500">
-            {isConnected ? session?.user?.email : "Connect Gmail to sync interviews."}
+            {isConnected && session?.user?.email
+              ? session.user.email
+              : "Connect Gmail so Guildy can find interviews for you."}
           </p>
         </div>
       </div>
 
       {isConnected ? (
         <button
-          onClick={disconnect}
+          onClick={handleDisconnect}
           disabled={loading}
           className="rounded-md border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
         >
@@ -42,12 +49,12 @@ export function GoogleConnectionCard() {
         </button>
       ) : (
         <button
-          onClick={connect}
+          onClick={handleConnect}
           className="rounded-md bg-black px-3 py-1 text-xs font-medium text-white hover:bg-gray-900"
         >
           Connect
         </button>
       )}
     </div>
-  )
+  );
 }
