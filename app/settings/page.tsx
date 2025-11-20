@@ -1,4 +1,5 @@
-"use client"
+export const dynamic = "force-dynamic";
+"use client";
 
 import { GoogleConnectionCard } from "@/components/GoogleConnectionCard"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -6,8 +7,8 @@ import { Button } from "@/components/ui/button"
 import { useSession } from "next-auth/react"
 
 export default function SettingsPage() {
-  // MUST NOT destructure directly or Vercel build crashes
   const sessionResult = useSession()
+
   const session = sessionResult?.data
   const status = sessionResult?.status
 
@@ -25,7 +26,6 @@ export default function SettingsPage() {
 
       <div className="space-y-6">
 
-        {/* ---- Google OAuth REAL CONNECT CARD ---- */}
         <Card>
           <CardHeader>
             <CardTitle>Email Connection</CardTitle>
@@ -36,12 +36,10 @@ export default function SettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {/* This is your real NextAuth connect/disconnect UI */}
             <GoogleConnectionCard />
           </CardContent>
         </Card>
 
-        {/* ---- Profile ---- */}
         <Card>
           <CardHeader>
             <CardTitle>Profile</CardTitle>
@@ -57,7 +55,6 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* ---- Delete Account ---- */}
         <Card className="border-red-200">
           <CardHeader>
             <CardTitle className="text-red-600">Delete Account</CardTitle>
