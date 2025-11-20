@@ -1,20 +1,21 @@
-import GoogleProvider from "next-auth/providers/google";
+import NextAuth from "next-auth"
+import GoogleProvider from "next-auth/providers/google"
 
-export const authOptions = {
+const handler = NextAuth({
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       authorization: {
         params: {
-          scope:
-            "openid email profile https://www.googleapis.com/auth/gmail.readonly",
+          scope: "openid email profile https://www.googleapis.com/auth/gmail.readonly",
           access_type: "offline",
-          prompt: "consent",
-        },
-      },
-    }),
+          prompt: "consent"
+        }
+      }
+    })
   ],
+  session: { strategy: "jwt" }
+})
 
-  // (leave all your existing callbacks, pages, session, adapter, etc.)
-};
+export { handler as GET, handler as POST }
