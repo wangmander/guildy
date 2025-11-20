@@ -1,25 +1,22 @@
-"use client";
+"use client"
 
-import { useSession, signIn, signOut } from "next-auth/react";
-import { useState } from "react";
+import { useSession, signIn, signOut } from "next-auth/react"
+import { useState } from "react"
 
 export function GoogleConnectionCard() {
-  const sessionResult = useSession();
-  const session = sessionResult?.data;
-  const status = sessionResult?.status;
+  const { data: session, status } = useSession()
+  const [loading, setLoading] = useState(false)
 
-  const [loading, setLoading] = useState(false);
-
-  const isConnected = status === "authenticated" && !!session?.user?.email;
+  const isConnected = status === "authenticated" && !!session?.user?.email
 
   const handleConnect = () => {
-    signIn("google");
-  };
+    signIn("google")
+  }
 
   const handleDisconnect = async () => {
-    setLoading(true);
-    await signOut({ callbackUrl: "/" });
-  };
+    setLoading(true)
+    await signOut({ callbackUrl: "/settings" })
+  }
 
   return (
     <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4">
@@ -29,12 +26,10 @@ export function GoogleConnectionCard() {
         </div>
         <div>
           <p className="text-sm font-semibold">
-            {isConnected ? "Google connected" : "Connect Google"}
+            {isConnected ? "Google connected" : "Connect Gmail"}
           </p>
           <p className="text-xs text-gray-500">
-            {isConnected && session?.user?.email
-              ? session.user.email
-              : "Connect Gmail so Guildy can find interviews for you."}
+            {isConnected ? session.user?.email : "Connect Gmail so Guildy can find interviews for you."}
           </p>
         </div>
       </div>
@@ -56,5 +51,5 @@ export function GoogleConnectionCard() {
         </button>
       )}
     </div>
-  );
+  )
 }
