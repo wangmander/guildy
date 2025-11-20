@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { FcGoogle } from "react-icons/fc"
 
 export function GoogleConnectionCard() {
-  const { data: session } = useSession()
+  const { data: session, status } = useSession()
 
   const isConnected = !!session?.user?.email
   const email = session?.user?.email ?? ""
@@ -32,10 +32,11 @@ export function GoogleConnectionCard() {
             <p className="font-medium">
               {isConnected ? email : "Connect Gmail"}
             </p>
+
             <p className="text-sm text-gray-600">
               {isConnected
                 ? "Guildy is syncing your interview pipeline."
-                : "Guildy will scan for interview emails only."}
+                : "Guildy will scan only interview-related emails."}
             </p>
           </div>
         </div>
@@ -47,7 +48,11 @@ export function GoogleConnectionCard() {
         ) : (
           <Button
             variant="outline"
-            onClick={() => signOut({ callbackUrl: "/settings" })}
+            onClick={() =>
+              signOut({
+                callbackUrl: "/settings"
+              })
+            }
           >
             Disconnect
           </Button>
