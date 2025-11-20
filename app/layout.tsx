@@ -3,7 +3,7 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 import { TopNav } from "@/components/top-nav"
-import SessionWrapper from "@/components/SessionWrapper"
+import { SessionProvider } from "next-auth/react"
 
 const inter = Inter({
   subsets: ["latin"],
@@ -28,12 +28,13 @@ export default function RootLayout({
       className={`${inter.variable} antialiased h-screen overflow-hidden`}
     >
       <body className="bg-gray-50 h-screen overflow-hidden">
-        <SessionWrapper>
+        {/* GLOBAL SESSION PROVIDER */}
+        <SessionProvider>
           <TopNav />
           <main className="h-[calc(100vh-64px)] overflow-hidden">
             {children}
           </main>
-        </SessionWrapper>
+        </SessionProvider>
       </body>
     </html>
   )
