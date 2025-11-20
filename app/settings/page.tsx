@@ -1,4 +1,3 @@
-export const dynamic = "force-dynamic";
 "use client";
 
 import { GoogleConnectionCard } from "@/components/GoogleConnectionCard";
@@ -7,9 +6,9 @@ import { Button } from "@/components/ui/button";
 import { useSession } from "next-auth/react";
 
 export default function SettingsPage() {
-  // IMPORTANT: do NOT destructure
   const sessionResult = useSession();
 
+  // Because useSession() is undefined during static rendering, we use safe access
   const session = sessionResult?.data;
   const status = sessionResult?.status;
 
@@ -69,7 +68,10 @@ export default function SettingsPage() {
                 <p className="text-sm font-medium text-gray-900">Delete Account</p>
                 <p className="text-sm text-gray-500">Permanently delete your account and all associated data.</p>
               </div>
-              <Button variant="destructive" onClick={handleDeleteAccount}>
+              <Button 
+                variant="destructive"
+                onClick={handleDeleteAccount}
+              >
                 Delete Account
               </Button>
             </div>
