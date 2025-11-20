@@ -29,10 +29,7 @@ export function GoogleConnectionCard() {
           </div>
 
           <div className="flex flex-col">
-            <p className="font-medium">
-              {isConnected ? email : "Connect Gmail"}
-            </p>
-
+            <p className="font-medium">{isConnected ? email : "Connect Gmail"}</p>
             <p className="text-sm text-gray-600">
               {isConnected
                 ? "Guildy is syncing your interview pipeline."
@@ -50,7 +47,7 @@ export function GoogleConnectionCard() {
             variant="outline"
             onClick={() =>
               signOut({
-                callbackUrl: "/settings"
+                callbackUrl: "/settings",
               })
             }
           >
