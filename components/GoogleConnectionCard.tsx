@@ -9,11 +9,9 @@ export function GoogleConnectionCard() {
 
   const isConnected = status === "authenticated" && !!session?.user?.email
 
-  const handleConnect = () => {
-    signIn("google")
-  }
+  const connect = () => signIn("google")
 
-  const handleDisconnect = async () => {
+  const disconnect = async () => {
     setLoading(true)
     await signOut({ callbackUrl: "/" })
   }
@@ -29,16 +27,14 @@ export function GoogleConnectionCard() {
             {isConnected ? "Google connected" : "Connect Google"}
           </p>
           <p className="text-xs text-gray-500">
-            {isConnected && session?.user?.email
-              ? session.user.email
-              : "Connect Gmail so Guildy can find interviews for you."}
+            {isConnected ? session?.user?.email : "Connect Gmail to sync interviews."}
           </p>
         </div>
       </div>
 
       {isConnected ? (
         <button
-          onClick={handleDisconnect}
+          onClick={disconnect}
           disabled={loading}
           className="rounded-md border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
         >
@@ -46,7 +42,7 @@ export function GoogleConnectionCard() {
         </button>
       ) : (
         <button
-          onClick={handleConnect}
+          onClick={connect}
           className="rounded-md bg-black px-3 py-1 text-xs font-medium text-white hover:bg-gray-900"
         >
           Connect
@@ -55,4 +51,3 @@ export function GoogleConnectionCard() {
     </div>
   )
 }
-
