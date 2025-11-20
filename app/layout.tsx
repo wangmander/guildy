@@ -1,8 +1,9 @@
-// app/layout.tsx  (SERVER COMPONENT – KEEP IT THIS WAY)
+// app/layout.tsx
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { TopNav } from "@/components/top-nav";
+import { Providers } from "./providers";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -20,8 +21,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${inter.variable} antialiased h-screen overflow-hidden`}>
       <body className="bg-gray-50 h-screen overflow-hidden">
-        <TopNav />
-        <main className="h-[calc(100vh-64px)] overflow-hidden">{children}</main>
+        <Providers>
+          <TopNav />
+          <main className="h-[calc(100vh-64px)] overflow-hidden">{children}</main>
+        </Providers>
       </body>
     </html>
   );
