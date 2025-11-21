@@ -1,26 +1,26 @@
-import type React from "react"
-import type { Metadata } from "next"
-import { Inter } from "next/font/google"
-import "./globals.css"
-import { TopNav } from "@/components/top-nav"
-import { SessionProvider } from "next-auth/react"
+import type React from "react";
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
+import { TopNav } from "@/components/top-nav";
+import AuthSessionProvider from "@/components/SessionProvider";
 
 const inter = Inter({
   subsets: ["latin"],
   display: "swap",
   variable: "--font-inter",
-})
+});
 
 export const metadata: Metadata = {
   title: "Guildy Dashboard",
   description: "Track your job applications with pipeline visualization",
   generator: "v0.app",
-}
+};
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   return (
     <html
@@ -28,13 +28,13 @@ export default function RootLayout({
       className={`${inter.variable} antialiased h-screen overflow-hidden`}
     >
       <body className="bg-gray-50 h-screen overflow-hidden">
-        <SessionProvider>
+        <AuthSessionProvider>
           <TopNav />
           <main className="h-[calc(100vh-64px)] overflow-hidden">
             {children}
           </main>
-        </SessionProvider>
+        </AuthSessionProvider>
       </body>
     </html>
-  )
+  );
 }
