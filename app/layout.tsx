@@ -1,30 +1,40 @@
-import type React from "react";
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import "./globals.css";
-import { TopNav } from "@/components/top-nav";
-import SessionWrapper from "@/components/SessionWrapper";
+import type React from "react"
+import type { Metadata } from "next"
+import { Inter } from "next/font/google"
+import "./globals.css"
+import { TopNav } from "@/components/top-nav"
+import { SessionProvider } from "next-auth/react"
 
 const inter = Inter({
   subsets: ["latin"],
   display: "swap",
-  variable: "--font-inter"
-});
+  variable: "--font-inter",
+})
 
 export const metadata: Metadata = {
   title: "Guildy Dashboard",
-  description: "Track your job applications with pipeline visualization"
-};
+  description: "Track your job applications with pipeline visualization",
+  generator: "v0.app",
+}
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
   return (
-    <html lang="en" className={inter.variable}>
-      <body className="bg-gray-50">
-        <SessionWrapper>
+    <html
+      lang="en"
+      className={`${inter.variable} antialiased h-screen overflow-hidden`}
+    >
+      <body className="bg-gray-50 h-screen overflow-hidden">
+        <SessionProvider>
           <TopNav />
-          <main>{children}</main>
-        </SessionWrapper>
+          <main className="h-[calc(100vh-64px)] overflow-hidden">
+            {children}
+          </main>
+        </SessionProvider>
       </body>
     </html>
-  );
+  )
 }
