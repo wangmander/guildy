@@ -8,7 +8,7 @@ import { PipelineCardList } from "@/components/pipeline-card-list"
 import { JobDetailPanel } from "@/components/job-detail-panel"
 import { MobileBottomSheet } from "@/components/mobile-bottom-sheet"
 
-// still needed for later steps, but unused now
+// supabase import already correct
 import { supabase } from "@/lib/supabaseClient"
 
 const stages = ["APPLIED", "RECRUITER_SCREEN", "INTERVIEW", "OFFER"] as const
@@ -19,23 +19,48 @@ export default function PipelinesPage() {
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false)
   const rightPanelRef = useRef<HTMLDivElement>(null)
 
+  // ⭐ THIS IS NOW THE MAIN LOAD LOGIC — Supabase first, fallback to sampleJobs
   useEffect(() => {
-    const storedJobs = storage.getJobs()
-    const jobsToUse = storedJobs || sampleJobs
+    async function loadPipelines() {
+      const { data, error } = await supabase
+        .from("pipelines")
+        .select("*")
+        .order("last_email_at", { ascending: false })
 
-    const sortedJobs = [...jobsToUse].sort((a, b) => {
-      const dateA = a.scheduledMeeting ? new Date(a.scheduledMeeting.date).getTime() : Number.MAX_SAFE_INTEGER
-      const dateB = b.scheduledMeeting ? new Date(b.scheduledMeeting.date).getTime() : Number.MAX_SAFE_INTEGER
-      return dateA - dateB
-    })
+      if (error) {
+        console.error("Supabase load error:", error)
+      }
 
-    setJobs(sortedJobs)
-    if (sortedJobs.length > 0) {
-      setSelectedJob(sortedJobs[0])
+      // If there is no data in Supabase yet → fallback
+      if (!data || data.length === 0) {
+        const storedJobs = storage.getJobs()
+        const jobsToUse = storedJobs || sampleJobs
+
+        const sortedJobs = [...jobsToUse].sort((a, b) => {
+          const dateA = a.scheduledMeeting ? new Date(a.scheduledMeeting.date).getTime() : Number.MAX_SAFE_INTEGER
+          const dateB = b.scheduledMeeting ? new Date(b.scheduledMeeting.date).getTime() : Number.MAX_SAFE_INTEGER
+          return dateA - dateB
+        })
+
+        setJobs(sortedJobs)
+        if (sortedJobs.length > 0) {
+          setSelectedJob(sortedJobs[0])
+        }
+        return
+      }
+
+      // TEMP — use raw Supabase rows until we map them into your Job type
+      // (Next step will be mapping)
+      const supabaseJobs: any[] = data
+
+      setJobs(supabaseJobs)
+      setSelectedJob(supabaseJobs[0] || null)
     }
+
+    loadPipelines()
   }, [])
 
-  // Save jobs to localStorage whenever jobs change
+  // Save local sample data (this only affects fallback mode)
   useEffect(() => {
     if (jobs.length > 0) {
       storage.setJobs(jobs)
@@ -44,7 +69,7 @@ export default function PipelinesPage() {
 
   const handleAdvance = (jobId: string) => {
     setJobs((prevJobs) =>
-      prevJobs.map((job) => {
+      prevJobs.map((job: any) => {
         if (job.id === jobId) {
           const currentIndex = stages.indexOf(job.stage)
           if (currentIndex < stages.length - 1) {
@@ -58,7 +83,7 @@ export default function PipelinesPage() {
 
   const handleBack = (jobId: string) => {
     setJobs((prevJobs) =>
-      prevJobs.map((job) => {
+      prevJobs.map((job: any) => {
         if (job.id === jobId) {
           const currentIndex = stages.indexOf(job.stage)
           if (currentIndex > 0) {
@@ -70,7 +95,7 @@ export default function PipelinesPage() {
     )
   }
 
-  const handleSelectJob = (job: Job) => {
+  const handleSelectJob = (job: any) => {
     setSelectedJob(job)
     setIsMobileSheetOpen(true)
     if (rightPanelRef.current) {
@@ -78,23 +103,17 @@ export default function PipelinesPage() {
     }
   }
 
-  const handleActionClick = (job: Job) => {
+  const handleActionClick = (job: any) => {
     setSelectedJob(job)
     setIsMobileSheetOpen(true)
 
     setTimeout(() => {
       const targetSuffix = job.scheduledMeeting ? "interview-questions" : "company-intel"
-
       const mobileEl = document.getElementById(`mobile-${targetSuffix}`)
       const desktopEl = document.getElementById(`desktop-${targetSuffix}`)
 
-      if (mobileEl) {
-        mobileEl.scrollIntoView({ behavior: "smooth", block: "start" })
-      }
-
-      if (desktopEl) {
-        desktopEl.scrollIntoView({ behavior: "smooth", block: "start" })
-      }
+      if (mobileEl) mobileEl.scrollIntoView({ behavior: "smooth", block: "start" })
+      if (desktopEl) desktopEl.scrollIntoView({ behavior: "smooth", block: "start" })
     }, 300)
   }
 
@@ -103,7 +122,9 @@ export default function PipelinesPage() {
   }
 
   const handleSaveNotes = (jobId: string, notes: string) => {
-    setJobs((prevJobs) => prevJobs.map((job) => (job.id === jobId ? { ...job, notes } : job)))
+    setJobs((prevJobs) =>
+      prevJobs.map((job: any) => (job.id === jobId ? { ...job, notes } : job))
+    )
   }
 
   return (
