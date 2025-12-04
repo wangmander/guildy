@@ -8,6 +8,9 @@ import { PipelineCardList } from "@/components/pipeline-card-list"
 import { JobDetailPanel } from "@/components/job-detail-panel"
 import { MobileBottomSheet } from "@/components/mobile-bottom-sheet"
 
+// ⭐ added import
+import { supabase } from "@/lib/supabaseClient"
+
 const stages = ["APPLIED", "RECRUITER_SCREEN", "INTERVIEW", "OFFER"] as const
 
 export default function PipelinesPage() {
@@ -15,6 +18,12 @@ export default function PipelinesPage() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false)
   const rightPanelRef = useRef<HTMLDivElement>(null)
+
+  // ⭐ test function added
+  async function addTestRow() {
+    await supabase.from("test_pipelines").insert({ name: "hello" })
+    alert("Inserted!")
+  }
 
   useEffect(() => {
     const storedJobs = storage.getJobs()
@@ -49,7 +58,7 @@ export default function PipelinesPage() {
           }
         }
         return job
-      }),
+      })
     )
   }
 
@@ -63,7 +72,7 @@ export default function PipelinesPage() {
           }
         }
         return job
-      }),
+      })
     )
   }
 
@@ -79,9 +88,7 @@ export default function PipelinesPage() {
     setSelectedJob(job)
     setIsMobileSheetOpen(true)
 
-    // Use setTimeout to allow render to happen first
     setTimeout(() => {
-      // Determine which section to scroll to based on job state
       const targetSuffix = job.scheduledMeeting ? "interview-questions" : "company-intel"
 
       const mobileEl = document.getElementById(`mobile-${targetSuffix}`)
@@ -94,7 +101,7 @@ export default function PipelinesPage() {
       if (desktopEl) {
         desktopEl.scrollIntoView({ behavior: "smooth", block: "start" })
       }
-    }, 300) // Increased timeout slightly to ensure mobile sheet is mounted
+    }, 300)
   }
 
   const handleCloseMobileSheet = () => {
@@ -107,6 +114,18 @@ export default function PipelinesPage() {
 
   return (
     <div className="mx-auto max-w-7xl h-[calc(100vh-64px)] flex flex-col overflow-hidden">
+
+      {/* ⭐ TEST BUTTON (safe placement) */}
+      <div className="p-4">
+        <button
+          onClick={addTestRow}
+          className="px-3 py-2 bg-blue-600 text-white rounded"
+        >
+          Add Test Row
+        </button>
+      </div>
+      {/* ⭐ END TEST BUTTON */}
+
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
         {/* Left Panel - Pipeline Cards */}
         <div className="w-full lg:w-1/2 border-b lg:border-b-0 flex flex-col overflow-y-auto custom-scrollbar">
