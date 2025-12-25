@@ -55,6 +55,13 @@ export function PipelineCard({ job, onClick, onActionClick, isSelected }: Pipeli
 
   const meetingInfo = getMeetingDate()
 
+  // ✅ FIX: Safely get company name (handles both string and object)
+  const companyName = typeof job.company === 'string' ? job.company : job.company?.name || 'Unknown'
+  const companyInitial = companyName.charAt(0).toUpperCase()
+
+  // ✅ FIX: Safely get job title
+  const jobTitle = job.role || job.title || 'Role'
+
   return (
     <Card
       className={`p-3 cursor-pointer transition-all hover:shadow-md border-2 rounded-[3rem] ${
@@ -67,11 +74,11 @@ export function PipelineCard({ job, onClick, onActionClick, isSelected }: Pipeli
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-sm font-semibold text-gray-700">
-            {job.company.name.charAt(0)}
+            {companyInitial}
           </div>
           <div className="flex items-baseline gap-2">
-            <h3 className="font-bold text-gray-900 text-base">{job.company.name}</h3>
-            <span className="text-gray-500 text-sm">{job.title}</span>
+            <h3 className="font-bold text-gray-900 text-base">{companyName}</h3>
+            <span className="text-gray-500 text-sm">{jobTitle}</span>
           </div>
         </div>
         <div className="flex gap-1.5">
