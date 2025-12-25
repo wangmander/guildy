@@ -10,25 +10,24 @@ export const authOptions: NextAuthOptions = {
         params: {
           scope:
             "openid email profile https://www.googleapis.com/auth/gmail.readonly",
+          access_type: "offline",
+          prompt: "consent",
         },
       },
     }),
   ],
   secret: process.env.NEXTAUTH_SECRET,
-  session: {
-    strategy: "jwt",
-  },
+  session: { strategy: "jwt" },
   callbacks: {
-    async jwt({ token, account, profile }) {
-      if (account && profile) {
-        token.email = profile.email
-        token.accessToken = account.access_token
-      }
+    async jwt({ token, account }) {
+      // token only exists on SIGN IN / RE-CONSENT
+      if (account?.access_token) token.accessToken = account.access_token
+      if (account?.refresh_token) token.refreshToken = account.refresh_token
       return token
     },
     async session({ session, token }) {
-      session.user.email = token.email as string
       ;(session as any).accessToken = token.accessToken
+      ;(session as any).refreshToken = token.refreshToken
       return session
     },
   },
