@@ -55,10 +55,6 @@ export function PipelineCard({ job, onClick, onActionClick, isSelected }: Pipeli
 
   const meetingInfo = getMeetingDate()
 
-  // ✅ Only data safety fix - rest is original v0
-  const companyName = typeof job.company === 'string' ? job.company : job.company?.name || 'Unknown'
-  const companyInitial = companyName.charAt(0).toUpperCase()
-
   return (
     <Card
       className={`p-3 cursor-pointer transition-all hover:shadow-md border-2 rounded-[3rem] ${
@@ -68,13 +64,13 @@ export function PipelineCard({ job, onClick, onActionClick, isSelected }: Pipeli
       onClick={onClick}
     >
       {/* Header */}
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center text-sm font-semibold text-gray-700">
-            {companyInitial}
+            {job.company.name.charAt(0)}
           </div>
           <div className="flex items-baseline gap-2">
-            <h3 className="font-bold text-gray-900 text-base">{companyName}</h3>
+            <h3 className="font-bold text-gray-900 text-base">{job.company.name}</h3>
             <span className="text-gray-500 text-sm">{job.title}</span>
           </div>
         </div>

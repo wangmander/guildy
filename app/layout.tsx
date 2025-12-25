@@ -1,5 +1,20 @@
+import type React from "react"
+import type { Metadata } from "next"
+import { Inter } from 'next/font/google'
 import "./globals.css"
-import { ThemeProvider } from "@/components/theme-provider"
+import { TopNav } from "@/components/top-nav"
+
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-inter",
+})
+
+export const metadata: Metadata = {
+  title: "Guildy Dashboard",
+  description: "Track your job applications with pipeline visualization",
+    generator: 'v0.app'
+}
 
 export default function RootLayout({
   children,
@@ -7,11 +22,10 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className="min-h-screen bg-background text-foreground">
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          {children}
-        </ThemeProvider>
+    <html lang="en" className={`${inter.variable} antialiased h-screen overflow-hidden`}>
+      <body className="bg-gray-50 h-screen overflow-hidden">
+        <TopNav />
+        <main className="h-[calc(100vh-64px)] overflow-hidden">{children}</main>
       </body>
     </html>
   )
