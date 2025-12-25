@@ -8,16 +8,29 @@ import { JobDetailPanel } from "@/components/job-detail-panel"
 import { MobileBottomSheet } from "@/components/mobile-bottom-sheet"
 import { supabase } from "@/lib/supabaseClient"
 
-const stages = ["APPLIED", "RECRUITER_SCREEN", "INTERVIEW", "OFFER"] as const
+const STAGES = ["APPLIED", "RECRUITER_SCREEN", "INTERVIEW", "OFFER"] as const
+type Stage = typeof STAGES[number]
 
-function supabaseRowToJob(row: any): Job {
+/**
+ * Convert ANYTHING into a safe Job object the UI can never crash on
+ */
+function toSafeJob(input: any, index = 0): Job {
   return {
-    id: row.id,
-    company: row.company ?? "Unknown company",
-    role: row.role ?? "Unknown role",
-    stage: stages.includes(row.stage) ? row.stage : "APPLIED",
-    notes: "",
-    scheduledMeeting: null,
+    id: typeof input?.id === "string" ? input.id : `fallback-${index}`,
+    company:
+      typeof input?.company === "string" && input.company.length > 0
+        ? input.company
+        : "Unknown Company",
+    role:
+      typeof input?.role === "string"
+        ? input.role
+        : "",
+    stage:
+      typeof input?.stage === "string" && STAGES.includes(input.stage as Stage)
+        ? input.stage
+        : "APPLIED",
+    notes: typeof input?.notes === "string" ? input.notes : "",
+    scheduledMeeting: input?.scheduledMeeting ?? null,
     companyIntel: {
       overview: "",
       keyPoints: [],
@@ -35,24 +48,29 @@ export default function PipelinesPage() {
 
   useEffect(() => {
     async function load() {
-      const { data, error } = await supabase.from("pipelines").select("*")
+      const { data, error } = await supabase
+        .from("pipelines")
+        .select("*")
 
-      if (data && data.length > 0) {
-        const mapped = data.map(supabaseRowToJob)
-        setJobs(mapped)
-        setSelectedJob(mapped[0])
-      } else {
-        setJobs(sampleJobs)
-        setSelectedJob(sampleJobs[0])
+      if (error) {
+        console.error("Supabase error:", error)
       }
 
-      if (error) console.error(error)
+      if (Array.isArray(data) && data.length > 0) {
+        const safe = data.map((row, i) => toSafeJob(row, i))
+        setJobs(safe)
+        setSelectedJob(safe[0])
+      } else {
+        const safeFallback = sampleJobs.map((j, i) => toSafeJob(j, i))
+        setJobs(safeFallback)
+        setSelectedJob(safeFallback[0])
+      }
     }
 
     load()
   }, [])
 
-  const handleSelectJob = (job: Job) => {
+  function handleSelectJob(job: Job) {
     setSelectedJob(job)
     setIsMobileSheetOpen(true)
     rightPanelRef.current?.scrollTo({ top: 0, behavior: "smooth" })
@@ -61,11 +79,15 @@ export default function PipelinesPage() {
   return (
     <div className="mx-auto max-w-7xl h-[calc(100vh-64px)] flex flex-col overflow-hidden">
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
+        {/* LEFT PANEL */}
         <div className="w-full lg:w-1/2 border-b lg:border-b-0 flex flex-col overflow-y-auto">
           <div className="p-6">
-            <h1 className="text-2xl font-bold mb-2">Interview Pipelines</h1>
+            <h1 className="text-2xl font-bold mb-2">
+              Interview Pipelines
+            </h1>
+
             <PipelineCardList
-              jobs={jobs}
+              jobs={jobs.map((j, i) => toSafeJob(j, i))}
               selectedJobId={selectedJob?.id}
               onSelect={handleSelectJob}
               onActionClick={handleSelectJob}
@@ -73,10 +95,19 @@ export default function PipelinesPage() {
           </div>
         </div>
 
-        <div ref={rightPanelRef} className="hidden lg:block w-1/2 overflow-y-auto">
-          <JobDetailPanel job={selectedJob} onSaveNotes={() => {}} idPrefix="desktop" />
+        {/* RIGHT PANEL */}
+        <div
+          ref={rightPanelRef}
+          className="hidden lg:block w-1/2 overflow-y-auto"
+        >
+          <JobDetailPanel
+            job={selectedJob}
+            onSaveNotes={() => {}}
+            idPrefix="desktop"
+          />
         </div>
 
+        {/* MOBILE */}
         <MobileBottomSheet
           isOpen={isMobileSheetOpen}
           onClose={() => setIsMobileSheetOpen(false)}
