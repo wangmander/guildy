@@ -3,15 +3,29 @@
 import { useState, useEffect, useRef } from "react"
 import type { Job } from "@/types"
 import { sampleJobs } from "@/data/sample-jobs"
-import { storage } from "@/lib/storage"
 import { PipelineCardList } from "@/components/pipeline-card-list"
 import { JobDetailPanel } from "@/components/job-detail-panel"
 import { MobileBottomSheet } from "@/components/mobile-bottom-sheet"
-
-// supabase import already correct
 import { supabase } from "@/lib/supabaseClient"
 
 const stages = ["APPLIED", "RECRUITER_SCREEN", "INTERVIEW", "OFFER"] as const
+
+function supabaseRowToJob(row: any): Job {
+  return {
+    id: row.id,
+    company: row.company ?? "Unknown company",
+    role: row.role ?? "Unknown role",
+    stage: stages.includes(row.stage) ? row.stage : "APPLIED",
+    notes: "",
+    scheduledMeeting: null,
+    companyIntel: {
+      overview: "",
+      keyPoints: [],
+      competitors: [],
+    },
+    interviewQuestions: [],
+  }
+}
 
 export default function PipelinesPage() {
   const [jobs, setJobs] = useState<Job[]>([])
@@ -19,149 +33,55 @@ export default function PipelinesPage() {
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false)
   const rightPanelRef = useRef<HTMLDivElement>(null)
 
-  // ⭐ THIS IS NOW THE MAIN LOAD LOGIC — Supabase first, fallback to sampleJobs
   useEffect(() => {
-    async function loadPipelines() {
-      const { data, error } = await supabase
-        .from("pipelines")
-        .select("*")
-        .order("last_email_at", { ascending: false })
+    async function load() {
+      const { data, error } = await supabase.from("pipelines").select("*")
 
-      if (error) {
-        console.error("Supabase load error:", error)
+      if (data && data.length > 0) {
+        const mapped = data.map(supabaseRowToJob)
+        setJobs(mapped)
+        setSelectedJob(mapped[0])
+      } else {
+        setJobs(sampleJobs)
+        setSelectedJob(sampleJobs[0])
       }
 
-      // If there is no data in Supabase yet → fallback
-      if (!data || data.length === 0) {
-        const storedJobs = storage.getJobs()
-        const jobsToUse = storedJobs || sampleJobs
-
-        const sortedJobs = [...jobsToUse].sort((a, b) => {
-          const dateA = a.scheduledMeeting ? new Date(a.scheduledMeeting.date).getTime() : Number.MAX_SAFE_INTEGER
-          const dateB = b.scheduledMeeting ? new Date(b.scheduledMeeting.date).getTime() : Number.MAX_SAFE_INTEGER
-          return dateA - dateB
-        })
-
-        setJobs(sortedJobs)
-        if (sortedJobs.length > 0) {
-          setSelectedJob(sortedJobs[0])
-        }
-        return
-      }
-
-      // TEMP — use raw Supabase rows until we map them into your Job type
-      // (Next step will be mapping)
-      const supabaseJobs: any[] = data
-
-      setJobs(supabaseJobs)
-      setSelectedJob(supabaseJobs[0] || null)
+      if (error) console.error(error)
     }
 
-    loadPipelines()
+    load()
   }, [])
 
-  // Save local sample data (this only affects fallback mode)
-  useEffect(() => {
-    if (jobs.length > 0) {
-      storage.setJobs(jobs)
-    }
-  }, [jobs])
-
-  const handleAdvance = (jobId: string) => {
-    setJobs((prevJobs) =>
-      prevJobs.map((job: any) => {
-        if (job.id === jobId) {
-          const currentIndex = stages.indexOf(job.stage)
-          if (currentIndex < stages.length - 1) {
-            return { ...job, stage: stages[currentIndex + 1] }
-          }
-        }
-        return job
-      })
-    )
-  }
-
-  const handleBack = (jobId: string) => {
-    setJobs((prevJobs) =>
-      prevJobs.map((job: any) => {
-        if (job.id === jobId) {
-          const currentIndex = stages.indexOf(job.stage)
-          if (currentIndex > 0) {
-            return { ...job, stage: stages[currentIndex - 1] }
-          }
-        }
-        return job
-      })
-    )
-  }
-
-  const handleSelectJob = (job: any) => {
+  const handleSelectJob = (job: Job) => {
     setSelectedJob(job)
     setIsMobileSheetOpen(true)
-    if (rightPanelRef.current) {
-      rightPanelRef.current.scrollTo({ top: 0, behavior: "smooth" })
-    }
-  }
-
-  const handleActionClick = (job: any) => {
-    setSelectedJob(job)
-    setIsMobileSheetOpen(true)
-
-    setTimeout(() => {
-      const targetSuffix = job.scheduledMeeting ? "interview-questions" : "company-intel"
-      const mobileEl = document.getElementById(`mobile-${targetSuffix}`)
-      const desktopEl = document.getElementById(`desktop-${targetSuffix}`)
-
-      if (mobileEl) mobileEl.scrollIntoView({ behavior: "smooth", block: "start" })
-      if (desktopEl) desktopEl.scrollIntoView({ behavior: "smooth", block: "start" })
-    }, 300)
-  }
-
-  const handleCloseMobileSheet = () => {
-    setIsMobileSheetOpen(false)
-  }
-
-  const handleSaveNotes = (jobId: string, notes: string) => {
-    setJobs((prevJobs) =>
-      prevJobs.map((job: any) => (job.id === jobId ? { ...job, notes } : job))
-    )
+    rightPanelRef.current?.scrollTo({ top: 0, behavior: "smooth" })
   }
 
   return (
     <div className="mx-auto max-w-7xl h-[calc(100vh-64px)] flex flex-col overflow-hidden">
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
-        {/* Left Panel - Pipeline Cards */}
-        <div className="w-full lg:w-1/2 border-b lg:border-b-0 flex flex-col overflow-y-auto custom-scrollbar">
-          <div className="p-4 sm:p-6 lg:p-8 flex flex-col min-h-full">
-            <div className="mb-4 lg:mb-6 flex-shrink-0">
-              <h1 className="text-xl lg:text-2xl font-bold text-gray-900">Interview Pipelines</h1>
-              <p className="text-sm text-gray-600 mt-1">
-                Everything gets auto-found and organized—so you can focus on winning, not tracking.
-              </p>
-            </div>
-
-            <div className="flex-1">
-              <PipelineCardList
-                jobs={jobs}
-                onSelect={handleSelectJob}
-                onActionClick={handleActionClick}
-                selectedJobId={selectedJob?.id}
-              />
-            </div>
+        <div className="w-full lg:w-1/2 border-b lg:border-b-0 flex flex-col overflow-y-auto">
+          <div className="p-6">
+            <h1 className="text-2xl font-bold mb-2">Interview Pipelines</h1>
+            <PipelineCardList
+              jobs={jobs}
+              selectedJobId={selectedJob?.id}
+              onSelect={handleSelectJob}
+              onActionClick={handleSelectJob}
+            />
           </div>
         </div>
 
-        {/* Right Panel - Job Details (Desktop Only) */}
-        <div ref={rightPanelRef} className="hidden lg:block w-1/2 overflow-y-auto bg-white custom-scrollbar">
-          <JobDetailPanel job={selectedJob} onSaveNotes={handleSaveNotes} idPrefix="desktop" />
+        <div ref={rightPanelRef} className="hidden lg:block w-1/2 overflow-y-auto">
+          <JobDetailPanel job={selectedJob} onSaveNotes={() => {}} idPrefix="desktop" />
         </div>
 
-        {/* Mobile Bottom Sheet */}
         <MobileBottomSheet
           isOpen={isMobileSheetOpen}
-          onClose={handleCloseMobileSheet}
+          onClose={() => setIsMobileSheetOpen(false)}
           job={selectedJob}
-          onSaveNotes={handleSaveNotes}
+          onSaveNotes={() => {}}
         />
       </div>
     </div>
