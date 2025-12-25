@@ -10,19 +10,37 @@ import { supabase } from "@/lib/supabaseClient"
 const STAGES = ["APPLIED", "RECRUITER_SCREEN", "INTERVIEW", "OFFER"] as const
 
 function toSafeJob(input: any, index: number): Job {
+  // Get company name (handle both string and object formats)
+  const companyName = typeof input?.company === "string" ? input.company : input?.company?.name || "Unknown Company"
+  
   return {
     id: typeof input?.id === "string" ? input.id : `fallback-${index}`,
-    company: typeof input?.company === "string" ? input.company : "Unknown Company",
-    role: typeof input?.role === "string" ? input.role : "",
+    company: {
+      name: companyName,
+      glassdoorRating: input?.company?.glassdoorRating || null,
+    },
+    role: input?.role || "",
+    title: input?.role || input?.title || "Role Not Specified",
     stage: STAGES.includes(input?.stage) ? input.stage : "APPLIED",
-    notes: "",
-    scheduledMeeting: null,
-    companyIntel: {
+    status: input?.status || "ACTIVE",
+    location: input?.location || "Location not specified",
+    industry: input?.industry || "Industry not specified",
+    jobType: input?.jobType || "Full-time",
+    appliedAt: input?.created_at || input?.appliedAt || new Date().toISOString(),
+    notes: input?.notes || "",
+    tags: input?.tags || [],
+    nextEtaText: "TBD",
+    postingUrl: input?.postingUrl || "",
+    scheduledMeeting: input?.scheduledMeeting || null,
+    lastEmail: input?.lastEmail || null,
+    interviewPrep: input?.interviewPrep || null,
+    recentNews: input?.recentNews || [],
+    companyIntel: input?.companyIntel || {
       overview: "",
       keyPoints: [],
       competitors: [],
     },
-    interviewQuestions: [],
+    interviewQuestions: input?.interviewQuestions || [],
   }
 }
 
@@ -37,12 +55,12 @@ export default function PipelinesPage() {
       const { data, error } = await supabase.from("pipelines").select("*")
       console.log("Supabase data:", data)
       console.log("Supabase error:", error)
-      console.log("Data length:", data?.length)
       
       let finalJobs: Job[]
       if (Array.isArray(data) && data.length > 0) {
-        console.log("Using Supabase data")
+        console.log("Using Supabase data - transforming to Job objects")
         finalJobs = data.map((row, i) => toSafeJob(row, i))
+        console.log("Transformed jobs:", finalJobs)
       } else {
         console.log("Using sample data")
         finalJobs = sampleJobs.map((row, i) => toSafeJob(row, i))
@@ -59,7 +77,6 @@ export default function PipelinesPage() {
     rightPanelRef.current?.scrollTo({ top: 0, behavior: "smooth" })
   }
 
-  // 🚨 CRITICAL: do NOT render children until jobs exist
   if (!jobs || jobs.length === 0) {
     return <div className="p-6">Loading pipelines…</div>
   }
