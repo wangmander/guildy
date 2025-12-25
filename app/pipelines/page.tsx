@@ -1,11 +1,36 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import type { Job } from "@/types"
+import type { Job, Stage, Status } from "@/types"
 import { PipelineCardList } from "@/components/pipeline-card-list"
 import { JobDetailPanel } from "@/components/job-detail-panel"
 import { MobileBottomSheet } from "@/components/mobile-bottom-sheet"
 import { supabase } from "@/lib/supabaseClient"
+
+function rowToJob(row: any): Job {
+  return {
+    id: row.id,
+    title: row.role ?? "Interview",
+    company: {
+      name: row.company ?? "Unknown",
+    },
+    stage: (row.stage as Stage) ?? "APPLIED",
+    status: "WAITING" as Status,
+    appliedAt: row.last_email_at ?? undefined,
+    lastEmail: row.last_email_subject
+      ? {
+          fromName: row.company ?? "",
+          fromEmail: "",
+          subject: row.last_email_subject,
+          receivedAt: row.last_email_at ?? "",
+          snippet: "",
+        }
+      : undefined,
+    notes: "",
+    interviewPrep: undefined,
+    recentNews: [],
+  }
+}
 
 export default function PipelinesPage() {
   const [jobs, setJobs] = useState<Job[]>([])
@@ -21,16 +46,15 @@ export default function PipelinesPage() {
       .order("last_email_at", { ascending: false })
 
     if (data && data.length > 0) {
-      setJobs(data as any)
-      setSelectedJob(data[0] as any)
+      const mapped = data.map(rowToJob)
+      setJobs(mapped)
+      setSelectedJob(mapped[0])
     }
   }
 
   async function syncGmail() {
     setSyncing(true)
-    const res = await fetch("/api/gmail/sync", { method: "POST" })
-    const json = await res.json()
-    console.log("GMAIL SYNC RESULT:", json)
+    await fetch("/api/gmail/sync", { method: "POST" })
     await loadPipelines()
     setSyncing(false)
   }
@@ -41,24 +65,25 @@ export default function PipelinesPage() {
 
   return (
     <div className="mx-auto max-w-7xl h-[calc(100vh-64px)] flex flex-col overflow-hidden">
-      {/* TEMP GMAIL SYNC BUTTON */}
-      <div className="p-4 border-b bg-white flex gap-3 items-center">
+      {/* TEMP SYNC BUTTON */}
+      <div className="p-4 border-b bg-white flex items-center gap-3">
         <button
           onClick={syncGmail}
           disabled={syncing}
-          className="px-4 py-2 rounded bg-black text-white disabled:opacity-50"
+          className="px-4 py-2 bg-black text-white rounded disabled:opacity-50"
         >
           {syncing ? "Syncing Gmail…" : "Sync Gmail"}
         </button>
         <span className="text-sm text-gray-600">
-          Click once to import interview emails
+          Imports interview emails into pipelines
         </span>
       </div>
 
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
-        <div className="w-full lg:w-1/2 border-b lg:border-b-0 flex flex-col overflow-y-auto custom-scrollbar">
+        <div className="w-full lg:w-1/2 overflow-y-auto custom-scrollbar">
           <PipelineCardList
             jobs={jobs}
+            selectedJobId={selectedJob?.id}
             onSelect={(job) => {
               setSelectedJob(job)
               setIsMobileSheetOpen(true)
@@ -67,7 +92,6 @@ export default function PipelinesPage() {
               setSelectedJob(job)
               setIsMobileSheetOpen(true)
             }}
-            selectedJobId={selectedJob?.id}
           />
         </div>
 
@@ -75,7 +99,11 @@ export default function PipelinesPage() {
           ref={rightPanelRef}
           className="hidden lg:block w-1/2 overflow-y-auto bg-white custom-scrollbar"
         >
-          <JobDetailPanel job={selectedJob} onSaveNotes={() => {}} idPrefix="desktop" />
+          <JobDetailPanel
+            job={selectedJob}
+            onSaveNotes={() => {}}
+            idPrefix="desktop"
+          />
         </div>
 
         <MobileBottomSheet
