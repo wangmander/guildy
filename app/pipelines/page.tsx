@@ -1,105 +1,81 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import type { Job, Stage, Status } from "@/types"
+import type { Job } from "@/types"
 import { PipelineCardList } from "@/components/pipeline-card-list"
 import { JobDetailPanel } from "@/components/job-detail-panel"
 import { MobileBottomSheet } from "@/components/mobile-bottom-sheet"
 import { supabase } from "@/lib/supabaseClient"
 
-const stages = ["APPLIED", "RECRUITER_SCREEN", "INTERVIEW", "OFFER"] as const
-
-function rowToJob(row: any): Job {
-  return {
-    id: row.id,
-    title: row.role ?? "Untitled role",
-    company: {
-      name: row.company ?? "Unknown company",
-    },
-    stage: (row.stage as Stage) ?? "APPLIED",
-    status: "WAITING" as Status,
-    notes: "",
-    scheduledMeeting: undefined,
-    interviewPrep: undefined,
-    recentNews: [],
-    lastEmail: undefined,
-  }
-}
-
 export default function PipelinesPage() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const rightPanelRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    async function load() {
-      const { data, error } = await supabase
-        .from("pipelines")
-        .select("*")
-        .order("last_email_at", { ascending: false })
+  async function loadPipelines() {
+    const { data } = await supabase
+      .from("pipelines")
+      .select("*")
+      .order("last_email_at", { ascending: false })
 
-      if (error) {
-        console.error(error)
-        return
-      }
-
-      const mapped = (data ?? []).map(rowToJob)
-      setJobs(mapped)
-      setSelectedJob(mapped[0] ?? null)
+    if (data && data.length > 0) {
+      setJobs(data as any)
+      setSelectedJob(data[0] as any)
     }
+  }
 
-    load()
+  async function syncGmail() {
+    setSyncing(true)
+    const res = await fetch("/api/gmail/sync", { method: "POST" })
+    const json = await res.json()
+    console.log("GMAIL SYNC RESULT:", json)
+    await loadPipelines()
+    setSyncing(false)
+  }
+
+  useEffect(() => {
+    loadPipelines()
   }, [])
-
-  const handleSelectJob = (job: Job) => {
-    setSelectedJob(job)
-    setIsMobileSheetOpen(true)
-    rightPanelRef.current?.scrollTo({ top: 0, behavior: "smooth" })
-  }
-
-  const handleActionClick = (job: Job) => {
-    setSelectedJob(job)
-    setIsMobileSheetOpen(true)
-
-    setTimeout(() => {
-      const targetSuffix = job.scheduledMeeting
-        ? "interview-questions"
-        : "company-intel"
-
-      document
-        .getElementById(`mobile-${targetSuffix}`)
-        ?.scrollIntoView({ behavior: "smooth" })
-
-      document
-        .getElementById(`desktop-${targetSuffix}`)
-        ?.scrollIntoView({ behavior: "smooth" })
-    }, 300)
-  }
 
   return (
     <div className="mx-auto max-w-7xl h-[calc(100vh-64px)] flex flex-col overflow-hidden">
+      {/* TEMP GMAIL SYNC BUTTON */}
+      <div className="p-4 border-b bg-white flex gap-3 items-center">
+        <button
+          onClick={syncGmail}
+          disabled={syncing}
+          className="px-4 py-2 rounded bg-black text-white disabled:opacity-50"
+        >
+          {syncing ? "Syncing Gmail…" : "Sync Gmail"}
+        </button>
+        <span className="text-sm text-gray-600">
+          Click once to import interview emails
+        </span>
+      </div>
+
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
         <div className="w-full lg:w-1/2 border-b lg:border-b-0 flex flex-col overflow-y-auto custom-scrollbar">
-          <div className="p-4 sm:p-6 lg:p-8 flex flex-col min-h-full">
-            <PipelineCardList
-              jobs={jobs}
-              onSelect={handleSelectJob}
-              onActionClick={handleActionClick}
-              selectedJobId={selectedJob?.id}
-            />
-          </div>
+          <PipelineCardList
+            jobs={jobs}
+            onSelect={(job) => {
+              setSelectedJob(job)
+              setIsMobileSheetOpen(true)
+            }}
+            onActionClick={(job) => {
+              setSelectedJob(job)
+              setIsMobileSheetOpen(true)
+            }}
+            selectedJobId={selectedJob?.id}
+          />
         </div>
 
         <div
           ref={rightPanelRef}
           className="hidden lg:block w-1/2 overflow-y-auto bg-white custom-scrollbar"
         >
-          <JobDetailPanel
-            job={selectedJob}
-            onSaveNotes={() => {}}
-            idPrefix="desktop"
-          />
+          <JobDetailPanel job={selectedJob} onSaveNotes={() => {}} idPrefix="desktop" />
         </div>
 
         <MobileBottomSheet
