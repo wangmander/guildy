@@ -19,16 +19,18 @@ const handler = NextAuth({
     strategy: "jwt",
   },
   callbacks: {
-    async jwt({ token, account, profile }) {
-      if (account && profile) {
-        token.email = profile.email
+    async jwt({ token, account }) {
+      // 🔑 THIS IS THE CRITICAL LINE
+      if (account?.access_token) {
         token.accessToken = account.access_token
       }
       return token
     },
     async session({ session, token }) {
-      session.user.email = token.email as string
-      ;(session as any).accessToken = token.accessToken
+      // 🔑 EXPOSE ACCESS TOKEN TO API ROUTES
+      if (token.accessToken) {
+        ;(session as any).accessToken = token.accessToken
+      }
       return session
     },
   },
