@@ -1,5 +1,5 @@
 export type Stage = "APPLIED" | "RECRUITER_SCREEN" | "INTERVIEW" | "OFFER"
-export type Status = "WAITING" | "SCHEDULED" | "FEEDBACK_PENDING" | "DECLINED" | "NEGOTIATING"
+export type Status = "WAITING" | "SCHEDULED" | "FEEDBACK_PENDING" | "DECLINED" | "NEGOTIATING" | "ACTIVE"
 
 export interface EmailSnippet {
   fromName: string
@@ -34,20 +34,27 @@ export interface NewsItem {
   date?: string
 }
 
+export interface CompanyIntel {
+  overview: string
+  keyPoints: string[]
+  competitors: string[]
+}
+
 export interface Job {
   id: string
   title: string
+  role?: string // Added for backward compatibility with Supabase
   company: {
     name: string
     logoUrl?: string
     glassdoorRating?: number
   }
   location?: string
-  industry?: "Tech" | "Healthcare" | "Finance" | "Other"
-  jobType?: "PM" | "Design" | "Eng" | "Data" | "Other"
+  industry?: string
+  jobType?: string
   tags?: string[]
   stage: Stage
-  status: Status
+  status?: Status
   nextEtaText?: string
   appliedAt?: string
   postingUrl?: string
@@ -56,4 +63,6 @@ export interface Job {
   scheduledMeeting?: ScheduledMeeting
   interviewPrep?: InterviewPrep
   recentNews?: NewsItem[]
+  companyIntel?: CompanyIntel
+  interviewQuestions?: string[]
 }
