@@ -53,6 +53,14 @@ export function JobDetailPanel({ job, onSaveNotes, isMobile = false, idPrefix = 
     setIsEditing(false)
   }
 
+  // ✅ FIX: Safely get company name and details
+  const companyName = typeof job.company === 'string' ? job.company : job.company?.name || 'Unknown Company'
+  const companyInitial = companyName.charAt(0).toUpperCase()
+  const jobTitle = job.role || job.title || 'Role'
+  const jobLocation = job.location || 'Location not specified'
+  const jobIndustry = job.industry || 'Industry not specified'
+  const glassdoorRating = typeof job.company === 'object' ? job.company?.glassdoorRating : null
+
   const containerClass = "px-4 py-3"
   const cardClass = "p-3 mb-3"
 
@@ -61,24 +69,24 @@ export function JobDetailPanel({ job, onSaveNotes, isMobile = false, idPrefix = 
       <div className="mb-3">
         <div className="flex items-start gap-4 mb-4">
           <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center text-2xl font-medium flex-shrink-0">
-            {job.company.name.charAt(0)}
+            {companyInitial}
           </div>
           <div className="flex-1 min-w-0 pt-1">
-            <h1 className="text-3xl font-bold text-gray-900">{job.company.name}</h1>
-            <p className="text-xl text-gray-600">{job.title}</p>
+            <h1 className="text-3xl font-bold text-gray-900">{companyName}</h1>
+            <p className="text-xl text-gray-600">{jobTitle}</p>
             <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
               <div className="flex items-center gap-1">
                 <MapPin className="w-4 h-4" />
-                {job.location}
+                {jobLocation}
               </div>
-              <div>{job.industry}</div>
+              <div>{jobIndustry}</div>
             </div>
           </div>
         </div>
 
         <div className="flex gap-2 mb-3">
           <Badge variant="secondary">{job.stage.replace("_", " ")}</Badge>
-          <Badge variant={job.status === "SCHEDULED" ? "default" : "outline"}>{job.status.replace("_", " ")}</Badge>
+          <Badge variant={job.status === "SCHEDULED" ? "default" : "outline"}>{job.status?.replace("_", " ") || "Status"}</Badge>
         </div>
 
         {/* Next Action Banner */}
@@ -122,7 +130,6 @@ export function JobDetailPanel({ job, onSaveNotes, isMobile = false, idPrefix = 
       {job.lastEmail && (
         <Card className={cardClass}>
           <div className="flex items-center gap-2 mb-2">
-            {/* Changed Last Email icon color from pink to green */}
             <Mail className="w-5 h-5 text-green-600" />
             <span className="font-semibold">Last Email</span>
           </div>
@@ -133,7 +140,6 @@ export function JobDetailPanel({ job, onSaveNotes, isMobile = false, idPrefix = 
           <p className="text-sm text-gray-700 mb-2 leading-relaxed">{job.lastEmail.snippet}</p>
           <p className="text-xs text-gray-500 mb-2">{new Date(job.lastEmail.receivedAt).toLocaleString()}</p>
 
-          {/* Email Insights */}
           <div className="bg-gray-50 rounded-lg p-2 space-y-1">
             <div className="flex items-center justify-between text-sm">
               <span className="text-gray-600">Tone:</span>
@@ -160,7 +166,6 @@ export function JobDetailPanel({ job, onSaveNotes, isMobile = false, idPrefix = 
             <span className="font-semibold text-violet-900 text-lg">Interview Preparation</span>
           </div>
 
-          {/* Prep Focus Summary */}
           <div className="bg-violet-100 rounded-lg p-2 mb-3">
             <p className="text-sm font-medium text-violet-900">
               <span className="font-semibold">Prep Focus:</span> For {job.scheduledMeeting?.type || "this stage"},
@@ -168,7 +173,6 @@ export function JobDetailPanel({ job, onSaveNotes, isMobile = false, idPrefix = 
             </p>
           </div>
 
-          {/* Interviewer Profile */}
           <div className="mb-3">
             <div className="flex items-center gap-2 mb-2">
               <User className="w-4 h-4 text-violet-600" />
@@ -193,7 +197,6 @@ export function JobDetailPanel({ job, onSaveNotes, isMobile = false, idPrefix = 
             </div>
           </div>
 
-          {/* Sample Questions */}
           <div className="mb-3">
             <div className="flex items-center gap-2 mb-2">
               <HelpCircle className="w-4 h-4 text-violet-600" />
@@ -211,7 +214,6 @@ export function JobDetailPanel({ job, onSaveNotes, isMobile = false, idPrefix = 
             </div>
           </div>
 
-          {/* AI Tip */}
           <div className="bg-violet-100 rounded-lg p-2 mb-3">
             <p className="text-sm italic text-violet-900">
               <span className="font-semibold not-italic">AI Tip:</span> Your past responses may sound
@@ -219,7 +221,6 @@ export function JobDetailPanel({ job, onSaveNotes, isMobile = false, idPrefix = 
             </p>
           </div>
 
-          {/* Tips */}
           <div>
             <div className="flex items-center gap-2 mb-2">
               <Lightbulb className="w-4 h-4 text-violet-600" />
@@ -241,7 +242,6 @@ export function JobDetailPanel({ job, onSaveNotes, isMobile = false, idPrefix = 
 
       <Card id={`${idPrefix}-interview-questions`} className={cardClass}>
         <div className="flex items-center gap-2 mb-2">
-          {/* Changed Interview Prep icon color from rose to purple */}
           <BookOpen className="w-5 h-5 text-purple-600" />
           <div>
             <h3 className="font-semibold text-base">Interview Prep</h3>
@@ -250,44 +250,35 @@ export function JobDetailPanel({ job, onSaveNotes, isMobile = false, idPrefix = 
         </div>
 
         <div className="grid md:grid-cols-2 gap-3">
-          {/* Questions They Might Ask You */}
-          {/* Changed background and border colors from rose to purple */}
           <div className="bg-purple-50 rounded-lg p-3 border border-purple-100">
             <div className="flex items-center gap-2 mb-2">
-              {/* Changed icon color from rose to purple */}
               <HelpCircle className="w-4 h-4 text-purple-600" />
               <h4 className="font-semibold text-sm text-gray-900">Questions They Might Ask You</h4>
             </div>
             <ul className="space-y-2">
               <li className="flex items-start gap-2 text-sm text-gray-700">
-                {/* Changed bullet color from rose to purple */}
                 <span className="text-purple-600 font-semibold mt-0.5">•</span>
                 <span>Walk me through a project where you improved reliability.</span>
               </li>
               <li className="flex items-start gap-2 text-sm text-gray-700">
-                {/* Changed bullet color from rose to purple */}
                 <span className="text-purple-600 font-semibold mt-0.5">•</span>
                 <span>How do you collaborate with product and design teams?</span>
               </li>
               <li className="flex items-start gap-2 text-sm text-gray-700">
-                {/* Changed bullet color from rose to purple */}
                 <span className="text-purple-600 font-semibold mt-0.5">•</span>
                 <span>Describe a time you managed infrastructure scaling challenges.</span>
               </li>
               <li className="flex items-start gap-2 text-sm text-gray-700">
-                {/* Changed bullet color from rose to purple */}
                 <span className="text-purple-600 font-semibold mt-0.5">•</span>
                 <span>What's your approach to monitoring and incident response?</span>
               </li>
               <li className="flex items-start gap-2 text-sm text-gray-700">
-                {/* Changed bullet color from rose to purple */}
                 <span className="text-purple-600 font-semibold mt-0.5">•</span>
                 <span>How do you prioritize technical debt vs new features?</span>
               </li>
             </ul>
           </div>
 
-          {/* Questions You Should Ask Them */}
           <div className="bg-amber-50 rounded-lg p-3 border border-amber-100">
             <div className="flex items-center gap-2 mb-2">
               <MessageCircle className="w-4 h-4 text-amber-600" />
@@ -318,7 +309,6 @@ export function JobDetailPanel({ job, onSaveNotes, isMobile = false, idPrefix = 
           </div>
         </div>
 
-        {/* Optional: Future "Generate More" placeholder */}
         <div className="mt-3 pt-2 border-t border-gray-200">
           <p className="text-xs text-gray-500 italic">
             💡 Tip: Practice answering these questions out loud to build confidence before your interview.
@@ -335,7 +325,7 @@ export function JobDetailPanel({ job, onSaveNotes, isMobile = false, idPrefix = 
         <div className="grid grid-cols-2 gap-3 mb-3">
           <div>
             <p className="text-xs text-gray-500 mb-0.5">Industry</p>
-            <p className="text-sm font-medium text-gray-900">{job.industry}</p>
+            <p className="text-sm font-medium text-gray-900">{jobIndustry}</p>
           </div>
           <div>
             <p className="text-xs text-gray-500 mb-0.5">Size</p>
@@ -343,13 +333,13 @@ export function JobDetailPanel({ job, onSaveNotes, isMobile = false, idPrefix = 
           </div>
           <div>
             <p className="text-xs text-gray-500 mb-0.5">HQ Location</p>
-            <p className="text-sm font-medium text-gray-900">{job.location}</p>
+            <p className="text-sm font-medium text-gray-900">{jobLocation}</p>
           </div>
           <div>
             <p className="text-xs text-gray-500 mb-0.5">Glassdoor Rating</p>
             <div className="flex items-center gap-1">
-              <span className="text-sm font-medium text-gray-900">{job.company.glassdoorRating || "N/A"}</span>
-              {job.company.glassdoorRating && <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />}
+              <span className="text-sm font-medium text-gray-900">{glassdoorRating || "N/A"}</span>
+              {glassdoorRating && <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />}
             </div>
           </div>
         </div>
@@ -399,28 +389,24 @@ export function JobDetailPanel({ job, onSaveNotes, isMobile = false, idPrefix = 
         </div>
 
         <div className="space-y-4 mb-6">
-          {/* Applied */}
           <div className="flex items-center gap-4">
             <span className="w-20 text-sm text-gray-500">Applied</span>
             <div className="flex-1 h-2.5 bg-blue-600 rounded-full" />
             <span className="w-12 text-right text-sm text-gray-500">Day 0</span>
           </div>
 
-          {/* Recruiter */}
           <div className="flex items-center gap-4">
             <span className="w-20 text-sm text-gray-500">Recruiter</span>
             <div className="flex-1 h-2.5 bg-blue-600 rounded-full" />
             <span className="w-12 text-right text-sm text-gray-500">Day 3</span>
           </div>
 
-          {/* Interview */}
           <div className="flex items-center gap-4">
             <span className="w-20 text-sm text-gray-500">Interview</span>
             <div className="flex-1 h-2.5 bg-blue-200 rounded-full" />
             <span className="w-12 text-right text-sm text-gray-500">Day 8</span>
           </div>
 
-          {/* Offer */}
           <div className="flex items-center gap-4">
             <span className="w-20 text-sm text-gray-500">Offer</span>
             <div className="flex-1 h-2.5 bg-gray-100 rounded-full" />
@@ -444,18 +430,20 @@ export function JobDetailPanel({ job, onSaveNotes, isMobile = false, idPrefix = 
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Next ETA:</span>
-              <span>{job.nextEtaText}</span>
+              <span>{job.nextEtaText || "TBD"}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Job Type:</span>
-              <span>{job.jobType}</span>
+              <span>{job.jobType || "Full-time"}</span>
             </div>
-            <Button size="sm" variant="outline" className="mt-2 w-full bg-transparent" asChild>
-              <a href={job.postingUrl} target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="w-3 h-3 mr-1" />
-                View Job Posting
-              </a>
-            </Button>
+            {job.postingUrl && (
+              <Button size="sm" variant="outline" className="mt-2 w-full bg-transparent" asChild>
+                <a href={job.postingUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="w-3 h-3 mr-1" />
+                  View Job Posting
+                </a>
+              </Button>
+            )}
           </div>
         </details>
 
