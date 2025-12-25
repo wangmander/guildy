@@ -1,8 +1,6 @@
 "use client"
 
 import type { Job } from "@/types"
-import { Card } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { useState } from "react"
@@ -31,17 +29,35 @@ interface JobDetailPanelProps {
   idPrefix?: string
 }
 
+const cardStyle = {
+  backgroundColor: "white",
+  borderRadius: "12px",
+  padding: "16px",
+  marginBottom: "16px",
+  border: "1px solid #E5E7EB",
+  boxShadow: "0 1px 2px 0 rgb(0 0 0 / 0.05)"
+}
+
+const badgeStyle = {
+  display: "inline-block",
+  padding: "4px 12px",
+  borderRadius: "6px",
+  fontSize: "12px",
+  fontWeight: "500",
+  marginRight: "8px"
+}
+
 export function JobDetailPanel({ job, onSaveNotes, isMobile = false, idPrefix = "desktop" }: JobDetailPanelProps) {
   const [notes, setNotes] = useState(job?.notes || "")
   const [isEditing, setIsEditing] = useState(false)
 
   if (!job) {
     return (
-      <div className="px-4 py-6">
-        <div className="flex items-center justify-center">
-          <div className="text-center text-gray-500">
-            <p className="text-lg font-medium">Select a job to view details</p>
-            <p className="text-sm">Choose a pipeline from the left to see more information</p>
+      <div style={{ padding: "24px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "400px" }}>
+          <div style={{ textAlign: "center", color: "#6B7280" }}>
+            <p style={{ fontSize: "18px", fontWeight: "500", marginBottom: "8px" }}>Select a job to view details</p>
+            <p style={{ fontSize: "14px" }}>Choose a pipeline from the left to see more information</p>
           </div>
         </div>
       </div>
@@ -53,7 +69,6 @@ export function JobDetailPanel({ job, onSaveNotes, isMobile = false, idPrefix = 
     setIsEditing(false)
   }
 
-  // ✅ FIX: Safely get company name and details
   const companyName = typeof job.company === 'string' ? job.company : job.company?.name || 'Unknown Company'
   const companyInitial = companyName.charAt(0).toUpperCase()
   const jobTitle = job.role || job.title || 'Role'
@@ -61,22 +76,33 @@ export function JobDetailPanel({ job, onSaveNotes, isMobile = false, idPrefix = 
   const jobIndustry = job.industry || 'Industry not specified'
   const glassdoorRating = typeof job.company === 'object' ? job.company?.glassdoorRating : null
 
-  const containerClass = "px-4 py-3"
-  const cardClass = "p-3 mb-3"
-
   return (
-    <div className={containerClass}>
-      <div className="mb-3">
-        <div className="flex items-start gap-4 mb-4">
-          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center text-2xl font-medium flex-shrink-0">
+    <div style={{ padding: "16px" }}>
+      {/* Header */}
+      <div style={{ marginBottom: "24px" }}>
+        <div style={{ display: "flex", gap: "16px", marginBottom: "16px" }}>
+          <div style={{
+            width: "64px",
+            height: "64px",
+            backgroundColor: "#F3F4F6",
+            borderRadius: "50%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: "24px",
+            fontWeight: "500",
+            flexShrink: 0
+          }}>
             {companyInitial}
           </div>
-          <div className="flex-1 min-w-0 pt-1">
-            <h1 className="text-3xl font-bold text-gray-900">{companyName}</h1>
-            <p className="text-xl text-gray-600">{jobTitle}</p>
-            <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
-              <div className="flex items-center gap-1">
-                <MapPin className="w-4 h-4" />
+          <div style={{ flex: 1, paddingTop: "4px" }}>
+            <h1 style={{ fontSize: "30px", fontWeight: "700", color: "#111827", marginBottom: "4px" }}>
+              {companyName}
+            </h1>
+            <p style={{ fontSize: "20px", color: "#4B5563", marginBottom: "4px" }}>{jobTitle}</p>
+            <div style={{ display: "flex", alignItems: "center", gap: "16px", fontSize: "14px", color: "#6B7280" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                <MapPin style={{ width: "16px", height: "16px" }} />
                 {jobLocation}
               </div>
               <div>{jobIndustry}</div>
@@ -84,15 +110,23 @@ export function JobDetailPanel({ job, onSaveNotes, isMobile = false, idPrefix = 
           </div>
         </div>
 
-        <div className="flex gap-2 mb-3">
-          <Badge variant="secondary">{job.stage.replace("_", " ")}</Badge>
-          <Badge variant={job.status === "SCHEDULED" ? "default" : "outline"}>{job.status?.replace("_", " ") || "Status"}</Badge>
+        <div style={{ display: "flex", gap: "8px", marginBottom: "12px" }}>
+          <span style={{ ...badgeStyle, backgroundColor: "#F3F4F6", color: "#374151" }}>
+            {job.stage.replace("_", " ")}
+          </span>
+          <span style={{ ...badgeStyle, backgroundColor: "#DBEAFE", color: "#1E40AF", border: "1px solid #BFDBFE" }}>
+            {job.status?.replace("_", " ") || "ACTIVE"}
+          </span>
         </div>
 
-        {/* Next Action Banner */}
-        <div className="bg-orange-50 border border-orange-200 rounded-lg p-2">
-          <p className="text-sm font-medium text-orange-800">
-            <span className="font-semibold">Next Action:</span>{" "}
+        <div style={{ 
+          backgroundColor: "#FEF3C7", 
+          border: "1px solid #FCD34D", 
+          borderRadius: "8px", 
+          padding: "12px" 
+        }}>
+          <p style={{ fontSize: "14px", fontWeight: "500", color: "#92400E" }}>
+            <span style={{ fontWeight: "600" }}>Next Action:</span>{" "}
             {job.scheduledMeeting
               ? `Prepare for ${job.scheduledMeeting.type} on ${new Date(job.scheduledMeeting.date).toLocaleDateString()}`
               : job.status === "FEEDBACK_PENDING"
@@ -102,344 +136,236 @@ export function JobDetailPanel({ job, onSaveNotes, isMobile = false, idPrefix = 
         </div>
       </div>
 
-      {job.scheduledMeeting && (
-        <Card className={`${cardClass} bg-blue-50 border-blue-200`}>
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-blue-600" />
-              <span className="font-semibold text-blue-900">Upcoming Meeting</span>
-            </div>
-            <Badge variant="outline" className="bg-white text-blue-700 border-blue-300">
-              {job.scheduledMeeting.duration} min
-            </Badge>
+      {/* Interview Prep Card */}
+      <div style={cardStyle}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+          <BookOpen style={{ width: "20px", height: "20px", color: "#9333EA" }} />
+          <div>
+            <h3 style={{ fontSize: "16px", fontWeight: "600" }}>Interview Prep</h3>
+            <p style={{ fontSize: "14px", color: "#6B7280" }}>Prepare with focus for your next conversation.</p>
           </div>
-          <p className="text-base font-medium text-blue-900 mb-1">{job.scheduledMeeting.type}</p>
-          <div className="flex items-center gap-2 text-sm text-blue-700 mb-2">
-            <Clock className="w-4 h-4" />
-            {new Date(job.scheduledMeeting.date).toLocaleString()}
-          </div>
-          <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" asChild>
-            <a href={job.scheduledMeeting.meetingLink} target="_blank" rel="noopener noreferrer">
-              <ExternalLink className="w-3 h-3 mr-1" />
-              Join Meeting
-            </a>
-          </Button>
-        </Card>
-      )}
+        </div>
 
-      {job.lastEmail && (
-        <Card className={cardClass}>
-          <div className="flex items-center gap-2 mb-2">
-            <Mail className="w-5 h-5 text-green-600" />
-            <span className="font-semibold">Last Email</span>
-          </div>
-          <p className="text-sm font-semibold text-gray-900 mb-0.5">{job.lastEmail.subject}</p>
-          <p className="text-sm text-gray-600 mb-1">
-            From: {job.lastEmail.fromName} <span className="text-gray-400">({job.lastEmail.fromEmail})</span>
-          </p>
-          <p className="text-sm text-gray-700 mb-2 leading-relaxed">{job.lastEmail.snippet}</p>
-          <p className="text-xs text-gray-500 mb-2">{new Date(job.lastEmail.receivedAt).toLocaleString()}</p>
-
-          <div className="bg-gray-50 rounded-lg p-2 space-y-1">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">Tone:</span>
-              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                Positive
-              </Badge>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+          {/* Questions They Might Ask */}
+          <div style={{
+            backgroundColor: "#F5F3FF",
+            borderRadius: "8px",
+            padding: "12px",
+            border: "1px solid #E9D5FF"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+              <HelpCircle style={{ width: "16px", height: "16px", color: "#9333EA" }} />
+              <h4 style={{ fontSize: "14px", fontWeight: "600", color: "#111827" }}>
+                Questions They Might Ask You
+              </h4>
             </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">Response Likelihood:</span>
-              <span className="font-medium text-gray-900">High</span>
-            </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">Urgency:</span>
-              <span className="font-medium text-orange-600">Reply by Monday</span>
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {job.interviewPrep && (
-        <Card id={`${idPrefix}-interview-prep`} className={`${cardClass} bg-violet-50 border-violet-200`}>
-          <div className="flex items-center gap-2 mb-3">
-            <Target className="w-5 h-5 text-violet-600" />
-            <span className="font-semibold text-violet-900 text-lg">Interview Preparation</span>
-          </div>
-
-          <div className="bg-violet-100 rounded-lg p-2 mb-3">
-            <p className="text-sm font-medium text-violet-900">
-              <span className="font-semibold">Prep Focus:</span> For {job.scheduledMeeting?.type || "this stage"},
-              emphasize communication clarity and showcase relevant portfolio work.
-            </p>
-          </div>
-
-          <div className="mb-3">
-            <div className="flex items-center gap-2 mb-2">
-              <User className="w-4 h-4 text-violet-600" />
-              <span className="font-medium text-violet-900">Your Interviewer</span>
-            </div>
-            <div className="bg-white rounded-lg p-3 border border-violet-100">
-              <h4 className="font-semibold text-gray-900 text-base">{job.interviewPrep.interviewer.name}</h4>
-              <p className="text-sm text-violet-700 font-medium mb-1">{job.interviewPrep.interviewer.role}</p>
-              <p className="text-sm text-gray-700 mb-2 leading-relaxed">{job.interviewPrep.interviewer.bio}</p>
-
-              <div>
-                <p className="text-sm font-semibold text-gray-900 mb-1">What they're looking for:</p>
-                <ul className="text-sm text-gray-700 space-y-1">
-                  {job.interviewPrep.interviewer.goals.map((goal, index) => (
-                    <li key={index} className="flex items-start gap-2">
-                      <span className="text-violet-500 mt-0.5">•</span>
-                      <span>{goal}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          <div className="mb-3">
-            <div className="flex items-center gap-2 mb-2">
-              <HelpCircle className="w-4 h-4 text-violet-600" />
-              <span className="font-medium text-violet-900">Example Questions</span>
-            </div>
-            <div className="bg-white rounded-lg p-3 border border-violet-100 space-y-2">
-              {job.interviewPrep.sampleQuestions.map((question, index) => (
-                <div key={index} className="flex items-start gap-3">
-                  <span className="text-violet-600 font-semibold text-xs bg-violet-100 rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    {index + 1}
-                  </span>
-                  <span className="text-sm text-gray-700">{question}</span>
-                </div>
+            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+              {[
+                "Walk me through a project where you improved reliability.",
+                "How do you collaborate with product and design teams?",
+                "Describe a time you managed infrastructure scaling challenges.",
+                "What's your approach to monitoring and incident response?",
+                "How do you prioritize technical debt vs new features?"
+              ].map((q, i) => (
+                <li key={i} style={{ 
+                  display: "flex", 
+                  gap: "8px", 
+                  fontSize: "14px", 
+                  color: "#374151",
+                  marginBottom: "8px"
+                }}>
+                  <span style={{ color: "#9333EA", fontWeight: "600" }}>•</span>
+                  <span>{q}</span>
+                </li>
               ))}
-            </div>
-          </div>
-
-          <div className="bg-violet-100 rounded-lg p-2 mb-3">
-            <p className="text-sm italic text-violet-900">
-              <span className="font-semibold not-italic">AI Tip:</span> Your past responses may sound
-              generic—personalize with a specific example from your recent project work.
-            </p>
-          </div>
-
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Lightbulb className="w-4 h-4 text-violet-600" />
-              <span className="font-medium text-violet-900">What to Emphasize</span>
-            </div>
-            <div className="bg-white rounded-lg p-3 border border-violet-100">
-              <ul className="text-sm text-gray-700 space-y-1">
-                {job.interviewPrep.tips.map((tip, index) => (
-                  <li key={index} className="flex items-start gap-2">
-                    <span className="text-violet-500 mt-0.5">•</span>
-                    <span>{tip}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </Card>
-      )}
-
-      <Card id={`${idPrefix}-interview-questions`} className={cardClass}>
-        <div className="flex items-center gap-2 mb-2">
-          <BookOpen className="w-5 h-5 text-purple-600" />
-          <div>
-            <h3 className="font-semibold text-base">Interview Prep</h3>
-            <p className="text-sm text-gray-600">Prepare with focus for your next conversation.</p>
-          </div>
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-3">
-          <div className="bg-purple-50 rounded-lg p-3 border border-purple-100">
-            <div className="flex items-center gap-2 mb-2">
-              <HelpCircle className="w-4 h-4 text-purple-600" />
-              <h4 className="font-semibold text-sm text-gray-900">Questions They Might Ask You</h4>
-            </div>
-            <ul className="space-y-2">
-              <li className="flex items-start gap-2 text-sm text-gray-700">
-                <span className="text-purple-600 font-semibold mt-0.5">•</span>
-                <span>Walk me through a project where you improved reliability.</span>
-              </li>
-              <li className="flex items-start gap-2 text-sm text-gray-700">
-                <span className="text-purple-600 font-semibold mt-0.5">•</span>
-                <span>How do you collaborate with product and design teams?</span>
-              </li>
-              <li className="flex items-start gap-2 text-sm text-gray-700">
-                <span className="text-purple-600 font-semibold mt-0.5">•</span>
-                <span>Describe a time you managed infrastructure scaling challenges.</span>
-              </li>
-              <li className="flex items-start gap-2 text-sm text-gray-700">
-                <span className="text-purple-600 font-semibold mt-0.5">•</span>
-                <span>What's your approach to monitoring and incident response?</span>
-              </li>
-              <li className="flex items-start gap-2 text-sm text-gray-700">
-                <span className="text-purple-600 font-semibold mt-0.5">•</span>
-                <span>How do you prioritize technical debt vs new features?</span>
-              </li>
             </ul>
           </div>
 
-          <div className="bg-amber-50 rounded-lg p-3 border border-amber-100">
-            <div className="flex items-center gap-2 mb-2">
-              <MessageCircle className="w-4 h-4 text-amber-600" />
-              <h4 className="font-semibold text-sm text-gray-900">Questions You Should Ask Them</h4>
+          {/* Questions You Should Ask */}
+          <div style={{
+            backgroundColor: "#FEF3C7",
+            borderRadius: "8px",
+            padding: "12px",
+            border: "1px solid #FDE68A"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+              <MessageCircle style={{ width: "16px", height: "16px", color: "#D97706" }} />
+              <h4 style={{ fontSize: "14px", fontWeight: "600", color: "#111827" }}>
+                Questions You Should Ask Them
+              </h4>
             </div>
-            <ul className="space-y-2">
-              <li className="flex items-start gap-2 text-sm text-gray-700">
-                <span className="text-amber-600 font-semibold mt-0.5">•</span>
-                <span>What does success look like in this role after 90 days?</span>
-              </li>
-              <li className="flex items-start gap-2 text-sm text-gray-700">
-                <span className="text-amber-600 font-semibold mt-0.5">•</span>
-                <span>How does the team measure operational excellence?</span>
-              </li>
-              <li className="flex items-start gap-2 text-sm text-gray-700">
-                <span className="text-amber-600 font-semibold mt-0.5">•</span>
-                <span>What are the current challenges the infrastructure team faces?</span>
-              </li>
-              <li className="flex items-start gap-2 text-sm text-gray-700">
-                <span className="text-amber-600 font-semibold mt-0.5">•</span>
-                <span>How does this role contribute to the company's technical roadmap?</span>
-              </li>
-              <li className="flex items-start gap-2 text-sm text-gray-700">
-                <span className="text-amber-600 font-semibold mt-0.5">•</span>
-                <span>What's the team's approach to professional development?</span>
-              </li>
+            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+              {[
+                "What does success look like in this role after 90 days?",
+                "How does the team measure operational excellence?",
+                "What are the current challenges the infrastructure team faces?",
+                "How does this role contribute to the company's technical roadmap?",
+                "What's the team's approach to professional development?"
+              ].map((q, i) => (
+                <li key={i} style={{ 
+                  display: "flex", 
+                  gap: "8px", 
+                  fontSize: "14px", 
+                  color: "#374151",
+                  marginBottom: "8px"
+                }}>
+                  <span style={{ color: "#D97706", fontWeight: "600" }}>•</span>
+                  <span>{q}</span>
+                </li>
+              ))}
             </ul>
           </div>
         </div>
 
-        <div className="mt-3 pt-2 border-t border-gray-200">
-          <p className="text-xs text-gray-500 italic">
+        <div style={{
+          marginTop: "12px",
+          paddingTop: "12px",
+          borderTop: "1px solid #E5E7EB"
+        }}>
+          <p style={{ fontSize: "12px", color: "#6B7280", fontStyle: "italic" }}>
             💡 Tip: Practice answering these questions out loud to build confidence before your interview.
           </p>
         </div>
-      </Card>
+      </div>
 
-      <Card id={`${idPrefix}-company-intel`} className={cardClass}>
-        <div className="flex items-center gap-2 mb-3">
-          <Building2 className="w-5 h-5 text-yellow-600" />
-          <span className="font-semibold">Company Intel</span>
+      {/* Company Intel Card */}
+      <div style={cardStyle}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+          <Building2 style={{ width: "20px", height: "20px", color: "#EAB308" }} />
+          <span style={{ fontWeight: "600" }}>Company Intel</span>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 mb-3">
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
           <div>
-            <p className="text-xs text-gray-500 mb-0.5">Industry</p>
-            <p className="text-sm font-medium text-gray-900">{jobIndustry}</p>
+            <p style={{ fontSize: "12px", color: "#6B7280", marginBottom: "2px" }}>Industry</p>
+            <p style={{ fontSize: "14px", fontWeight: "500", color: "#111827" }}>{jobIndustry}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500 mb-0.5">Size</p>
-            <p className="text-sm font-medium text-gray-900">500-1000 employees</p>
+            <p style={{ fontSize: "12px", color: "#6B7280", marginBottom: "2px" }}>Size</p>
+            <p style={{ fontSize: "14px", fontWeight: "500", color: "#111827" }}>500-1000 employees</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500 mb-0.5">HQ Location</p>
-            <p className="text-sm font-medium text-gray-900">{jobLocation}</p>
+            <p style={{ fontSize: "12px", color: "#6B7280", marginBottom: "2px" }}>HQ Location</p>
+            <p style={{ fontSize: "14px", fontWeight: "500", color: "#111827" }}>{jobLocation}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500 mb-0.5">Glassdoor Rating</p>
-            <div className="flex items-center gap-1">
-              <span className="text-sm font-medium text-gray-900">{glassdoorRating || "N/A"}</span>
-              {glassdoorRating && <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />}
+            <p style={{ fontSize: "12px", color: "#6B7280", marginBottom: "2px" }}>Glassdoor Rating</p>
+            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <span style={{ fontSize: "14px", fontWeight: "500", color: "#111827" }}>
+                {glassdoorRating || "N/A"}
+              </span>
+              {glassdoorRating && <Star style={{ width: "12px", height: "12px", fill: "#FBBF24", color: "#FBBF24" }} />}
             </div>
           </div>
         </div>
 
-        <div className="bg-yellow-50 rounded-lg p-2 mb-2">
-          <p className="text-xs font-semibold text-yellow-900 mb-0.5">Recent News</p>
-          {job.recentNews && job.recentNews.length > 0 ? (
-            job.recentNews.map((news, index) => (
-              <a
-                key={index}
-                href={news.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block text-sm text-yellow-800 hover:underline hover:text-yellow-900 mb-1 last:mb-0"
-              >
-                {news.title} <ExternalLink className="inline w-3 h-3 ml-0.5" />
-              </a>
-            ))
-          ) : (
-            <p className="text-sm text-yellow-800">No recent news available.</p>
-          )}
+        <div style={{ 
+          backgroundColor: "#FEF3C7", 
+          borderRadius: "8px", 
+          padding: "8px", 
+          marginBottom: "8px" 
+        }}>
+          <p style={{ fontSize: "12px", fontWeight: "600", color: "#78350F", marginBottom: "4px" }}>
+            Recent News
+          </p>
+          <p style={{ fontSize: "14px", color: "#92400E" }}>No recent news available.</p>
         </div>
 
         <div>
-          <p className="text-xs font-semibold text-gray-900 mb-1">Common Interview Topics</p>
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="outline" className="text-xs border-yellow-200 bg-yellow-50 text-yellow-800">
-              Product thinking
-            </Badge>
-            <Badge variant="outline" className="text-xs border-yellow-200 bg-yellow-50 text-yellow-800">
-              Collaboration
-            </Badge>
-            <Badge variant="outline" className="text-xs border-yellow-200 bg-yellow-50 text-yellow-800">
-              User research
-            </Badge>
-            <Badge variant="outline" className="text-xs border-yellow-200 bg-yellow-50 text-yellow-800">
-              Design systems
-            </Badge>
+          <p style={{ fontSize: "12px", fontWeight: "600", color: "#111827", marginBottom: "4px" }}>
+            Common Interview Topics
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+            {["Product thinking", "Collaboration", "User research", "Design systems"].map(topic => (
+              <span key={topic} style={{
+                ...badgeStyle,
+                margin: 0,
+                backgroundColor: "#FEF3C7",
+                color: "#92400E",
+                border: "1px solid #FDE68A"
+              }}>
+                {topic}
+              </span>
+            ))}
           </div>
         </div>
-      </Card>
+      </div>
 
-      <Card className={cardClass}>
-        <div className="flex items-center gap-2 mb-4">
-          <Activity className="w-5 h-5 text-gray-900" />
-          <span className="font-semibold text-lg">Timeline Overview</span>
+      {/* Timeline Card */}
+      <div style={cardStyle}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
+          <Activity style={{ width: "20px", height: "20px", color: "#111827" }} />
+          <span style={{ fontWeight: "600", fontSize: "18px" }}>Timeline Overview</span>
         </div>
 
-        <div className="space-y-4 mb-6">
-          <div className="flex items-center gap-4">
-            <span className="w-20 text-sm text-gray-500">Applied</span>
-            <div className="flex-1 h-2.5 bg-blue-600 rounded-full" />
-            <span className="w-12 text-right text-sm text-gray-500">Day 0</span>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <span className="w-20 text-sm text-gray-500">Recruiter</span>
-            <div className="flex-1 h-2.5 bg-blue-600 rounded-full" />
-            <span className="w-12 text-right text-sm text-gray-500">Day 3</span>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <span className="w-20 text-sm text-gray-500">Interview</span>
-            <div className="flex-1 h-2.5 bg-blue-200 rounded-full" />
-            <span className="w-12 text-right text-sm text-gray-500">Day 8</span>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <span className="w-20 text-sm text-gray-500">Offer</span>
-            <div className="flex-1 h-2.5 bg-gray-100 rounded-full" />
-            <span className="w-12 text-right text-sm text-gray-400">TBD</span>
-          </div>
+        <div style={{ marginBottom: "24px" }}>
+          {[
+            { label: "Applied", progress: 100, day: "Day 0", color: "#2563EB" },
+            { label: "Recruiter", progress: 100, day: "Day 3", color: "#2563EB" },
+            { label: "Interview", progress: 50, day: "Day 8", color: "#BFDBFE" },
+            { label: "Offer", progress: 0, day: "TBD", color: "#F3F4F6" }
+          ].map(stage => (
+            <div key={stage.label} style={{ 
+              display: "flex", 
+              alignItems: "center", 
+              gap: "16px",
+              marginBottom: "16px"
+            }}>
+              <span style={{ width: "80px", fontSize: "14px", color: "#6B7280" }}>{stage.label}</span>
+              <div style={{ 
+                flex: 1, 
+                height: "10px", 
+                backgroundColor: stage.color, 
+                borderRadius: "9999px" 
+              }} />
+              <span style={{ 
+                width: "48px", 
+                textAlign: "right", 
+                fontSize: "14px", 
+                color: stage.progress === 0 ? "#9CA3AF" : "#6B7280" 
+              }}>
+                {stage.day}
+              </span>
+            </div>
+          ))}
         </div>
 
-        <p className="text-sm text-gray-600 italic">Response time is 1 day faster than average for this stage</p>
-      </Card>
+        <p style={{ fontSize: "14px", color: "#6B7280", fontStyle: "italic" }}>
+          Response time is 1 day faster than average for this stage
+        </p>
+      </div>
 
-      <Card className={cardClass}>
-        <details className="mb-2">
-          <summary className="font-semibold cursor-pointer flex items-center gap-2">
-            <Briefcase className="w-4 h-4 text-indigo-600" />
+      {/* Notes Card */}
+      <div style={cardStyle}>
+        <details style={{ marginBottom: "8px" }}>
+          <summary style={{ 
+            fontWeight: "600", 
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px"
+          }}>
+            <Briefcase style={{ width: "16px", height: "16px", color: "#6366F1" }} />
             Job Details
           </summary>
-          <div className="mt-2 space-y-1 text-sm pl-6">
-            <div className="flex justify-between">
-              <span className="text-gray-600">Applied:</span>
+          <div style={{ marginTop: "8px", paddingLeft: "24px", fontSize: "14px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+              <span style={{ color: "#6B7280" }}>Applied:</span>
               <span>{new Date(job.appliedAt || Date.now()).toLocaleDateString()}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Next ETA:</span>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+              <span style={{ color: "#6B7280" }}>Next ETA:</span>
               <span>{job.nextEtaText || "TBD"}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-600">Job Type:</span>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+              <span style={{ color: "#6B7280" }}>Job Type:</span>
               <span>{job.jobType || "Full-time"}</span>
             </div>
             {job.postingUrl && (
-              <Button size="sm" variant="outline" className="mt-2 w-full bg-transparent" asChild>
+              <Button size="sm" variant="outline" style={{ width: "100%", marginTop: "8px" }} asChild>
                 <a href={job.postingUrl} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="w-3 h-3 mr-1" />
+                  <ExternalLink style={{ width: "12px", height: "12px", marginRight: "4px" }} />
                   View Job Posting
                 </a>
               </Button>
@@ -448,24 +374,26 @@ export function JobDetailPanel({ job, onSaveNotes, isMobile = false, idPrefix = 
         </details>
 
         <details>
-          <summary className="font-semibold cursor-pointer">Notes</summary>
-          <div className="mt-2 pl-6">
+          <summary style={{ fontWeight: "600", cursor: "pointer" }}>Notes</summary>
+          <div style={{ marginTop: "8px", paddingLeft: "24px" }}>
             {!isEditing ? (
               <>
-                <p className="text-sm text-gray-700 whitespace-pre-wrap mb-2">{job.notes || "No notes added yet."}</p>
+                <p style={{ fontSize: "14px", color: "#374151", marginBottom: "8px", whiteSpace: "pre-wrap" }}>
+                  {job.notes || "No notes added yet."}
+                </p>
                 <Button size="sm" variant="outline" onClick={() => setIsEditing(true)}>
                   Edit Notes
                 </Button>
               </>
             ) : (
-              <div className="space-y-2">
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                 <Textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Add your notes about this job..."
-                  className="min-h-[100px]"
+                  style={{ minHeight: "100px" }}
                 />
-                <div className="flex gap-2">
+                <div style={{ display: "flex", gap: "8px" }}>
                   <Button size="sm" variant="outline" onClick={() => setIsEditing(false)}>
                     Cancel
                   </Button>
@@ -477,7 +405,7 @@ export function JobDetailPanel({ job, onSaveNotes, isMobile = false, idPrefix = 
             )}
           </div>
         </details>
-      </Card>
+      </div>
     </div>
   )
 }
