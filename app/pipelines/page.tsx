@@ -1,5 +1,4 @@
 "use client"
-
 import { useState, useEffect, useRef } from "react"
 import type { Job } from "@/types"
 import { sampleJobs } from "@/data/sample-jobs"
@@ -35,20 +34,22 @@ export default function PipelinesPage() {
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase.from("pipelines").select("*")
-
+      const { data, error } = await supabase.from("pipelines").select("*")
+      console.log("Supabase data:", data)
+      console.log("Supabase error:", error)
+      console.log("Data length:", data?.length)
+      
       let finalJobs: Job[]
-
       if (Array.isArray(data) && data.length > 0) {
+        console.log("Using Supabase data")
         finalJobs = data.map((row, i) => toSafeJob(row, i))
       } else {
+        console.log("Using sample data")
         finalJobs = sampleJobs.map((row, i) => toSafeJob(row, i))
       }
-
       setJobs(finalJobs)
       setSelectedJob(finalJobs[0] ?? null)
     }
-
     load()
   }, [])
 
@@ -69,7 +70,6 @@ export default function PipelinesPage() {
         <div className="w-full lg:w-1/2 border-b lg:border-b-0 flex flex-col overflow-y-auto">
           <div className="p-6">
             <h1 className="text-2xl font-bold mb-2">Interview Pipelines</h1>
-
             <PipelineCardList
               jobs={jobs}
               selectedJobId={selectedJob?.id}
@@ -78,7 +78,6 @@ export default function PipelinesPage() {
             />
           </div>
         </div>
-
         <div ref={rightPanelRef} className="hidden lg:block w-1/2 overflow-y-auto">
           <JobDetailPanel
             job={selectedJob}
@@ -86,7 +85,6 @@ export default function PipelinesPage() {
             idPrefix="desktop"
           />
         </div>
-
         <MobileBottomSheet
           isOpen={isMobileSheetOpen}
           onClose={() => setIsMobileSheetOpen(false)}
