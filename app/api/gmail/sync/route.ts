@@ -28,7 +28,7 @@ type Stage = (typeof STAGES)[number]
 const stageRank = (s: Stage) => STAGES.indexOf(s)
 
 /* =========================
-   HARD NEGATIVES (never interview)
+   HARD NEGATIVES
 ========================= */
 
 const HARD_NEGATIVES = [
@@ -218,9 +218,15 @@ export async function POST() {
 
     const gmail = google.gmail({ version: "v1", auth })
 
+    // 🔴 🔴 🔴 ONLY CHANGE: LAST 30 DAYS 🔴 🔴 🔴
+    const thirtyDaysAgo = Math.floor(
+      (Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000
+    )
+
     const list = await gmail.users.messages.list({
       userId: "me",
-      maxResults: 25,
+      q: `after:${thirtyDaysAgo}`,
+      maxResults: 500,
     })
 
     const messages = list.data.messages ?? []
@@ -259,16 +265,12 @@ export async function POST() {
       let isInterview = score >= 3
       let stage = detectStageFromRules(text)
 
-      /* 🔍 LLM only if borderline */
       if (!isInterview) {
         const completion = await openai.chat.completions.create({
           model: "gpt-4o-mini",
           temperature: 0,
           messages: [
-            {
-              role: "system",
-              content: "Return ONLY valid JSON.",
-            },
+            { role: "system", content: "Return ONLY valid JSON." },
             {
               role: "user",
               content: `
