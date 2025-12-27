@@ -14,48 +14,147 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 })
 
+/* ============================
+   SIGNAL DEFINITIONS
+============================ */
+
+const HARD_NEGATIVES = [
+  "order",
+  "shipment",
+  "tracking",
+  "invoice",
+  "receipt",
+  "refund",
+  "payment",
+  "amazon",
+  "subscription",
+  "security alert",
+  "verification code",
+  "otp",
+  "newsletter",
+  "promotion",
+]
+
+const INTERVIEW_PHRASES = [
+  "interview",
+  "interview request",
+  "interview invitation",
+  "schedule an interview",
+  "book an interview",
+  "interview availability",
+  "interview time",
+  "interview slot",
+  "interview confirmation",
+  "reschedule interview",
+  "calendar invite",
+  "zoom interview",
+  "google meet interview",
+  "teams interview",
+  "phone interview",
+  "video interview",
+  "onsite interview",
+  "on-site interview",
+]
+
+const RECRUITER_PHRASES = [
+  "recruiter",
+  "talent team",
+  "talent acquisition",
+  "hiring team",
+  "hiring manager",
+  "people team",
+  "people operations",
+  "hr",
+  "human resources",
+  "staffing",
+  "move forward",
+  "next step",
+  "next round",
+  "advance to the next stage",
+]
+
+const STAGE_PHRASES: Record<string, "APPLIED" | "RECRUITER_SCREEN" | "INTERVIEW" | "OFFER"> = {
+  "phone screen": "RECRUITER_SCREEN",
+  "initial screen": "RECRUITER_SCREEN",
+  "technical interview": "INTERVIEW",
+  "behavioral interview": "INTERVIEW",
+  "case interview": "INTERVIEW",
+  "panel interview": "INTERVIEW",
+  "loop interview": "INTERVIEW",
+  "final round": "INTERVIEW",
+  "offer": "OFFER",
+  "offer letter": "OFFER",
+  "verbal offer": "OFFER",
+  "written offer": "OFFER",
+}
+
+const CALENDAR_PHRASES = [
+  "availability",
+  "calendar",
+  "invite attached",
+  "meeting link",
+  "dial in",
+  "conference link",
+  "30 minutes",
+  "45 minutes",
+  "60 minutes",
+  "pst",
+  "est",
+  "cst",
+  "gmt",
+]
+
+const ATS_DOMAINS = [
+  "@greenhouse.io",
+  "@lever.co",
+  "@ashbyhq.com",
+  "@workday.com",
+  "@smartrecruiters.com",
+  "@icims.com",
+  "@hirevue.com",
+  "@myworkday.com",
+]
+
+/* ============================
+   HELPERS
+============================ */
+
+function contains(text: string, list: string[]) {
+  const t = text.toLowerCase()
+  return list.some((k) => t.includes(k))
+}
+
+function detectStage(text: string) {
+  const t = text.toLowerCase()
+  for (const key in STAGE_PHRASES) {
+    if (t.includes(key)) return STAGE_PHRASES[key]
+  }
+  return "APPLIED"
+}
+
+/* ============================
+   MAIN HANDLER
+============================ */
+
 export async function POST() {
   try {
     const session = await getServerSession(authOptions)
-
-    if (!session) {
+    if (!session || !(session as any).accessToken || !session.user?.email) {
       return NextResponse.json({ error: "NO SESSION" }, { status: 401 })
     }
 
-    const accessToken = (session as any).accessToken
-    const userEmail = session.user?.email
-
-    if (!accessToken || !userEmail) {
-      return NextResponse.json({
-        error: "MISSING TOKEN OR EMAIL",
-        session,
-      })
-    }
-
-    // Gmail auth
     const auth = new google.auth.OAuth2()
-    auth.setCredentials({ access_token: accessToken })
+    auth.setCredentials({ access_token: (session as any).accessToken })
     const gmail = google.gmail({ version: "v1", auth })
 
-    // 1️⃣ Get recent Gmail messages (broad, inclusive)
-    const listRes = await gmail.users.messages.list({
+    const list = await gmail.users.messages.list({
       userId: "me",
-      maxResults: 10,
+      maxResults: 25,
     })
 
-    const messages = listRes.data.messages ?? []
+    const messages = list.data.messages ?? []
+    let inserted = 0
 
-    if (messages.length === 0) {
-      return NextResponse.json({
-        gmailMessageCount: 0,
-        note: "No Gmail messages found",
-      })
-    }
-
-    let insertedCount = 0
-    const decisions: any[] = []
-
-    // 2️⃣ Process each message through ChatGPT
     for (const msg of messages) {
       if (!msg.id) continue
 
@@ -63,94 +162,86 @@ export async function POST() {
         userId: "me",
         id: msg.id,
         format: "metadata",
-        metadataHeaders: ["From", "Subject", "Date"],
+        metadataHeaders: ["From", "Subject"],
       })
 
       const headers = full.data.payload?.headers ?? []
-
-      const subject =
-        headers.find((h) => h.name === "Subject")?.value ?? ""
-      const from =
-        headers.find((h) => h.name === "From")?.value ?? ""
+      const subject = headers.find((h) => h.name === "Subject")?.value ?? ""
+      const from = headers.find((h) => h.name === "From")?.value ?? ""
       const snippet = full.data.snippet ?? ""
+      const blob = `${from} ${subject} ${snippet}`
 
-      // 3️⃣ Ask ChatGPT to classify + extract
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        temperature: 0,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are an expert recruiting assistant. You must return ONLY valid JSON.",
-          },
-          {
-            role: "user",
-            content: `
-Given this email, determine if it is related to a job interview or recruiting process.
+      // HARD NEGATIVE
+      if (contains(blob, HARD_NEGATIVES)) continue
 
-Email:
-From: ${from}
-Subject: ${subject}
-Snippet: ${snippet}
+      // SIGNAL SCORING
+      let score = 0
+      if (contains(blob, INTERVIEW_PHRASES)) score += 5
+      if (contains(blob, RECRUITER_PHRASES)) score += 4
+      if (contains(blob, CALENDAR_PHRASES)) score += 1
+      if (contains(blob, ATS_DOMAINS)) score += 6
 
-Return JSON exactly in this format:
+      let stage = detectStage(blob)
+
+      // AMBIGUOUS → LLM
+      if (score < 4) {
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          temperature: 0,
+          messages: [
+            {
+              role: "system",
+              content:
+                "Return ONLY JSON. If unsure, interviewRelated=false.",
+            },
+            {
+              role: "user",
+              content: `
+FROM: ${from}
+SUBJECT: ${subject}
+SNIPPET: ${snippet}
+
+Is this part of a job interview or recruiting process?
+
+Return:
 {
-  "isInterviewRelated": boolean,
-  "company": string | null,
-  "role": string | null,
+  "interviewRelated": boolean,
   "stage": "APPLIED" | "RECRUITER_SCREEN" | "INTERVIEW" | "OFFER" | null,
   "confidence": number
 }
-            `,
-          },
-        ],
-      })
+`,
+            },
+          ],
+        })
 
-      const raw = completion.choices[0].message.content
-      if (!raw) continue
+        const parsed = JSON.parse(
+          completion.choices[0].message.content!
+        )
 
-      let decision
-      try {
-        decision = JSON.parse(raw)
-      } catch {
-        continue
-      }
-
-      decisions.push({
-        subject,
-        from,
-        decision,
-      })
-
-      // 4️⃣ Only insert interview-related emails
-      if (!decision.isInterviewRelated) {
-        continue
+        if (!parsed.interviewRelated || parsed.confidence < 0.7) continue
+        stage = parsed.stage ?? stage
       }
 
       await supabase.from("pipelines").insert({
-        user_email: userEmail,
-        company: decision.company ?? from,
-        role: decision.role ?? subject,
-        stage: decision.stage ?? "APPLIED",
+        user_email: session.user.email,
+        company: from,
+        role: subject,
+        stage,
         last_email_subject: subject,
         last_email_at: new Date().toISOString(),
-        confidence: decision.confidence,
       })
 
-      insertedCount++
+      inserted++
     }
 
     return NextResponse.json({
-      gmailMessageCount: messages.length,
-      inserted: insertedCount,
-      decisions,
+      scanned: messages.length,
+      inserted,
     })
   } catch (err: any) {
     return NextResponse.json({
       error: "EXCEPTION",
       message: err.message,
-      stack: err.stack,
     })
   }
 }
