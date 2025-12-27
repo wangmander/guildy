@@ -5,6 +5,10 @@ import { google } from "googleapis"
 import { createClient } from "@supabase/supabase-js"
 import OpenAI from "openai"
 
+/* =========================
+   CLIENTS
+========================= */
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -14,9 +18,18 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 })
 
-/* ============================
-   SIGNAL DEFINITIONS
-============================ */
+/* =========================
+   STAGES
+========================= */
+
+const STAGES = ["APPLIED", "RECRUITER_SCREEN", "INTERVIEW", "OFFER"] as const
+type Stage = (typeof STAGES)[number]
+
+const stageRank = (s: Stage) => STAGES.indexOf(s)
+
+/* =========================
+   HARD NEGATIVES (never interview)
+========================= */
 
 const HARD_NEGATIVES = [
   "order",
@@ -26,26 +39,37 @@ const HARD_NEGATIVES = [
   "receipt",
   "refund",
   "payment",
-  "amazon",
-  "subscription",
   "security alert",
   "verification code",
   "otp",
   "newsletter",
   "promotion",
+  "amazon",
+  "walmart",
+  "doordash",
+  "ubereats",
 ]
 
-const INTERVIEW_PHRASES = [
+/* =========================
+   🔴 FULL PHRASE SET — UNCHANGED
+========================= */
+
+const HIGH_SIGNAL_INTERVIEW_PHRASES = [
   "interview",
   "interview request",
   "interview invitation",
+  "invite you to interview",
+  "interview scheduling",
   "schedule an interview",
   "book an interview",
   "interview availability",
   "interview time",
   "interview slot",
   "interview confirmation",
+  "confirmed interview",
   "reschedule interview",
+  "interview rescheduled",
+  "interview calendar",
   "calendar invite",
   "zoom interview",
   "google meet interview",
@@ -56,7 +80,7 @@ const INTERVIEW_PHRASES = [
   "on-site interview",
 ]
 
-const RECRUITER_PHRASES = [
+const RECRUITER_PIPELINE_PHRASES = [
   "recruiter",
   "talent team",
   "talent acquisition",
@@ -64,44 +88,87 @@ const RECRUITER_PHRASES = [
   "hiring manager",
   "people team",
   "people operations",
-  "hr",
+  "hr team",
   "human resources",
   "staffing",
-  "move forward",
+  "we would like to move forward",
   "next step",
   "next round",
+  "moving you forward",
   "advance to the next stage",
 ]
 
-const STAGE_PHRASES: Record<string, "APPLIED" | "RECRUITER_SCREEN" | "INTERVIEW" | "OFFER"> = {
+const INTERVIEW_STAGE_PHRASES: Record<string, Stage> = {
   "phone screen": "RECRUITER_SCREEN",
   "initial screen": "RECRUITER_SCREEN",
+  "screening interview": "RECRUITER_SCREEN",
+
   "technical interview": "INTERVIEW",
   "behavioral interview": "INTERVIEW",
   "case interview": "INTERVIEW",
   "panel interview": "INTERVIEW",
   "loop interview": "INTERVIEW",
-  "final round": "INTERVIEW",
+  "interview loop": "INTERVIEW",
+  "onsite loop": "INTERVIEW",
+  "coding interview": "INTERVIEW",
+  "system design interview": "INTERVIEW",
+  "take-home interview": "INTERVIEW",
+  "assignment interview": "INTERVIEW",
+  "assessment interview": "INTERVIEW",
+
   "offer": "OFFER",
-  "offer letter": "OFFER",
+  "job offer": "OFFER",
   "verbal offer": "OFFER",
   "written offer": "OFFER",
+  "offer letter": "OFFER",
+  "compensation": "OFFER",
+  "salary": "OFFER",
+  "equity": "OFFER",
+  "benefits": "OFFER",
+  "background check": "OFFER",
+  "reference check": "OFFER",
+  "references": "OFFER",
+  "start date": "OFFER",
 }
 
-const CALENDAR_PHRASES = [
+const APPLICATION_TRANSITION_PHRASES = [
+  "application status",
+  "application update",
+  "thank you for applying",
+  "reviewed your application",
+  "we reviewed your background",
+  "we reviewed your resume",
+  "shortlisted",
+  "selected to move forward",
+  "moving ahead with your application",
+  "we’d like to learn more about you",
+]
+
+const REJECTION_PHRASES = [
+  "we will not be moving forward",
+  "decided to move forward with other candidates",
+  "regret to inform you",
+  "unfortunately",
+  "position has been filled",
+  "keep your resume on file",
+  "future opportunities",
+]
+
+const LOGISTICS_PHRASES = [
   "availability",
+  "time zone",
+  "pst",
+  "est",
+  "cst",
+  "gmt",
+  "30 minutes",
+  "45 minutes",
+  "60 minutes",
   "calendar",
   "invite attached",
   "meeting link",
   "dial in",
   "conference link",
-  "30 minutes",
-  "45 minutes",
-  "60 minutes",
-  "pst",
-  "est",
-  "cst",
-  "gmt",
 ]
 
 const ATS_DOMAINS = [
@@ -115,36 +182,40 @@ const ATS_DOMAINS = [
   "@myworkday.com",
 ]
 
-/* ============================
+/* =========================
    HELPERS
-============================ */
+========================= */
 
-function contains(text: string, list: string[]) {
-  const t = text.toLowerCase()
-  return list.some((k) => t.includes(k))
-}
+const normalize = (s: string) =>
+  s.toLowerCase().replace(/[^a-z0-9]/g, "")
 
-function detectStage(text: string) {
-  const t = text.toLowerCase()
-  for (const key in STAGE_PHRASES) {
-    if (t.includes(key)) return STAGE_PHRASES[key]
+const containsAny = (text: string, phrases: string[]) =>
+  phrases.some((p) => text.includes(p))
+
+const detectStageFromRules = (text: string): Stage => {
+  for (const key in INTERVIEW_STAGE_PHRASES) {
+    if (text.includes(key)) return INTERVIEW_STAGE_PHRASES[key]
   }
   return "APPLIED"
 }
 
-/* ============================
-   MAIN HANDLER
-============================ */
+/* =========================
+   MAIN
+========================= */
 
 export async function POST() {
   try {
     const session = await getServerSession(authOptions)
+
     if (!session || !(session as any).accessToken || !session.user?.email) {
       return NextResponse.json({ error: "NO SESSION" }, { status: 401 })
     }
 
+    const userEmail = session.user.email
+
     const auth = new google.auth.OAuth2()
     auth.setCredentials({ access_token: (session as any).accessToken })
+
     const gmail = google.gmail({ version: "v1", auth })
 
     const list = await gmail.users.messages.list({
@@ -153,7 +224,9 @@ export async function POST() {
     })
 
     const messages = list.data.messages ?? []
+
     let inserted = 0
+    let updated = 0
 
     for (const msg of messages) {
       if (!msg.id) continue
@@ -162,37 +235,39 @@ export async function POST() {
         userId: "me",
         id: msg.id,
         format: "metadata",
-        metadataHeaders: ["From", "Subject"],
+        metadataHeaders: ["From", "Subject", "Date"],
       })
 
       const headers = full.data.payload?.headers ?? []
-      const subject = headers.find((h) => h.name === "Subject")?.value ?? ""
-      const from = headers.find((h) => h.name === "From")?.value ?? ""
+      const subject =
+        headers.find((h) => h.name === "Subject")?.value ?? ""
+      const from =
+        headers.find((h) => h.name === "From")?.value ?? ""
       const snippet = full.data.snippet ?? ""
-      const blob = `${from} ${subject} ${snippet}`
 
-      // HARD NEGATIVE
-      if (contains(blob, HARD_NEGATIVES)) continue
+      const text = `${from} ${subject} ${snippet}`.toLowerCase()
 
-      // SIGNAL SCORING
+      if (containsAny(text, HARD_NEGATIVES)) continue
+
       let score = 0
-      if (contains(blob, INTERVIEW_PHRASES)) score += 5
-      if (contains(blob, RECRUITER_PHRASES)) score += 4
-      if (contains(blob, CALENDAR_PHRASES)) score += 1
-      if (contains(blob, ATS_DOMAINS)) score += 6
+      if (containsAny(text, HIGH_SIGNAL_INTERVIEW_PHRASES)) score += 6
+      if (containsAny(text, RECRUITER_PIPELINE_PHRASES)) score += 4
+      if (containsAny(text, APPLICATION_TRANSITION_PHRASES)) score += 3
+      if (containsAny(text, LOGISTICS_PHRASES)) score += 1
+      if (ATS_DOMAINS.some((d) => from.includes(d))) score += 6
 
-      let stage = detectStage(blob)
+      let isInterview = score >= 3
+      let stage = detectStageFromRules(text)
 
-      // AMBIGUOUS → LLM
-      if (score < 4) {
+      /* 🔍 LLM only if borderline */
+      if (!isInterview) {
         const completion = await openai.chat.completions.create({
           model: "gpt-4o-mini",
           temperature: 0,
           messages: [
             {
               role: "system",
-              content:
-                "Return ONLY JSON. If unsure, interviewRelated=false.",
+              content: "Return ONLY valid JSON.",
             },
             {
               role: "user",
@@ -205,9 +280,8 @@ Is this part of a job interview or recruiting process?
 
 Return:
 {
-  "interviewRelated": boolean,
-  "stage": "APPLIED" | "RECRUITER_SCREEN" | "INTERVIEW" | "OFFER" | null,
-  "confidence": number
+  "isInterview": boolean,
+  "stage": "APPLIED" | "RECRUITER_SCREEN" | "INTERVIEW" | "OFFER" | null
 }
 `,
             },
@@ -218,25 +292,53 @@ Return:
           completion.choices[0].message.content!
         )
 
-        if (!parsed.interviewRelated || parsed.confidence < 0.7) continue
+        if (!parsed.isInterview) continue
         stage = parsed.stage ?? stage
       }
 
-      await supabase.from("pipelines").insert({
-        user_email: session.user.email,
-        company: from,
-        role: subject,
-        stage,
-        last_email_subject: subject,
-        last_email_at: new Date().toISOString(),
-      })
+      const { data: existing } = await supabase
+        .from("pipelines")
+        .select("*")
+        .eq("user_email", userEmail)
+        .ilike("company", `%${normalize(from)}%`)
+        .ilike("role", `%${normalize(subject)}%`)
+        .limit(1)
 
-      inserted++
+      if (existing && existing.length > 0) {
+        const current = existing[0]
+        const nextStage =
+          stageRank(stage) > stageRank(current.stage)
+            ? stage
+            : current.stage
+
+        await supabase
+          .from("pipelines")
+          .update({
+            stage: nextStage,
+            last_email_subject: subject,
+            last_email_at: new Date().toISOString(),
+          })
+          .eq("id", current.id)
+
+        updated++
+      } else {
+        await supabase.from("pipelines").insert({
+          user_email: userEmail,
+          company: from,
+          role: subject,
+          stage,
+          last_email_subject: subject,
+          last_email_at: new Date().toISOString(),
+        })
+
+        inserted++
+      }
     }
 
     return NextResponse.json({
       scanned: messages.length,
       inserted,
+      updated,
     })
   } catch (err: any) {
     return NextResponse.json({
