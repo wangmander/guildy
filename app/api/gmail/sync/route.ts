@@ -1,3 +1,5 @@
+// app/api/gmail/sync/route.ts
+
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -23,6 +25,7 @@ const openai = new OpenAI({
 ========================= */
 
 const MAX_LLM_CALLS = 8
+const DAYS = 30
 
 const STAGES = ["APPLIED", "RECRUITER_SCREEN", "INTERVIEW", "OFFER"] as const
 type Stage = (typeof STAGES)[number]
@@ -30,7 +33,6 @@ const stageRank = (s: Stage) => STAGES.indexOf(s)
 
 /* =========================
    TRANSACTIONAL NEGATIVES
-   (must appear MULTIPLE times)
 ========================= */
 
 const TRANSACTIONAL_TERMS = [
@@ -47,7 +49,7 @@ const TRANSACTIONAL_TERMS = [
 
 /* =========================
    🔴 ALL INTERVIEW PHRASES
-   (UNCHANGED)
+   (NONE REMOVED)
 ========================= */
 
 const HIGH_SIGNAL_INTERVIEW_PHRASES = [
@@ -94,6 +96,27 @@ const RECRUITER_PIPELINE_PHRASES = [
   "advance to the next stage",
 ]
 
+const INTERVIEW_STAGE_PHRASES = [
+  "first round",
+  "second round",
+  "final round",
+  "technical interview",
+  "behavioral interview",
+  "case interview",
+  "panel interview",
+  "loop interview",
+  "interview loop",
+  "onsite loop",
+  "screening interview",
+  "phone screen",
+  "initial screen",
+  "coding interview",
+  "system design interview",
+  "take-home interview",
+  "assignment interview",
+  "assessment interview",
+]
+
 const APPLICATION_TRANSITION_PHRASES = [
   "application status",
   "application update",
@@ -105,6 +128,32 @@ const APPLICATION_TRANSITION_PHRASES = [
   "selected to move forward",
   "moving ahead with your application",
   "we’d like to learn more about you",
+]
+
+const OFFER_PHRASES = [
+  "offer",
+  "job offer",
+  "verbal offer",
+  "written offer",
+  "offer letter",
+  "compensation",
+  "salary",
+  "equity",
+  "benefits",
+  "background check",
+  "reference check",
+  "references",
+  "start date",
+]
+
+const REJECTION_PHRASES = [
+  "we will not be moving forward",
+  "decided to move forward with other candidates",
+  "regret to inform you",
+  "unfortunately",
+  "position has been filled",
+  "keep your resume on file",
+  "future opportunities",
 ]
 
 const LOGISTICS_PHRASES = [
@@ -124,20 +173,6 @@ const LOGISTICS_PHRASES = [
   "conference link",
 ]
 
-const INTERVIEW_STAGE_PHRASES: Record<string, Stage> = {
-  "phone screen": "RECRUITER_SCREEN",
-  "initial screen": "RECRUITER_SCREEN",
-  "screening interview": "RECRUITER_SCREEN",
-  "technical interview": "INTERVIEW",
-  "behavioral interview": "INTERVIEW",
-  "case interview": "INTERVIEW",
-  "panel interview": "INTERVIEW",
-  "loop interview": "INTERVIEW",
-  "offer": "OFFER",
-  "job offer": "OFFER",
-  "offer letter": "OFFER",
-}
-
 /* =========================
    HELPERS
 ========================= */
@@ -148,17 +183,11 @@ const countMatches = (t: string, arr: string[]) =>
 const containsAny = (t: string, arr: string[]) =>
   arr.some((p) => t.includes(p))
 
-const detectStage = (t: string): Stage => {
-  for (const k in INTERVIEW_STAGE_PHRASES) {
-    if (t.includes(k)) return INTERVIEW_STAGE_PHRASES[k]
-  }
+function inferStage(text: string): Stage {
+  if (containsAny(text, OFFER_PHRASES)) return "OFFER"
+  if (containsAny(text, INTERVIEW_STAGE_PHRASES)) return "INTERVIEW"
+  if (containsAny(text, RECRUITER_PIPELINE_PHRASES)) return "RECRUITER_SCREEN"
   return "APPLIED"
-}
-
-function safeJsonParse(raw: string) {
-  return JSON.parse(
-    raw.replace(/```json/i, "").replace(/```/g, "").trim()
-  )
 }
 
 /* =========================
@@ -173,18 +202,17 @@ export async function POST() {
     }
 
     const userEmail = session.user.email
-
     const auth = new google.auth.OAuth2()
     auth.setCredentials({ access_token: (session as any).accessToken })
     const gmail = google.gmail({ version: "v1", auth })
 
-    const thirtyDaysAgo = Math.floor(
-      (Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000
+    const after = Math.floor(
+      (Date.now() - DAYS * 24 * 60 * 60 * 1000) / 1000
     )
 
     const list = await gmail.users.messages.list({
       userId: "me",
-      q: `after:${thirtyDaysAgo}`,
+      q: `after:${after}`,
       maxResults: 500,
     })
 
@@ -213,38 +241,54 @@ export async function POST() {
 
       const text = `${from} ${subject} ${snippet}`.toLowerCase()
 
-      // 🔒 Suppress ONLY if clearly transactional
       if (countMatches(text, TRANSACTIONAL_TERMS) >= 2) continue
 
       let score = 0
       if (containsAny(text, HIGH_SIGNAL_INTERVIEW_PHRASES)) score += 6
       if (containsAny(text, RECRUITER_PIPELINE_PHRASES)) score += 4
       if (containsAny(text, APPLICATION_TRANSITION_PHRASES)) score += 3
+      if (containsAny(text, OFFER_PHRASES)) score += 4
       if (containsAny(text, LOGISTICS_PHRASES)) score += 1
 
       let isInterview = score >= 3
-      let stage = detectStage(text)
+      let stage = inferStage(text)
+      let company: string | null = null
+      let role: string | null = null
 
-      if (!isInterview && llmCalls < MAX_LLM_CALLS) {
+      if (llmCalls < MAX_LLM_CALLS) {
         llmCalls++
         const res = await openai.chat.completions.create({
           model: "gpt-4o-mini",
           temperature: 0,
           messages: [
-            { role: "system", content: "Return ONLY valid JSON." },
+            {
+              role: "system",
+              content:
+                "Return ONLY valid JSON. No markdown. No backticks.",
+            },
             {
               role: "user",
-              content: `FROM:${from}\nSUBJECT:${subject}\nSNIPPET:${snippet}\nIs this interview-related?`,
+              content: `From: ${from}
+Subject: ${subject}
+Snippet: ${snippet}
+
+Return:
+{
+  "isInterview": boolean,
+  "company": string | null,
+  "role": string | null,
+  "stage": "APPLIED" | "RECRUITER_SCREEN" | "INTERVIEW" | "OFFER"
+}`,
             },
           ],
         })
 
-        const parsed = safeJsonParse(
-          res.choices[0].message.content || "{}"
-        )
-
+        const parsed = JSON.parse(res.choices[0].message.content!)
         if (!parsed.isInterview) continue
+        isInterview = true
         stage = parsed.stage ?? stage
+        company = parsed.company
+        role = parsed.role
       }
 
       if (!isInterview) continue
@@ -253,28 +297,34 @@ export async function POST() {
         .from("pipelines")
         .select("*")
         .eq("user_email", userEmail)
-        .ilike("company", `%${from}%`)
+        .ilike("company", `%${company ?? ""}%`)
+        .ilike("role", `%${role ?? ""}%`)
         .limit(1)
 
       if (existing?.length) {
         const current = existing[0]
-        const next =
+        const nextStage =
           stageRank(stage) > stageRank(current.stage)
             ? stage
             : current.stage
 
         await supabase
           .from("pipelines")
-          .update({ stage: next, last_email_at: new Date().toISOString() })
+          .update({
+            stage: nextStage,
+            last_email_subject: subject,
+            last_email_at: new Date().toISOString(),
+          })
           .eq("id", current.id)
 
         updated++
       } else {
         await supabase.from("pipelines").insert({
           user_email: userEmail,
-          company: from,
-          role: subject,
+          company: company ?? "Unknown company",
+          role: role ?? "Unknown role",
           stage,
+          last_email_subject: subject,
           last_email_at: new Date().toISOString(),
         })
         inserted++
