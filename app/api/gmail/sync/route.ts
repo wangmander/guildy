@@ -19,12 +19,13 @@ const openai = new OpenAI({
 })
 
 /* =========================
-   STAGES
+   CONFIG
 ========================= */
+
+const MAX_LLM_CALLS = 8 // 🔥 SPEED CONTROL
 
 const STAGES = ["APPLIED", "RECRUITER_SCREEN", "INTERVIEW", "OFFER"] as const
 type Stage = (typeof STAGES)[number]
-
 const stageRank = (s: Stage) => STAGES.indexOf(s)
 
 /* =========================
@@ -51,7 +52,7 @@ const HARD_NEGATIVES = [
 ]
 
 /* =========================
-   🔴 FULL PHRASE SET — UNCHANGED
+   🔴 ALL PHRASES — UNCHANGED
 ========================= */
 
 const HIGH_SIGNAL_INTERVIEW_PHRASES = [
@@ -98,39 +99,6 @@ const RECRUITER_PIPELINE_PHRASES = [
   "advance to the next stage",
 ]
 
-const INTERVIEW_STAGE_PHRASES: Record<string, Stage> = {
-  "phone screen": "RECRUITER_SCREEN",
-  "initial screen": "RECRUITER_SCREEN",
-  "screening interview": "RECRUITER_SCREEN",
-
-  "technical interview": "INTERVIEW",
-  "behavioral interview": "INTERVIEW",
-  "case interview": "INTERVIEW",
-  "panel interview": "INTERVIEW",
-  "loop interview": "INTERVIEW",
-  "interview loop": "INTERVIEW",
-  "onsite loop": "INTERVIEW",
-  "coding interview": "INTERVIEW",
-  "system design interview": "INTERVIEW",
-  "take-home interview": "INTERVIEW",
-  "assignment interview": "INTERVIEW",
-  "assessment interview": "INTERVIEW",
-
-  "offer": "OFFER",
-  "job offer": "OFFER",
-  "verbal offer": "OFFER",
-  "written offer": "OFFER",
-  "offer letter": "OFFER",
-  "compensation": "OFFER",
-  "salary": "OFFER",
-  "equity": "OFFER",
-  "benefits": "OFFER",
-  "background check": "OFFER",
-  "reference check": "OFFER",
-  "references": "OFFER",
-  "start date": "OFFER",
-}
-
 const APPLICATION_TRANSITION_PHRASES = [
   "application status",
   "application update",
@@ -142,16 +110,6 @@ const APPLICATION_TRANSITION_PHRASES = [
   "selected to move forward",
   "moving ahead with your application",
   "we’d like to learn more about you",
-]
-
-const REJECTION_PHRASES = [
-  "we will not be moving forward",
-  "decided to move forward with other candidates",
-  "regret to inform you",
-  "unfortunately",
-  "position has been filled",
-  "keep your resume on file",
-  "future opportunities",
 ]
 
 const LOGISTICS_PHRASES = [
@@ -171,30 +129,30 @@ const LOGISTICS_PHRASES = [
   "conference link",
 ]
 
-const ATS_DOMAINS = [
-  "@greenhouse.io",
-  "@lever.co",
-  "@ashbyhq.com",
-  "@workday.com",
-  "@smartrecruiters.com",
-  "@icims.com",
-  "@hirevue.com",
-  "@myworkday.com",
-]
+const INTERVIEW_STAGE_PHRASES: Record<string, Stage> = {
+  "phone screen": "RECRUITER_SCREEN",
+  "initial screen": "RECRUITER_SCREEN",
+  "screening interview": "RECRUITER_SCREEN",
+  "technical interview": "INTERVIEW",
+  "behavioral interview": "INTERVIEW",
+  "case interview": "INTERVIEW",
+  "panel interview": "INTERVIEW",
+  "loop interview": "INTERVIEW",
+  "offer": "OFFER",
+  "job offer": "OFFER",
+  "offer letter": "OFFER",
+}
 
 /* =========================
    HELPERS
 ========================= */
 
-const normalize = (s: string) =>
-  s.toLowerCase().replace(/[^a-z0-9]/g, "")
+const containsAny = (t: string, arr: string[]) =>
+  arr.some((p) => t.includes(p))
 
-const containsAny = (text: string, phrases: string[]) =>
-  phrases.some((p) => text.includes(p))
-
-const detectStageFromRules = (text: string): Stage => {
-  for (const key in INTERVIEW_STAGE_PHRASES) {
-    if (text.includes(key)) return INTERVIEW_STAGE_PHRASES[key]
+const detectStage = (t: string): Stage => {
+  for (const k in INTERVIEW_STAGE_PHRASES) {
+    if (t.includes(k)) return INTERVIEW_STAGE_PHRASES[k]
   }
   return "APPLIED"
 }
@@ -206,7 +164,6 @@ const detectStageFromRules = (text: string): Stage => {
 export async function POST() {
   try {
     const session = await getServerSession(authOptions)
-
     if (!session || !(session as any).accessToken || !session.user?.email) {
       return NextResponse.json({ error: "NO SESSION" }, { status: 401 })
     }
@@ -215,10 +172,8 @@ export async function POST() {
 
     const auth = new google.auth.OAuth2()
     auth.setCredentials({ access_token: (session as any).accessToken })
-
     const gmail = google.gmail({ version: "v1", auth })
 
-    // 🔴 🔴 🔴 ONLY CHANGE: LAST 30 DAYS 🔴 🔴 🔴
     const thirtyDaysAgo = Math.floor(
       (Date.now() - 30 * 24 * 60 * 60 * 1000) / 1000
     )
@@ -233,6 +188,7 @@ export async function POST() {
 
     let inserted = 0
     let updated = 0
+    let llmCalls = 0
 
     for (const msg of messages) {
       if (!msg.id) continue
@@ -241,7 +197,7 @@ export async function POST() {
         userId: "me",
         id: msg.id,
         format: "metadata",
-        metadataHeaders: ["From", "Subject", "Date"],
+        metadataHeaders: ["From", "Subject"],
       })
 
       const headers = full.data.payload?.headers ?? []
@@ -260,66 +216,48 @@ export async function POST() {
       if (containsAny(text, RECRUITER_PIPELINE_PHRASES)) score += 4
       if (containsAny(text, APPLICATION_TRANSITION_PHRASES)) score += 3
       if (containsAny(text, LOGISTICS_PHRASES)) score += 1
-      if (ATS_DOMAINS.some((d) => from.includes(d))) score += 6
 
       let isInterview = score >= 3
-      let stage = detectStageFromRules(text)
+      let stage = detectStage(text)
 
-      if (!isInterview) {
-        const completion = await openai.chat.completions.create({
+      if (!isInterview && llmCalls < MAX_LLM_CALLS) {
+        llmCalls++
+        const res = await openai.chat.completions.create({
           model: "gpt-4o-mini",
           temperature: 0,
           messages: [
-            { role: "system", content: "Return ONLY valid JSON." },
+            { role: "system", content: "Return ONLY JSON." },
             {
               role: "user",
-              content: `
-FROM: ${from}
-SUBJECT: ${subject}
-SNIPPET: ${snippet}
-
-Is this part of a job interview or recruiting process?
-
-Return:
-{
-  "isInterview": boolean,
-  "stage": "APPLIED" | "RECRUITER_SCREEN" | "INTERVIEW" | "OFFER" | null
-}
-`,
+              content: `FROM:${from}\nSUBJECT:${subject}\nSNIPPET:${snippet}\nIs this interview-related?`,
             },
           ],
         })
 
-        const parsed = JSON.parse(
-          completion.choices[0].message.content!
-        )
-
+        const parsed = JSON.parse(res.choices[0].message.content!)
         if (!parsed.isInterview) continue
         stage = parsed.stage ?? stage
       }
+
+      if (!isInterview) continue
 
       const { data: existing } = await supabase
         .from("pipelines")
         .select("*")
         .eq("user_email", userEmail)
-        .ilike("company", `%${normalize(from)}%`)
-        .ilike("role", `%${normalize(subject)}%`)
+        .ilike("company", `%${from}%`)
         .limit(1)
 
-      if (existing && existing.length > 0) {
+      if (existing?.length) {
         const current = existing[0]
-        const nextStage =
+        const next =
           stageRank(stage) > stageRank(current.stage)
             ? stage
             : current.stage
 
         await supabase
           .from("pipelines")
-          .update({
-            stage: nextStage,
-            last_email_subject: subject,
-            last_email_at: new Date().toISOString(),
-          })
+          .update({ stage: next, last_email_at: new Date().toISOString() })
           .eq("id", current.id)
 
         updated++
@@ -329,10 +267,8 @@ Return:
           company: from,
           role: subject,
           stage,
-          last_email_subject: subject,
           last_email_at: new Date().toISOString(),
         })
-
         inserted++
       }
     }
@@ -341,11 +277,9 @@ Return:
       scanned: messages.length,
       inserted,
       updated,
+      llmCalls,
     })
   } catch (err: any) {
-    return NextResponse.json({
-      error: "EXCEPTION",
-      message: err.message,
-    })
+    return NextResponse.json({ error: err.message })
   }
 }
