@@ -22,17 +22,18 @@ const openai = new OpenAI({
    CONFIG
 ========================= */
 
-const MAX_LLM_CALLS = 8 // 🔥 SPEED CONTROL
+const MAX_LLM_CALLS = 8
 
 const STAGES = ["APPLIED", "RECRUITER_SCREEN", "INTERVIEW", "OFFER"] as const
 type Stage = (typeof STAGES)[number]
 const stageRank = (s: Stage) => STAGES.indexOf(s)
 
 /* =========================
-   HARD NEGATIVES
+   TRANSACTIONAL NEGATIVES
+   (must appear MULTIPLE times)
 ========================= */
 
-const HARD_NEGATIVES = [
+const TRANSACTIONAL_TERMS = [
   "order",
   "shipment",
   "tracking",
@@ -40,19 +41,13 @@ const HARD_NEGATIVES = [
   "receipt",
   "refund",
   "payment",
-  "security alert",
   "verification code",
   "otp",
-  "newsletter",
-  "promotion",
-  "amazon",
-  "walmart",
-  "doordash",
-  "ubereats",
 ]
 
 /* =========================
-   🔴 ALL PHRASES — UNCHANGED
+   🔴 ALL INTERVIEW PHRASES
+   (UNCHANGED)
 ========================= */
 
 const HIGH_SIGNAL_INTERVIEW_PHRASES = [
@@ -147,6 +142,9 @@ const INTERVIEW_STAGE_PHRASES: Record<string, Stage> = {
    HELPERS
 ========================= */
 
+const countMatches = (t: string, arr: string[]) =>
+  arr.reduce((n, p) => (t.includes(p) ? n + 1 : n), 0)
+
 const containsAny = (t: string, arr: string[]) =>
   arr.some((p) => t.includes(p))
 
@@ -155,6 +153,12 @@ const detectStage = (t: string): Stage => {
     if (t.includes(k)) return INTERVIEW_STAGE_PHRASES[k]
   }
   return "APPLIED"
+}
+
+function safeJsonParse(raw: string) {
+  return JSON.parse(
+    raw.replace(/```json/i, "").replace(/```/g, "").trim()
+  )
 }
 
 /* =========================
@@ -209,7 +213,8 @@ export async function POST() {
 
       const text = `${from} ${subject} ${snippet}`.toLowerCase()
 
-      if (containsAny(text, HARD_NEGATIVES)) continue
+      // 🔒 Suppress ONLY if clearly transactional
+      if (countMatches(text, TRANSACTIONAL_TERMS) >= 2) continue
 
       let score = 0
       if (containsAny(text, HIGH_SIGNAL_INTERVIEW_PHRASES)) score += 6
@@ -226,7 +231,7 @@ export async function POST() {
           model: "gpt-4o-mini",
           temperature: 0,
           messages: [
-            { role: "system", content: "Return ONLY JSON." },
+            { role: "system", content: "Return ONLY valid JSON." },
             {
               role: "user",
               content: `FROM:${from}\nSUBJECT:${subject}\nSNIPPET:${snippet}\nIs this interview-related?`,
@@ -234,7 +239,10 @@ export async function POST() {
           ],
         })
 
-        const parsed = JSON.parse(res.choices[0].message.content!)
+        const parsed = safeJsonParse(
+          res.choices[0].message.content || "{}"
+        )
+
         if (!parsed.isInterview) continue
         stage = parsed.stage ?? stage
       }
