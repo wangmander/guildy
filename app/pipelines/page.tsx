@@ -10,9 +10,9 @@ import { supabase } from "@/lib/supabaseClient"
 function rowToJob(row: any): Job {
   return {
     id: row.id,
-    title: row.role ?? "Interview",
+    title: row.role || "Interview",
     company: {
-      name: row.company ?? "Unknown",
+      name: row.company || "Unknown company",
     },
     stage: (row.stage as Stage) ?? "APPLIED",
     status: "WAITING" as Status,
@@ -65,7 +65,6 @@ export default function PipelinesPage() {
 
   return (
     <div className="mx-auto max-w-7xl h-[calc(100vh-64px)] flex flex-col overflow-hidden">
-      {/* TEMP SYNC BUTTON */}
       <div className="p-4 border-b bg-white flex items-center gap-3">
         <button
           onClick={syncGmail}
@@ -80,7 +79,7 @@ export default function PipelinesPage() {
       </div>
 
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
-        <div className="w-full lg:w-1/2 overflow-y-auto custom-scrollbar">
+        <div className="w-full lg:w-1/2 overflow-y-auto">
           <PipelineCardList
             jobs={jobs}
             selectedJobId={selectedJob?.id}
@@ -95,15 +94,8 @@ export default function PipelinesPage() {
           />
         </div>
 
-        <div
-          ref={rightPanelRef}
-          className="hidden lg:block w-1/2 overflow-y-auto bg-white custom-scrollbar"
-        >
-          <JobDetailPanel
-            job={selectedJob}
-            onSaveNotes={() => {}}
-            idPrefix="desktop"
-          />
+        <div ref={rightPanelRef} className="hidden lg:block w-1/2 bg-white">
+          <JobDetailPanel job={selectedJob} onSaveNotes={() => {}} />
         </div>
 
         <MobileBottomSheet
