@@ -1,15 +1,9 @@
-// app/api/gmail/sync/route.ts
-
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { google } from "googleapis"
 import { createClient } from "@supabase/supabase-js"
 import OpenAI from "openai"
-
-/* =========================
-   CLIENTS
-========================= */
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -20,39 +14,12 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
 })
 
-/* =========================
-   CONFIG
-========================= */
+/* -----------------------------
+   INTERVIEW SIGNALS (UNCHANGED)
+-------------------------------- */
 
-const MAX_LLM_CALLS = 8
-const DAYS = 30
-
-const STAGES = ["APPLIED", "RECRUITER_SCREEN", "INTERVIEW", "OFFER"] as const
-type Stage = (typeof STAGES)[number]
-const stageRank = (s: Stage) => STAGES.indexOf(s)
-
-/* =========================
-   TRANSACTIONAL NEGATIVES
-========================= */
-
-const TRANSACTIONAL_TERMS = [
-  "order",
-  "shipment",
-  "tracking",
-  "invoice",
-  "receipt",
-  "refund",
-  "payment",
-  "verification code",
-  "otp",
-]
-
-/* =========================
-   🔴 ALL INTERVIEW PHRASES
-   (NONE REMOVED)
-========================= */
-
-const HIGH_SIGNAL_INTERVIEW_PHRASES = [
+const PHRASES = [
+  // High-signal interview scheduling
   "interview",
   "interview request",
   "interview invitation",
@@ -76,9 +43,8 @@ const HIGH_SIGNAL_INTERVIEW_PHRASES = [
   "video interview",
   "onsite interview",
   "on-site interview",
-]
 
-const RECRUITER_PIPELINE_PHRASES = [
+  // Recruiter / pipeline
   "recruiter",
   "talent team",
   "talent acquisition",
@@ -94,9 +60,8 @@ const RECRUITER_PIPELINE_PHRASES = [
   "next round",
   "moving you forward",
   "advance to the next stage",
-]
 
-const INTERVIEW_STAGE_PHRASES = [
+  // Interview rounds
   "first round",
   "second round",
   "final round",
@@ -115,9 +80,8 @@ const INTERVIEW_STAGE_PHRASES = [
   "take-home interview",
   "assignment interview",
   "assessment interview",
-]
 
-const APPLICATION_TRANSITION_PHRASES = [
+  // Application → interview
   "application status",
   "application update",
   "thank you for applying",
@@ -128,9 +92,8 @@ const APPLICATION_TRANSITION_PHRASES = [
   "selected to move forward",
   "moving ahead with your application",
   "we’d like to learn more about you",
-]
 
-const OFFER_PHRASES = [
+  // Offer
   "offer",
   "job offer",
   "verbal offer",
@@ -144,9 +107,8 @@ const OFFER_PHRASES = [
   "reference check",
   "references",
   "start date",
-]
 
-const REJECTION_PHRASES = [
+  // Rejection (still pipeline signal)
   "we will not be moving forward",
   "decided to move forward with other candidates",
   "regret to inform you",
@@ -154,9 +116,8 @@ const REJECTION_PHRASES = [
   "position has been filled",
   "keep your resume on file",
   "future opportunities",
-]
 
-const LOGISTICS_PHRASES = [
+  // Calendar / logistics (LOW WEIGHT)
   "availability",
   "time zone",
   "pst",
@@ -173,171 +134,166 @@ const LOGISTICS_PHRASES = [
   "conference link",
 ]
 
-/* =========================
-   HELPERS
-========================= */
-
-const countMatches = (t: string, arr: string[]) =>
-  arr.reduce((n, p) => (t.includes(p) ? n + 1 : n), 0)
-
-const containsAny = (t: string, arr: string[]) =>
-  arr.some((p) => t.includes(p))
-
-function inferStage(text: string): Stage {
-  if (containsAny(text, OFFER_PHRASES)) return "OFFER"
-  if (containsAny(text, INTERVIEW_STAGE_PHRASES)) return "INTERVIEW"
-  if (containsAny(text, RECRUITER_PIPELINE_PHRASES)) return "RECRUITER_SCREEN"
-  return "APPLIED"
+function containsSignal(text: string) {
+  const t = text.toLowerCase()
+  return PHRASES.some((p) => t.includes(p))
 }
 
-/* =========================
-   MAIN
-========================= */
+function normalizeCompany(raw: string) {
+  return raw
+    .replace(/<.*?>/g, "")
+    .replace(/".*?"/g, "")
+    .trim()
+}
 
 export async function POST() {
-  try {
-    const session = await getServerSession(authOptions)
-    if (!session || !(session as any).accessToken || !session.user?.email) {
-      return NextResponse.json({ error: "NO SESSION" }, { status: 401 })
-    }
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.email)
+    return NextResponse.json({ error: "NO SESSION" }, { status: 401 })
 
-    const userEmail = session.user.email
-    const auth = new google.auth.OAuth2()
-    auth.setCredentials({ access_token: (session as any).accessToken })
-    const gmail = google.gmail({ version: "v1", auth })
+  const accessToken = (session as any).accessToken
+  const userEmail = session.user.email
+  if (!accessToken)
+    return NextResponse.json({ error: "NO TOKEN" }, { status: 401 })
 
-    const after = Math.floor(
-      (Date.now() - DAYS * 24 * 60 * 60 * 1000) / 1000
-    )
+  const auth = new google.auth.OAuth2()
+  auth.setCredentials({ access_token: accessToken })
+  const gmail = google.gmail({ version: "v1", auth })
 
-    const list = await gmail.users.messages.list({
+  // Last 30 days
+  const after = Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 30
+
+  const list = await gmail.users.messages.list({
+    userId: "me",
+    q: `after:${after}`,
+    maxResults: 500,
+  })
+
+  let inserted = 0
+  let updated = 0
+  let llmCalls = 0
+
+  for (const m of list.data.messages ?? []) {
+    const full = await gmail.users.messages.get({
       userId: "me",
-      q: `after:${after}`,
-      maxResults: 500,
+      id: m.id!,
+      format: "metadata",
+      metadataHeaders: ["From", "Subject", "Date"],
     })
 
-    const messages = list.data.messages ?? []
+    const headers = full.data.payload?.headers ?? []
+    const subject =
+      headers.find((h) => h.name === "Subject")?.value ?? ""
+    const from =
+      headers.find((h) => h.name === "From")?.value ?? ""
+    const snippet = full.data.snippet ?? ""
+    const combined = `${subject} ${snippet}`
 
-    let inserted = 0
-    let updated = 0
-    let llmCalls = 0
+    // HARD FILTER: must contain signal
+    if (!containsSignal(combined)) continue
 
-    for (const msg of messages) {
-      if (!msg.id) continue
+    // Dedup email
+    const { data: existingEmail } = await supabase
+      .from("emails")
+      .select("id")
+      .eq("gmail_message_id", m.id!)
+      .maybeSingle()
 
-      const full = await gmail.users.messages.get({
-        userId: "me",
-        id: msg.id,
-        format: "metadata",
-        metadataHeaders: ["From", "Subject"],
-      })
+    if (existingEmail) continue
 
-      const headers = full.data.payload?.headers ?? []
-      const subject =
-        headers.find((h) => h.name === "Subject")?.value ?? ""
-      const from =
-        headers.find((h) => h.name === "From")?.value ?? ""
-      const snippet = full.data.snippet ?? ""
-
-      const text = `${from} ${subject} ${snippet}`.toLowerCase()
-
-      if (countMatches(text, TRANSACTIONAL_TERMS) >= 2) continue
-
-      let score = 0
-      if (containsAny(text, HIGH_SIGNAL_INTERVIEW_PHRASES)) score += 6
-      if (containsAny(text, RECRUITER_PIPELINE_PHRASES)) score += 4
-      if (containsAny(text, APPLICATION_TRANSITION_PHRASES)) score += 3
-      if (containsAny(text, OFFER_PHRASES)) score += 4
-      if (containsAny(text, LOGISTICS_PHRASES)) score += 1
-
-      let isInterview = score >= 3
-      let stage = inferStage(text)
-      let company: string | null = null
-      let role: string | null = null
-
-      if (llmCalls < MAX_LLM_CALLS) {
-        llmCalls++
-        const res = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          temperature: 0,
-          messages: [
-            {
-              role: "system",
-              content:
-                "Return ONLY valid JSON. No markdown. No backticks.",
-            },
-            {
-              role: "user",
-              content: `From: ${from}
+    // LLM extraction
+    llmCalls++
+    const resp = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0,
+      messages: [
+        {
+          role: "system",
+          content:
+            "Return ONLY valid JSON. Extract company, role, and interview stage.",
+        },
+        {
+          role: "user",
+          content: `
+Email:
+From: ${from}
 Subject: ${subject}
 Snippet: ${snippet}
 
 Return:
 {
-  "isInterview": boolean,
-  "company": string | null,
-  "role": string | null,
-  "stage": "APPLIED" | "RECRUITER_SCREEN" | "INTERVIEW" | "OFFER"
-}`,
-            },
-          ],
-        })
+  "company": string,
+  "role": string,
+  "stage": "APPLIED" | "RECRUITER" | "INTERVIEW" | "OFFER"
+}
+          `,
+        },
+      ],
+    })
 
-        const parsed = JSON.parse(res.choices[0].message.content!)
-        if (!parsed.isInterview) continue
-        isInterview = true
-        stage = parsed.stage ?? stage
-        company = parsed.company
-        role = parsed.role
-      }
+    const parsed = JSON.parse(resp.choices[0].message.content!)
+    const company = normalizeCompany(parsed.company || from)
+    const role = parsed.role || "Interview"
+    const stage = parsed.stage || "APPLIED"
 
-      if (!isInterview) continue
+    // Find pipeline
+    const { data: pipeline } = await supabase
+      .from("pipelines")
+      .select("*")
+      .eq("user_email", userEmail)
+      .eq("company", company)
+      .eq("role", role)
+      .maybeSingle()
 
-      const { data: existing } = await supabase
+    let pipelineId: string
+
+    if (!pipeline) {
+      const { data: created } = await supabase
         .from("pipelines")
-        .select("*")
-        .eq("user_email", userEmail)
-        .ilike("company", `%${company ?? ""}%`)
-        .ilike("role", `%${role ?? ""}%`)
-        .limit(1)
-
-      if (existing?.length) {
-        const current = existing[0]
-        const nextStage =
-          stageRank(stage) > stageRank(current.stage)
-            ? stage
-            : current.stage
-
-        await supabase
-          .from("pipelines")
-          .update({
-            stage: nextStage,
-            last_email_subject: subject,
-            last_email_at: new Date().toISOString(),
-          })
-          .eq("id", current.id)
-
-        updated++
-      } else {
-        await supabase.from("pipelines").insert({
+        .insert({
           user_email: userEmail,
-          company: company ?? "Unknown company",
-          role: role ?? "Unknown role",
+          company,
+          role,
           stage,
           last_email_subject: subject,
           last_email_at: new Date().toISOString(),
         })
-        inserted++
+        .select()
+        .single()
+
+      pipelineId = created.id
+      inserted++
+    } else {
+      pipelineId = pipeline.id
+      if (pipeline.stage !== stage) {
+        await supabase
+          .from("pipelines")
+          .update({
+            stage,
+            last_email_subject: subject,
+            last_email_at: new Date().toISOString(),
+          })
+          .eq("id", pipeline.id)
+        updated++
       }
     }
 
-    return NextResponse.json({
-      scanned: messages.length,
-      inserted,
-      updated,
-      llmCalls,
+    // Insert email
+    await supabase.from("emails").insert({
+      user_email: userEmail,
+      pipeline_id: pipelineId,
+      gmail_message_id: m.id!,
+      from_email: from,
+      subject,
+      snippet,
+      received_at: new Date().toISOString(),
     })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message })
   }
+
+  return NextResponse.json({
+    scanned: list.data.messages?.length ?? 0,
+    inserted,
+    updated,
+    llmCalls,
+  })
 }
