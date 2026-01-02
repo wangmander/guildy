@@ -1,11 +1,12 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { Job, Stage, Status } from "@/types"
 import { PipelineCardList } from "@/components/pipeline-card-list"
 import { JobDetailPanel } from "@/components/job-detail-panel"
 import { MobileBottomSheet } from "@/components/mobile-bottom-sheet"
 import { supabase } from "@/lib/supabaseClient"
+import { useSession } from "next-auth/react"
 
 function rowToJob(row: any): Job {
   return {
@@ -33,6 +34,8 @@ function rowToJob(row: any): Job {
 }
 
 export default function PipelinesPage() {
+  const { data: session, status } = useSession()
+
   const [jobs, setJobs] = useState<Job[]>([])
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false)
@@ -40,15 +43,24 @@ export default function PipelinesPage() {
   const rightPanelRef = useRef<HTMLDivElement>(null)
 
   async function loadPipelines() {
-    const { data } = await supabase
+    const userEmail = session?.user?.email
+    if (!userEmail) return
+
+    const { data, error } = await supabase
       .from("pipelines")
       .select("*")
+      .eq("user_email", userEmail)
       .order("last_email_at", { ascending: false })
+
+    if (error) return
 
     if (data && data.length > 0) {
       const mapped = data.map(rowToJob)
       setJobs(mapped)
       setSelectedJob(mapped[0])
+    } else {
+      setJobs([])
+      setSelectedJob(null)
     }
   }
 
@@ -60,15 +72,15 @@ export default function PipelinesPage() {
   }
 
   useEffect(() => {
-    loadPipelines()
-  }, [])
+    if (status === "authenticated") loadPipelines()
+  }, [status])
 
   return (
     <div className="mx-auto max-w-7xl h-[calc(100vh-64px)] flex flex-col overflow-hidden">
       <div className="p-4 border-b bg-white flex items-center gap-3">
         <button
           onClick={syncGmail}
-          disabled={syncing}
+          disabled={syncing || status !== "authenticated"}
           className="px-4 py-2 bg-black text-white rounded disabled:opacity-50"
         >
           {syncing ? "Syncing Gmail…" : "Sync Gmail"}
