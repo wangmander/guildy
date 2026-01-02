@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import type { Job, Stage, Status } from "@/types"
 import { PipelineCardList } from "@/components/pipeline-card-list"
 import { JobDetailPanel } from "@/components/job-detail-panel"
@@ -18,269 +18,293 @@ function safeStr(v: any, fallback = ""): string {
   }
 }
 
-function safeArr(v: any): string[] {
-  if (!Array.isArray(v)) return []
-  return v.map((x) => safeStr(x, "").trim()).filter(Boolean)
-}
-
-function safeJson(v: any): any {
-  if (!v) return null
-  if (typeof v === "object") return v
-  if (typeof v !== "string") return null
-  try {
-    return JSON.parse(v)
-  } catch {
-    return null
-  }
-}
-
 function normalizeStage(stage: any): Stage {
-  const s = safeStr(stage, "").toUpperCase()
+  const s = safeStr(stage, "").toUpperCase().trim()
   if (s.includes("OFFER")) return "OFFER" as Stage
-  if (s.includes("INTERVIEW")) return "INTERVIEW" as Stage
   if (s.includes("RECRUITER") || s.includes("SCREEN")) return "RECRUITER_SCREEN" as Stage
-  if (s.includes("APPLIED")) return "APPLIED" as Stage
+  if (s.includes("INTERVIEW") || s.includes("LOOP") || s.includes("ONSITE")) return "INTERVIEW" as Stage
+  return "APPLIED" as Stage
+}
+
+function refineStageBucket(
+  stage: Stage,
+  stageDetail: string,
+  emailSubject: string,
+  emailSnippet: string
+): Stage {
+  const s = safeStr(stage, "").toUpperCase()
+  if (s !== "INTERVIEW") return stage
+
+  const t = `${stageDetail} ${emailSubject} ${emailSnippet}`.toLowerCase()
+
+  // Strong signals it's still the very first recruiter screen / scheduling step
+  const recruiterSignals = [
+    "recruiter",
+    "talent",
+    "phone screen",
+    "screening",
+    "screen",
+    "intro call",
+    "introduction call",
+    "initial call",
+    "quick call",
+    "availability",
+    "confirm your availability",
+    "schedule a call",
+    "schedule time",
+    "calendly",
+    "30-minute",
+    "30 minute",
+    "15-minute",
+    "15 minute",
+    "zoom interview",
+    "google meet",
+    "teams meeting",
+  ]
+
+  // Signals it's later than recruiter screen (so keep INTERVIEW)
+  const laterSignals = [
+    "hiring manager",
+    "hm interview",
+    "panel",
+    "onsite",
+    "on-site",
+    "loop",
+    "full loop",
+    "final round",
+    "case study",
+    "presentation",
+    "take home",
+    "take-home",
+    "assignment",
+    "work sample",
+    "design challenge",
+    "whiteboard",
+    "system design",
+    "coding challenge",
+    "technical challenge",
+  ]
+
+  // If we see later-stage signals, do NOT downgrade.
+  if (laterSignals.some((x) => t.includes(x))) return stage
+
+  // Otherwise, if it looks like an interview but only scheduling / intro signals exist,
+  // treat it as recruiter screen (this maps to "Screening" in your UI).
+  if (recruiterSignals.some((x) => t.includes(x))) return "RECRUITER_SCREEN" as Stage
+
+  // Default: if the LLM says "INTERVIEW" but we have no later-stage evidence, keep it in Screening.
   return "RECRUITER_SCREEN" as Stage
 }
 
-/**
- * Map a DB pipeline row into the Job shape, BUT with aggressive null-safety:
- * - Always provide interviewPrep + companyIntel + arrays so V0 components don't crash.
- * - Pass through LLM JSON (prep_json/insights_json) while also providing common aliases.
- */
 function rowToJob(row: any): Job {
-  const prep = safeJson(row?.prep_json) || {}
-  const insights = safeJson(row?.insights_json) || {}
-
   const companyName = safeStr(row?.company, "Unknown company")
   const roleTitle = safeStr(row?.role, "Interview")
-  const stageBucket = normalizeStage(row?.stage)
+
+  let stageBucket = normalizeStage(row?.stage)
 
   const stageDetail =
     safeStr(row?.stage_detail, "").trim() ||
-    safeStr(prep?.stage_detail, "").trim() ||
-    safeStr(insights?.stage_detail, "").trim() ||
+    safeStr(row?.pipeline_insights?.stage_detail, "").trim() ||
+    safeStr(row?.pipeline_insights?.stage_reason, "").trim() ||
     ""
 
-  const companyType =
-    safeStr(prep?.company_type, "").trim() ||
-    safeStr(prep?.companyType, "").trim() ||
-    safeStr(insights?.company_type, "").trim() ||
-    safeStr(insights?.companyType, "").trim() ||
-    "Unknown"
-
-  const companySize =
-    safeStr(prep?.company_size_bucket, "").trim() ||
-    safeStr(prep?.companySizeBucket, "").trim() ||
-    safeStr(prep?.company_size, "").trim() ||
-    safeStr(prep?.companySize, "").trim() ||
-    "Unknown"
-
-  const assumptions = safeArr(prep?.assumptions).slice(0, 8)
-
-  const stageFocus =
-    safeStr(prep?.stage_focus, "").trim() ||
-    safeStr(prep?.stageFocus, "").trim() ||
-    safeStr(insights?.stage_focus, "").trim() ||
-    safeStr(insights?.stageFocus, "").trim() ||
-    ""
-
-  const questionsTheyMightAsk =
-    safeArr(prep?.questions_they_might_ask).length
-      ? safeArr(prep?.questions_they_might_ask)
-      : safeArr(prep?.questionsTheyMightAsk)
-
-  const questionsYouShouldAsk =
-    safeArr(prep?.questions_you_should_ask).length
-      ? safeArr(prep?.questions_you_should_ask)
-      : safeArr(prep?.questionsYouShouldAsk)
-
-  const storiesToPrepare =
-    safeArr(prep?.stories_to_prepare).length ? safeArr(prep?.stories_to_prepare) : safeArr(prep?.storiesToPrepare)
-
-  const homeworkNext24h =
-    safeArr(prep?.homework_next_24h).length ? safeArr(prep?.homework_next_24h) : safeArr(prep?.homeworkNext24h)
-
-  const nextAction =
-    safeStr(insights?.next_action, "").trim() ||
-    safeStr(insights?.nextAction, "").trim() ||
-    safeStr(prep?.next_action, "").trim() ||
-    safeStr(prep?.nextAction, "").trim() ||
-    ""
-
-  const why =
-    safeStr(insights?.why, "").trim() ||
-    safeStr(insights?.rationale, "").trim() ||
-    safeStr(insights?.reasoning, "").trim() ||
-    ""
-
-  const tone = safeStr(insights?.tone, "").trim()
-  const urgency = safeStr(insights?.urgency, "").trim()
-  const responseLikelihood =
-    safeStr(insights?.response_likelihood, "").trim() || safeStr(insights?.responseLikelihood, "").trim()
-
-  const companyIntelSummary =
-    safeStr(prep?.company_intel_summary, "").trim() ||
-    safeStr(prep?.companyIntelSummary, "").trim() ||
-    safeStr(insights?.company_intel_summary, "").trim() ||
-    safeStr(insights?.companyIntelSummary, "").trim() ||
-    ""
-
-  const knownOrUnknownNote =
-    companyType === "Unknown" || companySize === "Unknown"
-      ? "Guildy couldn’t confidently infer company details from email alone."
-      : ""
-
-  const receivedAt = row?.last_email_at ?? undefined
   const lastEmailSubject = safeStr(row?.last_email_subject, "")
-  const lastEmailFrom = safeStr(row?.last_email_from, "")
   const lastEmailSnippet = safeStr(row?.last_email_snippet, "")
 
-  const interviewPrep: any = {
-    stage_focus: stageFocus,
-    stageFocus,
-    stage_detail: stageDetail,
-    stageDetail,
+  stageBucket = refineStageBucket(stageBucket, stageDetail, lastEmailSubject, lastEmailSnippet)
 
-    questions_they_might_ask: questionsTheyMightAsk,
-    questionsTheyMightAsk,
-    questions_you_should_ask: questionsYouShouldAsk,
-    questionsYouShouldAsk,
+  const companyIntel = row?.pipeline_insights?.company_intel ?? null
+  const companyIndustry = safeStr(companyIntel?.industry, "Unknown")
+  const companySize = safeStr(companyIntel?.size, "Unknown")
+  const companyHq = safeStr(companyIntel?.hq_location, "Unknown")
+  const companyRating = safeStr(companyIntel?.glassdoor_rating, "N/A")
+  const companyType = safeStr(companyIntel?.type, "")
+  const companySummary = safeStr(companyIntel?.summary, "")
 
-    stories_to_prepare: storiesToPrepare,
-    storiesToPrepare,
-    homework_next_24h: homeworkNext24h,
-    homeworkNext24h,
+  const truthfulNote =
+    companyIndustry === "Unknown" && companyHq === "Unknown" && companySize === "Unknown"
+      ? "Not enough reliable public info found for this company yet. Add the job post link and re-sync."
+      : ""
 
-    company_type: companyType,
-    companyType,
-    company_size_bucket: companySize,
-    companySizeBucket: companySize,
-    assumptions,
-    company_intel_summary: companyIntelSummary,
-    companyIntelSummary,
-    truthful_note: knownOrUnknownNote,
-    truthfulNote: knownOrUnknownNote,
+  const stageFocus =
+    safeStr(row?.pipeline_insights?.interview_prep?.prep_focus, "").trim() ||
+    safeStr(row?.pipeline_insights?.prep_focus, "").trim() ||
+    ""
 
-    next_action: nextAction,
-    nextAction,
-    why,
-    tone,
-    urgency,
-    response_likelihood: responseLikelihood,
-    responseLikelihood,
+  const theyAsk = Array.isArray(row?.pipeline_insights?.interview_prep?.questions_they_might_ask)
+    ? row.pipeline_insights.interview_prep.questions_they_might_ask
+    : Array.isArray(row?.pipeline_insights?.questions_they_might_ask)
+      ? row.pipeline_insights.questions_they_might_ask
+      : []
 
-    _raw_prep_json: prep,
-    _raw_insights_json: insights,
-  }
+  const youAsk = Array.isArray(row?.pipeline_insights?.interview_prep?.questions_you_should_ask)
+    ? row.pipeline_insights.interview_prep.questions_you_should_ask
+    : Array.isArray(row?.pipeline_insights?.questions_you_should_ask)
+      ? row.pipeline_insights.questions_you_should_ask
+      : []
 
-  const job: any = {
-    id: row.id,
+  const emphasize = Array.isArray(row?.pipeline_insights?.interview_prep?.what_to_emphasize)
+    ? row.pipeline_insights.interview_prep.what_to_emphasize
+    : Array.isArray(row?.pipeline_insights?.what_to_emphasize)
+      ? row.pipeline_insights.what_to_emphasize
+      : []
+
+  const stories = Array.isArray(row?.pipeline_insights?.interview_prep?.stories_and_homework)
+    ? row.pipeline_insights.interview_prep.stories_and_homework
+    : Array.isArray(row?.pipeline_insights?.stories_and_homework)
+      ? row.pipeline_insights.stories_and_homework
+      : []
+
+  const next24 = Array.isArray(row?.pipeline_insights?.interview_prep?.next_24h_homework)
+    ? row.pipeline_insights.interview_prep.next_24h_homework
+    : Array.isArray(row?.pipeline_insights?.next_24h_homework)
+      ? row.pipeline_insights.next_24h_homework
+      : []
+
+  const interviewPrep =
+    stageFocus || theyAsk.length || youAsk.length || emphasize.length || stories.length || next24.length
+      ? {
+          prepFocus: stageFocus || undefined,
+          questionsTheyMightAsk: (theyAsk ?? []).map((x: any) => safeStr(x, "")).filter(Boolean),
+          questionsYouShouldAsk: (youAsk ?? []).map((x: any) => safeStr(x, "")).filter(Boolean),
+          whatToEmphasize: (emphasize ?? []).map((x: any) => safeStr(x, "")).filter(Boolean),
+          storiesAndHomework: (stories ?? []).map((x: any) => safeStr(x, "")).filter(Boolean),
+          next24hHomework: (next24 ?? []).map((x: any) => safeStr(x, "")).filter(Boolean),
+          aiTip:
+            safeStr(row?.pipeline_insights?.interview_prep?.ai_tip, "").trim() ||
+            "If this still feels generic, add the job post link + team name and re-sync.",
+        }
+      : undefined
+
+  const nextAction =
+    safeStr(row?.pipeline_insights?.next_action, "").trim() ||
+    safeStr(row?.pipeline_insights?.next_step, "").trim() ||
+    ""
+
+  const tone =
+    safeStr(row?.pipeline_insights?.tone, "").trim() ||
+    safeStr(row?.pipeline_insights?.email_tone, "").trim() ||
+    ""
+
+  const responseLikelihood =
+    safeStr(row?.pipeline_insights?.response_likelihood, "").trim() ||
+    safeStr(row?.pipeline_insights?.likelihood, "").trim() ||
+    ""
+
+  const urgency =
+    safeStr(row?.pipeline_insights?.urgency, "").trim() ||
+    safeStr(row?.pipeline_insights?.urgency_level, "").trim() ||
+    ""
+
+  const dueBy =
+    safeStr(row?.pipeline_insights?.due_by, "").trim() ||
+    safeStr(row?.pipeline_insights?.reply_by, "").trim() ||
+    ""
+
+  const appliedAt = row?.last_email_at ?? undefined
+
+  return {
+    id: safeStr(row?.id, ""),
     title: roleTitle,
     company: {
       name: companyName,
-      type: companyType,
+      industry: companyIndustry,
       size: companySize,
-      intelSummary: companyIntelSummary,
-      truthfulNote: knownOrUnknownNote,
+      hqLocation: companyHq,
+      rating: companyRating,
+      summary: companySummary,
+      type: companyType || undefined,
+      truthfulNote: truthfulNote || undefined,
     },
     stage: stageBucket,
-    status: "WAITING" as Status,
-    appliedAt: receivedAt ?? undefined,
-
+    status: ("WAITING" as Status) ?? ("WAITING" as Status),
+    appliedAt,
     lastEmail: lastEmailSubject
       ? {
-          fromName: companyName,
-          fromEmail: lastEmailFrom || "",
+          fromName: companyName || "",
+          fromEmail: safeStr(row?.last_email_from, ""),
           subject: lastEmailSubject,
-          receivedAt: receivedAt ?? "",
-          snippet: lastEmailSnippet || "",
+          receivedAt: safeStr(row?.last_email_at, ""),
+          snippet: lastEmailSnippet,
         }
       : undefined,
-
     notes: safeStr(row?.notes, ""),
     interviewPrep,
-
-    companyIntel: {
-      companyType,
-      companySizeBucket: companySize,
-      assumptions,
-      companyIntelSummary,
-      truthfulNote: knownOrUnknownNote,
-    },
-
-    insights: {
-      nextAction,
-      why,
-      tone,
-      urgency,
-      responseLikelihood,
-      stageDetail,
-    },
-
-    recentNews: Array.isArray(row?.recent_news) ? row.recent_news : [],
-  }
-
-  return job as Job
-}
-
-/** Catches crashes inside JobDetailPanel so the whole page doesn’t die */
-class PanelErrorBoundary extends React.Component<
-  { children: React.ReactNode; fallback: React.ReactNode },
-  { hasError: boolean }
-> {
-  constructor(props: any) {
-    super(props)
-    this.state = { hasError: false }
-  }
-  static getDerivedStateFromError() {
-    return { hasError: true }
-  }
-  componentDidCatch(error: any) {
-    console.error("JobDetailPanel crashed:", error)
-  }
-  render() {
-    if (this.state.hasError) return this.props.fallback
-    return this.props.children
+    nextAction: nextAction || undefined,
+    tone: tone || undefined,
+    responseLikelihood: responseLikelihood || undefined,
+    urgency: urgency || undefined,
+    dueBy: dueBy || undefined,
+    recentNews: Array.isArray(companyIntel?.recent_news) ? companyIntel.recent_news : [],
   }
 }
 
 function LoggedOutConnect() {
   return (
-    <div className="mx-auto max-w-7xl h-[calc(100vh-64px)] flex items-center justify-center px-6">
-      <div className="w-full max-w-xl bg-white border rounded-xl p-8">
-        <div className="flex items-center gap-3">
+    <div className="min-h-[calc(100vh-64px)] flex items-center justify-center px-6 bg-white">
+      <div className="w-full max-w-md border rounded-2xl p-8 shadow-sm">
+        <div className="flex items-center gap-3 mb-6">
           <div className="h-10 w-10 rounded-xl bg-black text-white flex items-center justify-center font-semibold">
-            g
+            G
           </div>
-          <div className="text-lg font-semibold">guildy</div>
+          <div>
+            <div className="text-lg font-semibold leading-none">guildy</div>
+            <div className="text-sm text-gray-500">Auto-pipelines + bespoke stage prep from Gmail</div>
+          </div>
         </div>
 
-        <h1 className="mt-6 text-3xl font-semibold tracking-tight">Connect Gmail to see your pipelines</h1>
-        <p className="mt-3 text-gray-600">
-          Guildy auto-builds pipelines from recruiting threads, infers stage conservatively, and generates stage-specific
-          prep matched to the company + role. If it can’t infer intel, it will say so.
+        <h1 className="text-2xl font-semibold tracking-tight mb-2">Connect Gmail to start.</h1>
+        <p className="text-sm text-gray-600 mb-6">
+          Guildy builds a job pipeline from your recruiting threads, estimates stage, and generates prep that matches the
+          exact stage (screening vs HM vs loop).
         </p>
-
-        <ul className="mt-6 space-y-2 text-sm text-gray-700">
-          <li>• First reach-out → recruiter screen (not “full loop”).</li>
-          <li>• Prep is stage-specific (no generic boilerplate).</li>
-          <li>• No fake company intel: Unknown stays Unknown.</li>
-        </ul>
 
         <button
           onClick={() => signIn("google", { callbackUrl: "/pipelines" })}
-          className="mt-8 w-full px-4 py-3 bg-black text-white rounded-lg font-medium"
+          className="w-full px-4 py-3 bg-black text-white rounded-lg"
         >
           Connect Gmail
         </button>
+
+        <div className="mt-6 text-xs text-gray-500">
+          Tip: If company intel/prep is generic, add the job post link + team name and re-sync.
+        </div>
       </div>
+    </div>
+  )
+}
+
+function PanelErrorBoundary({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  const [hasError, setHasError] = useState(false)
+
+  return (
+    <div
+      className="h-full"
+      onErrorCapture={() => {
+        setHasError(true)
+      }}
+    >
+      {hasError ? (
+        <div className="p-6">
+          <div className="text-sm font-medium">Details panel crashed</div>
+          <div className="text-sm text-gray-600 mt-1">
+            Your pipeline list is still working. The crash is inside JobDetailPanel.
+          </div>
+        </div>
+      ) : (
+        children
+      )}
     </div>
   )
 }
 
 export default function PipelinesPage() {
   const { data: session, status } = useSession()
+  const userEmail = session?.user?.email ?? ""
 
   const [jobs, setJobs] = useState<Job[]>([])
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
@@ -288,7 +312,7 @@ export default function PipelinesPage() {
   const [syncing, setSyncing] = useState(false)
   const rightPanelRef = useRef<HTMLDivElement>(null)
 
-  const userEmail = useMemo(() => session?.user?.email, [session?.user?.email])
+  const isAuthed = status === "authenticated"
 
   async function loadPipelines() {
     if (!userEmail) return
@@ -299,18 +323,16 @@ export default function PipelinesPage() {
       .eq("user_email", userEmail)
       .order("last_email_at", { ascending: false })
 
-    if (error) {
-      console.error("loadPipelines error:", error)
-      setJobs([])
-      setSelectedJob(null)
-      return
-    }
+    if (error) return
 
-    const rows = Array.isArray(data) ? data : []
-    if (rows.length > 0) {
-      const mapped = rows.map(rowToJob)
+    if (data && data.length > 0) {
+      const mapped = data.map(rowToJob)
       setJobs(mapped)
-      setSelectedJob(mapped[0] ?? null)
+      setSelectedJob((prev) => {
+        if (!prev) return mapped[0]
+        const stillExists = mapped.find((j) => j.id === prev.id)
+        return stillExists ?? mapped[0]
+      })
     } else {
       setJobs([])
       setSelectedJob(null)
@@ -321,31 +343,30 @@ export default function PipelinesPage() {
     setSyncing(true)
     try {
       await fetch("/api/gmail/sync", { method: "POST" })
-    } catch (e) {
-      console.error("syncGmail fetch error:", e)
+      await loadPipelines()
+    } finally {
+      setSyncing(false)
     }
-    await loadPipelines()
-    setSyncing(false)
   }
 
   useEffect(() => {
-    if (status === "authenticated") loadPipelines()
-    if (status !== "authenticated") {
-      setJobs([])
-      setSelectedJob(null)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, userEmail])
+    if (isAuthed) loadPipelines()
+  }, [isAuthed])
+
+  useEffect(() => {
+    // Ensure details panel scroll position resets when switching jobs
+    if (rightPanelRef.current) rightPanelRef.current.scrollTop = 0
+  }, [selectedJob?.id])
 
   if (status === "loading") {
     return (
-      <div className="mx-auto max-w-7xl h-[calc(100vh-64px)] flex items-center justify-center text-sm text-gray-500">
+      <div className="h-[calc(100vh-64px)] flex items-center justify-center text-sm text-gray-600">
         Loading…
       </div>
     )
   }
 
-  if (status !== "authenticated") {
+  if (status === "unauthenticated") {
     return <LoggedOutConnect />
   }
 
@@ -354,7 +375,7 @@ export default function PipelinesPage() {
       <div className="p-4 border-b bg-white flex items-center gap-3">
         <button
           onClick={syncGmail}
-          disabled={syncing || status !== "authenticated"}
+          disabled={syncing || !isAuthed}
           className="px-4 py-2 bg-black text-white rounded disabled:opacity-50"
         >
           {syncing ? "Syncing Gmail…" : "Sync Gmail"}
@@ -362,8 +383,8 @@ export default function PipelinesPage() {
         <span className="text-sm text-gray-600">Imports recruiting emails into pipelines</span>
       </div>
 
-      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
-        <div className="w-full lg:w-1/2 overflow-y-auto">
+      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden min-h-0">
+        <div className="w-full lg:w-1/2 overflow-y-auto min-h-0">
           <PipelineCardList
             jobs={jobs}
             selectedJobId={selectedJob?.id}
@@ -378,37 +399,18 @@ export default function PipelinesPage() {
           />
         </div>
 
-        <div ref={rightPanelRef} className="hidden lg:block w-1/2 bg-white">
-          {!selectedJob ? (
-            <div className="p-6 text-sm text-gray-600">Select a pipeline.</div>
-          ) : (
-            <PanelErrorBoundary
-              fallback={
-                <div className="p-6">
-                  <div className="text-sm font-semibold text-gray-900">Details panel crashed</div>
-                  <div className="mt-2 text-sm text-gray-600">
-                    Your pipeline list is still working. The crash is inside <code>JobDetailPanel</code>.
-                  </div>
-                  <div className="mt-4 text-xs text-gray-500">
-                    Next: I’ll patch <code>components/job-detail-panel.tsx</code> to be null-safe, full file paste.
-                  </div>
-                </div>
-              }
-            >
-              <JobDetailPanel job={selectedJob} onSaveNotes={() => {}} />
-            </PanelErrorBoundary>
-          )}
+        <div ref={rightPanelRef} className="hidden lg:block w-1/2 bg-white overflow-y-auto min-h-0">
+          <PanelErrorBoundary>
+            <JobDetailPanel job={selectedJob} onSaveNotes={() => {}} />
+          </PanelErrorBoundary>
         </div>
 
-        {/* Only render the mobile sheet when we actually have a job */}
-        {selectedJob ? (
-          <MobileBottomSheet
-            isOpen={isMobileSheetOpen}
-            onClose={() => setIsMobileSheetOpen(false)}
-            job={selectedJob}
-            onSaveNotes={() => {}}
-          />
-        ) : null}
+        <MobileBottomSheet
+          isOpen={isMobileSheetOpen}
+          onClose={() => setIsMobileSheetOpen(false)}
+          job={selectedJob}
+          onSaveNotes={() => {}}
+        />
       </div>
     </div>
   )
