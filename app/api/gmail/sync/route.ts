@@ -112,7 +112,7 @@ const PHRASE_WEIGHTS: Array<{ phrase: string; w: number }> = [
   { phrase: "we will not be moving forward", w: 9 },
   { phrase: "decided to move forward with other candidates", w: 9 },
   { phrase: "regret to inform you", w: 8 },
-  { phrase: "unfortunately", w: 4 }, // common word, lower weight
+  { phrase: "unfortunately", w: 4 },
   { phrase: "position has been filled", w: 8 },
   { phrase: "keep your resume on file", w: 7 },
   { phrase: "future opportunities", w: 6 },
@@ -134,7 +134,6 @@ const PHRASE_WEIGHTS: Array<{ phrase: string; w: number }> = [
   { phrase: "conference link", w: 3 },
 
   // ===== ADDITIONS (ONLY ADDING — NOT REMOVING) =====
-  // Common hiring artifacts / steps (HIGH)
   { phrase: "interviewing", w: 7 },
   { phrase: "interviewer", w: 7 },
   { phrase: "recruiting", w: 6 },
@@ -171,11 +170,11 @@ const PHRASE_WEIGHTS: Array<{ phrase: string; w: number }> = [
   { phrase: "compensation discussion", w: 7 },
   { phrase: "negotiation", w: 6 },
   { phrase: "negotiate", w: 6 },
-  { phrase: "verbal", w: 2 }, // too common otherwise
+  { phrase: "verbal", w: 2 },
   { phrase: "background screening", w: 7 },
   { phrase: "reference", w: 5 },
   { phrase: "start your role", w: 6 },
-  { phrase: "welcome", w: 1 }, // too common
+  { phrase: "welcome", w: 1 },
 ]
 
 // ATS / recruiting domains (HUGE signal, but NOT hard-block)
@@ -190,7 +189,7 @@ const ATS_DOMAINS = [
   "@myworkday.com",
 ]
 
-// stages in your UI/types (bucket), but LLM can create bespoke detail text
+// UI bucket stages (still buckets), LLM returns a bespoke stage_detail too
 type StageBucket = "APPLIED" | "RECRUITER_SCREEN" | "INTERVIEW" | "OFFER"
 
 function normalize(s: string) {
@@ -211,26 +210,27 @@ function computeRuleScore(text: string) {
   const t = text.toLowerCase()
   let score = 0
   const hits: Array<{ phrase: string; w: number }> = []
+
   for (const { phrase, w } of PHRASE_WEIGHTS) {
     if (t.includes(phrase.toLowerCase())) {
       score += w
       hits.push({ phrase, w })
     }
   }
-  // ATS domain bonus
+
   for (const d of ATS_DOMAINS) {
     if (t.includes(d)) {
       score += 10
       hits.push({ phrase: d, w: 10 })
     }
   }
+
   return { score, hits }
 }
 
 /**
  * Gate logic:
- * - MUST have some signal: score >= MIN_SCORE OR (>=2 phrase hits)
- * This keeps your phrase list intact but stops trash.
+ * MUST have some signal: score >= MIN_SCORE OR (>=2 phrase hits)
  */
 const MIN_SCORE = 9
 const MIN_HITS = 2
@@ -248,7 +248,6 @@ function stageBucketFromLLM(s: any): StageBucket {
   return "RECRUITER_SCREEN"
 }
 
-// only allow stage to move forward, never backward
 const STAGE_ORDER: Record<StageBucket, number> = {
   APPLIED: 1,
   RECRUITER_SCREEN: 2,
@@ -265,7 +264,6 @@ function safeCompanyRole(decision: any, fromHeader: string, subject: string) {
   const company = (decision?.company || "").trim()
   const role = (decision?.role || "").trim()
 
-  // If LLM failed, do a light heuristic before falling back to fromHeader/subject
   const fromEmail = extractEmailAddress(fromHeader)
   const domain = fromEmail.split("@")[1] || ""
   const heuristicCompany =
@@ -316,14 +314,8 @@ export async function POST() {
     let inserted = 0
     let updated = 0
     let emailsInserted = 0
-    const sampled = {
-      passedRules: 0,
-      passedLLM: 0,
-      ruleExamples: [] as any[],
-      llmExamples: [] as any[],
-    }
 
-    // Pull pipelines once (faster than querying per email)
+    // Pull pipelines once
     const { data: existingPipelines } = await supabase
       .from("pipelines")
       .select("*")
@@ -334,7 +326,7 @@ export async function POST() {
     for (const msg of messages) {
       if (!msg.id) continue
 
-      // skip if we already ingested this email
+      // skip if already ingested
       const { data: existingEmail } = await supabase
         .from("emails")
         .select("id")
@@ -360,16 +352,10 @@ export async function POST() {
 
       const { score, hits } = computeRuleScore(blob)
       const passesRules = shouldSendToLLM(score, hits.length)
-
       if (!passesRules) continue
 
-      sampled.passedRules++
-      if (sampled.ruleExamples.length < 3) {
-        sampled.ruleExamples.push({ subject, from: fromHeader, score, hits: hits.slice(0, 12) })
-      }
-
-      // LLM decision — use JSON response_format so we never get ```json
       llmCalls++
+
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         temperature: 0,
@@ -385,9 +371,9 @@ export async function POST() {
               "- Never call shopping/receipts/promotions interview-related unless clear recruiting intent.",
               "- Prefer extracting COMPANY + ROLE from the content; do not use sender name/email unless unavoidable.",
               "- Infer BOTH:",
-              "  (1) a strict stage_bucket in {APPLIED, RECRUITER_SCREEN, INTERVIEW, OFFER}",
-              "  (2) a flexible stage_detail string customized to company/role/hiring style (e.g., 'Recruiter screen', 'Hiring manager 1:1', 'Portfolio review', 'System design', 'Panel loop', 'Offer negotiation').",
-              "- Stage must match the email’s content (e.g., first outreach = RECRUITER_SCREEN, scheduling actual interview rounds = INTERVIEW).",
+              "  (1) stage_bucket in {APPLIED, RECRUITER_SCREEN, INTERVIEW, OFFER}",
+              "  (2) stage_detail: bespoke to company/role/hiring style (e.g., 'Recruiter screen', 'Hiring manager 1:1', 'Portfolio review', 'System design', 'Panel loop', 'Offer negotiation').",
+              "- Stage must match the email content (outreach/screening => RECRUITER_SCREEN; scheduled rounds => INTERVIEW).",
               "- Use rule hits as supporting evidence.",
             ].join("\n"),
           },
@@ -413,7 +399,7 @@ export async function POST() {
                   role: "string|null",
                   stage_bucket: "APPLIED|RECRUITER_SCREEN|INTERVIEW|OFFER|null",
                   stage_detail: "string|null",
-                  reasoning_tags: "string[] (short tags only, no prose)",
+                  reasoning_tags: "string[]",
                 },
               },
               null,
@@ -431,49 +417,27 @@ export async function POST() {
         continue
       }
 
-      // must pass LLM gate
       const isInterviewRelated = !!decision?.isInterviewRelated
       const confidence = Number(decision?.confidence ?? 0)
-
       if (!isInterviewRelated || confidence < 0.7) continue
-
-      sampled.passedLLM++
-      if (sampled.llmExamples.length < 3) {
-        sampled.llmExamples.push({
-          subject,
-          from: fromHeader,
-          company: decision?.company,
-          role: decision?.role,
-          stage_bucket: decision?.stage_bucket,
-          stage_detail: decision?.stage_detail,
-          confidence,
-          tags: decision?.reasoning_tags,
-        })
-      }
 
       const { company, role } = safeCompanyRole(decision, fromHeader, subject)
       const stageBucket = stageBucketFromLLM(decision?.stage_bucket)
-      const stageDetail = String(decision?.stage_detail || "").slice(0, 120)
 
-      // Match existing pipeline by normalized company+role (no duplicates)
       const companyN = normalize(company)
       const roleN = normalize(role)
 
-      let match = pipelines.find((p: any) => {
-        return normalize(p.company) === companyN && normalize(p.role) === roleN
-      })
+      let match = pipelines.find((p: any) => normalize(p.company) === companyN && normalize(p.role) === roleN)
 
       let pipelineId: string
 
       if (!match) {
-        // Create pipeline
         const { data: created, error: createErr } = await supabase
           .from("pipelines")
           .insert({
             user_email: userEmail,
             company,
             role,
-            // keep your existing UI stage column as strict bucket
             stage: stageBucket,
             last_email_subject: subject,
             last_email_at: new Date().toISOString(),
@@ -509,7 +473,6 @@ export async function POST() {
         }
       }
 
-      // Insert email row (pipeline-linked)
       const receivedAt = dateHeader ? new Date(dateHeader).toISOString() : new Date().toISOString()
 
       const { error: emailErr } = await supabase.from("emails").insert({
@@ -523,35 +486,14 @@ export async function POST() {
       })
 
       if (!emailErr) emailsInserted++
-
-      // (Optional) store stageDetail for later use in prep — only if column exists (safe attempt)
-      // If you don't have these columns, Supabase will error; we ignore.
-      try {
-        await supabase
-          .from("emails")
-          .update({
-            // @ts-ignore
-            stage_bucket: stageBucket,
-            // @ts-ignore
-            stage_detail: stageDetail || null,
-            // @ts-ignore
-            confidence,
-            // @ts-ignore
-            rule_score: score,
-          })
-          .eq("gmail_message_id", msg.id)
-      } catch {}
     }
 
     return NextResponse.json({
       scanned,
-      passedRules: sampled.passedRules,
-      passedLLM: sampled.passedLLM,
       llmCalls,
       inserted,
       updated,
       emailsInserted,
-      samples: sampled,
     })
   } catch (err: any) {
     return NextResponse.json({
