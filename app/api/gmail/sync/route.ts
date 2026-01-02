@@ -185,6 +185,111 @@ const PHRASE_WEIGHTS: Array<{ phrase: string; w: number }> = [
   { phrase: "scheduled for", w: 7 },
   { phrase: "confirmed for", w: 7 },
   { phrase: "meeting is set", w: 7 },
+
+  // ===== NEW ADDITIONS (ONLY ADDING) =====
+  // A) Recruiter outreach + “first reach out” signals (MED/HIGH)
+  { phrase: "reaching out", w: 6 },
+  { phrase: "reaching out to you", w: 7 },
+  { phrase: "reach out", w: 6 },
+  { phrase: "wanted to reach out", w: 7 },
+  { phrase: "connect about", w: 6 },
+  { phrase: "connect with you", w: 6 },
+  { phrase: "quick call", w: 6 },
+  { phrase: "brief call", w: 6 },
+  { phrase: "intro call", w: 7 },
+  { phrase: "introduction call", w: 7 },
+  { phrase: "exploratory call", w: 7 },
+  { phrase: "chat about the role", w: 7 },
+  { phrase: "chat about", w: 5 },
+  { phrase: "learn more about the role", w: 7 },
+  { phrase: "learn more about you", w: 6 },
+  { phrase: "your background", w: 5 },
+  { phrase: "your experience", w: 5 },
+  { phrase: "your portfolio", w: 6 },
+  { phrase: "portfolio", w: 4 },
+  { phrase: "resume", w: 4 },
+  { phrase: "cv", w: 4 },
+
+  // B) Strong explicit scheduling/coordination phrasing (HIGH)
+  { phrase: "schedule time", w: 8 },
+  { phrase: "schedule a call", w: 8 },
+  { phrase: "schedule a chat", w: 8 },
+  { phrase: "schedule a screening", w: 9 },
+  { phrase: "schedule your interview", w: 10 },
+  { phrase: "set up an interview", w: 10 },
+  { phrase: "set up a call", w: 8 },
+  { phrase: "set up a time", w: 8 },
+  { phrase: "coordinate a time", w: 8 },
+  { phrase: "coordinate a call", w: 8 },
+  { phrase: "share your availability", w: 9 },
+  { phrase: "please share your availability", w: 10 },
+  { phrase: "send your availability", w: 9 },
+  { phrase: "times that work", w: 8 },
+  { phrase: "times work for you", w: 8 },
+  { phrase: "what time works", w: 7 },
+  { phrase: "what time works for you", w: 8 },
+  { phrase: "pick a time", w: 8 },
+  { phrase: "select a time", w: 8 },
+  { phrase: "choose a time", w: 8 },
+  { phrase: "book time", w: 8 },
+  { phrase: "book time with", w: 8 },
+
+  // C) Meeting/call artifacts (HIGH)
+  { phrase: "video call", w: 7 },
+  { phrase: "zoom call", w: 8 },
+  { phrase: "google meet", w: 6 },
+  { phrase: "microsoft teams", w: 6 },
+  { phrase: "meet link", w: 7 },
+  { phrase: "zoom link", w: 7 },
+  { phrase: "teams link", w: 7 },
+  { phrase: "calendar link", w: 6 },
+  { phrase: "invite", w: 3 }, // low-ish by itself; helps with other hits
+  { phrase: "calendar event", w: 7 },
+  { phrase: "calendar attachment", w: 8 },
+  { phrase: ".ics", w: 8 },
+
+  // D) Stage / round wording variations (HIGH)
+  { phrase: "screen", w: 3 },
+  { phrase: "screening", w: 6 },
+  { phrase: "recruiter call", w: 8 },
+  { phrase: "hiring manager call", w: 8 },
+  { phrase: "hm screen", w: 8 },
+  { phrase: "portfolio review", w: 8 },
+  { phrase: "design review", w: 7 },
+  { phrase: "product sense", w: 6 },
+  { phrase: "whiteboard", w: 7 },
+  { phrase: "whiteboarding", w: 7 },
+  { phrase: "design challenge", w: 8 },
+  { phrase: "design exercise", w: 8 },
+  { phrase: "take-home exercise", w: 8 },
+  { phrase: "homework assignment", w: 8 },
+  { phrase: "presentation interview", w: 8 },
+
+  // E) Offer/close signals (HIGH)
+  { phrase: "total compensation", w: 9 },
+  { phrase: "tc", w: 1 }, // too ambiguous; keep low weight
+  { phrase: "signing bonus", w: 8 },
+  { phrase: "start paperwork", w: 8 },
+  { phrase: "onboarding", w: 7 },
+  { phrase: "employment offer", w: 9 },
+
+  // F) Rejection variants (HIGH)
+  { phrase: "not moving forward", w: 9 },
+  { phrase: "move forward with other candidates", w: 9 },
+  { phrase: "we have decided not to move forward", w: 9 },
+  { phrase: "we are unable to move forward", w: 9 },
+  { phrase: "closed the role", w: 8 },
+
+  // G) ATS / recruiting tool names inside body (MED/HIGH)
+  { phrase: "greenhouse", w: 6 },
+  { phrase: "lever", w: 5 },
+  { phrase: "workday", w: 6 },
+  { phrase: "ashby", w: 6 },
+  { phrase: "smartrecruiters", w: 6 },
+  { phrase: "icims", w: 6 },
+  { phrase: "hirevue", w: 6 },
+  { phrase: "goodtime", w: 6 },
+  { phrase: "calendly", w: 6 },
 ]
 
 const ATS_DOMAINS = [
@@ -196,6 +301,22 @@ const ATS_DOMAINS = [
   "@icims.com",
   "@hirevue.com",
   "@myworkday.com",
+
+  // ===== NEW ADDITIONS (ONLY ADDING) =====
+  "@workablemail.com",
+  "@workable.com",
+  "@jobvite.com",
+  "@taleo.net",
+  "@successfactors.com",
+  "@brassring.com",
+  "@oraclecloud.com",
+  "@smartrecruiters.de",
+  "@personio.com",
+  "@teamtailor.com",
+  "@pinpoint-hq.com",
+  "@recruitee.com",
+  "@breezy.hr",
+  "@bamboohr.com",
 ]
 
 // Storage bucket stages in DB
@@ -293,6 +414,31 @@ const STRONG_SCHEDULING_PHRASES = new Set(
     "confirmed for",
     "meeting is set",
     "confirm your availability",
+
+    // ===== NEW ADDITIONS (ONLY ADDING) =====
+    "share your availability",
+    "please share your availability",
+    "send your availability",
+    "schedule a call",
+    "schedule time",
+    "set up an interview",
+    "set up a call",
+    "set up a time",
+    "coordinate a time",
+    "pick a time",
+    "select a time",
+    "choose a time",
+    "book time",
+    "calendar event",
+    "calendar attachment",
+    ".ics",
+    "meet link",
+    "zoom link",
+    "teams link",
+    "google meet",
+    "microsoft teams",
+    "video call",
+    "zoom call",
   ].map((s) => s.toLowerCase())
 )
 
@@ -303,7 +449,11 @@ function hasStrongSchedulingSignal(blobLower: string, hits: Array<{ phrase: stri
   }
 
   // Link-based / tooling signals
-  if (/(zoom\.us\/j\/|meet\.google\.com\/|teams\.microsoft\.com\/|calendly\.com\/|goodtime\.io\/|x\.ai\/scheduling)/i.test(blobLower)) {
+  if (
+    /(zoom\.us\/j\/|meet\.google\.com\/|teams\.microsoft\.com\/|calendly\.com\/|goodtime\.io\/|x\.ai\/scheduling|hirevue\.com\/|myworkdayjobs\.com\/|greenhouse\.io\/|lever\.co\/|ashbyhq\.com\/)/i.test(
+      blobLower
+    )
+  ) {
     return true
   }
 
@@ -315,6 +465,21 @@ function hasStrongSchedulingSignal(blobLower: string, hits: Array<{ phrase: stri
   if (hasInterviewWord && hasTimePattern && (blobLower.includes("schedule") || blobLower.includes("calendar"))) {
     return true
   }
+
+  // ===== NEW ADDITIONS (ONLY ADDING) =====
+  // If there is a meeting link + availability language, treat as strong even without the literal phrase hits.
+  const hasMeetingLink =
+    /(zoom\.us\/j\/|meet\.google\.com\/|teams\.microsoft\.com\/|calendly\.com\/|goodtime\.io\/|x\.ai\/scheduling)/i.test(
+      blobLower
+    )
+  const hasAvailabilityLanguage =
+    blobLower.includes("availability") ||
+    blobLower.includes("times that work") ||
+    blobLower.includes("what time works") ||
+    blobLower.includes("pick a time") ||
+    blobLower.includes("select a time") ||
+    blobLower.includes("choose a time")
+  if (hasMeetingLink && hasAvailabilityLanguage) return true
 
   return false
 }
@@ -525,6 +690,11 @@ export async function POST() {
               "- Stage must match email content.",
               "- IMPORTANT: Only use INTERVIEW if the email clearly schedules/sets an interview time or includes a meeting link/calendar invite.",
               "- Use rule hits as supporting evidence.",
+              "",
+              // ===== NEW ADDITIONS (ONLY ADDING) =====
+              "- If the email is a FIRST REACH-OUT from a recruiter (no specific time set), stage_bucket should be RECRUITER_SCREEN (not INTERVIEW).",
+              "- Do NOT label FULL LOOP / ONSITE unless the email explicitly says onsite/panel/loop/final round or lists multiple interviewers/rounds.",
+              "- If the email requests availability for a 15/20/30/45/60 min call, that is RECRUITER_SCREEN unless it explicitly says hiring manager/panel/onsite.",
             ].join("\n"),
           },
           {
