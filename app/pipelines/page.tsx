@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import React, { useEffect, useMemo, useRef, useState } from "react"
 import type { Job, Stage, Status } from "@/types"
 import { PipelineCardList } from "@/components/pipeline-card-list"
 import { JobDetailPanel } from "@/components/job-detail-panel"
@@ -136,29 +136,22 @@ function rowToJob(row: any): Job {
   const lastEmailFrom = safeStr(row?.last_email_from, "")
   const lastEmailSnippet = safeStr(row?.last_email_snippet, "")
 
-  // Big: provide BOTH snake_case and camelCase keys to survive whatever V0 components expect.
   const interviewPrep: any = {
-    // Stage
     stage_focus: stageFocus,
     stageFocus,
     stage_detail: stageDetail,
     stageDetail,
 
-    // Qs
     questions_they_might_ask: questionsTheyMightAsk,
     questionsTheyMightAsk,
-
     questions_you_should_ask: questionsYouShouldAsk,
     questionsYouShouldAsk,
 
-    // Stories + homework
     stories_to_prepare: storiesToPrepare,
     storiesToPrepare,
-
     homework_next_24h: homeworkNext24h,
     homeworkNext24h,
 
-    // Company intel
     company_type: companyType,
     companyType,
     company_size_bucket: companySize,
@@ -169,7 +162,6 @@ function rowToJob(row: any): Job {
     truthful_note: knownOrUnknownNote,
     truthfulNote: knownOrUnknownNote,
 
-    // Next action (some panels show it in prep section)
     next_action: nextAction,
     nextAction,
     why,
@@ -178,7 +170,6 @@ function rowToJob(row: any): Job {
     response_likelihood: responseLikelihood,
     responseLikelihood,
 
-    // Raw (debug passthrough)
     _raw_prep_json: prep,
     _raw_insights_json: insights,
   }
@@ -193,11 +184,8 @@ function rowToJob(row: any): Job {
       intelSummary: companyIntelSummary,
       truthfulNote: knownOrUnknownNote,
     },
-
     stage: stageBucket,
-    // If you later model real status, keep this stable for now.
     status: "WAITING" as Status,
-
     appliedAt: receivedAt ?? undefined,
 
     lastEmail: lastEmailSubject
@@ -211,11 +199,8 @@ function rowToJob(row: any): Job {
       : undefined,
 
     notes: safeStr(row?.notes, ""),
-
-    // V0 panels tend to assume this exists
     interviewPrep,
 
-    // Some versions show "company intel" separately
     companyIntel: {
       companyType,
       companySizeBucket: companySize,
@@ -224,7 +209,6 @@ function rowToJob(row: any): Job {
       truthfulNote: knownOrUnknownNote,
     },
 
-    // Some versions show "next action" separately
     insights: {
       nextAction,
       why,
@@ -234,11 +218,31 @@ function rowToJob(row: any): Job {
       stageDetail,
     },
 
-    // Keep stable so map() never crashes
     recentNews: Array.isArray(row?.recent_news) ? row.recent_news : [],
   }
 
   return job as Job
+}
+
+/** Catches crashes inside JobDetailPanel so the whole page doesn’t die */
+class PanelErrorBoundary extends React.Component<
+  { children: React.ReactNode; fallback: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: any) {
+    super(props)
+    this.state = { hasError: false }
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+  componentDidCatch(error: any) {
+    console.error("JobDetailPanel crashed:", error)
+  }
+  render() {
+    if (this.state.hasError) return this.props.fallback
+    return this.props.children
+  }
 }
 
 function LoggedOutConnect() {
@@ -375,15 +379,36 @@ export default function PipelinesPage() {
         </div>
 
         <div ref={rightPanelRef} className="hidden lg:block w-1/2 bg-white">
-          <JobDetailPanel job={selectedJob} onSaveNotes={() => {}} />
+          {!selectedJob ? (
+            <div className="p-6 text-sm text-gray-600">Select a pipeline.</div>
+          ) : (
+            <PanelErrorBoundary
+              fallback={
+                <div className="p-6">
+                  <div className="text-sm font-semibold text-gray-900">Details panel crashed</div>
+                  <div className="mt-2 text-sm text-gray-600">
+                    Your pipeline list is still working. The crash is inside <code>JobDetailPanel</code>.
+                  </div>
+                  <div className="mt-4 text-xs text-gray-500">
+                    Next: I’ll patch <code>components/job-detail-panel.tsx</code> to be null-safe, full file paste.
+                  </div>
+                </div>
+              }
+            >
+              <JobDetailPanel job={selectedJob} onSaveNotes={() => {}} />
+            </PanelErrorBoundary>
+          )}
         </div>
 
-        <MobileBottomSheet
-          isOpen={isMobileSheetOpen}
-          onClose={() => setIsMobileSheetOpen(false)}
-          job={selectedJob}
-          onSaveNotes={() => {}}
-        />
+        {/* Only render the mobile sheet when we actually have a job */}
+        {selectedJob ? (
+          <MobileBottomSheet
+            isOpen={isMobileSheetOpen}
+            onClose={() => setIsMobileSheetOpen(false)}
+            job={selectedJob}
+            onSaveNotes={() => {}}
+          />
+        ) : null}
       </div>
     </div>
   )
