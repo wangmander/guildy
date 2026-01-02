@@ -20,6 +20,21 @@ function safeString(v: any, fallback = ""): string {
   }
 }
 
+function safeArrayStrings(v: any, max = 6): string[] {
+  if (!Array.isArray(v)) return []
+  return v
+    .map((x) => safeString(x, "").trim())
+    .filter(Boolean)
+    .slice(0, max)
+}
+
+function safeOneSentence(v: any, fallback = ""): string {
+  const s = safeString(v, fallback).trim()
+  if (!s) return fallback
+  // hard cap so UI doesn't explode
+  return s.length > 220 ? s.slice(0, 220).trim() + "…" : s
+}
+
 function stageBucketToUiStage(stageRaw: any, stageDetail?: any): Stage {
   const s = safeString(stageRaw, "").toUpperCase().trim()
   if (UI_STAGES.includes(s as Stage)) return s as Stage
@@ -39,6 +54,69 @@ function stageBucketToUiStage(stageRaw: any, stageDetail?: any): Stage {
   return "SCREENING"
 }
 
+/**
+ * Convert LLM JSON into the strict shapes the UI should render.
+ * If LLM couldn't infer something, we say "Unknown" / "Not available" (truthful).
+ */
+function mapPrepAndIntel(row: any) {
+  const prep = row?.prep_json ?? null
+  const insights = row?.insights_json ?? null
+
+  const companyName = safeString(row?.company, "Unknown company")
+  const roleTitle = safeString(row?.role, "Role")
+
+  const companyType = safeString(prep?.company_type, "unknown")
+  const sizeBucket = safeString(prep?.company_size_bucket, "unknown")
+  const roleArchetype = safeString(prep?.role_archetype, "other")
+  const stageFocus = safeOneSentence(prep?.stage_focus, "")
+
+  const assumptions = safeArrayStrings(prep?.assumptions, 6)
+
+  const companyIntel = {
+    industry: companyType !== "unknown" ? companyType : "Unknown",
+    size: sizeBucket !== "unknown" ? sizeBucket : "Unknown",
+    hqLocation: safeString(prep?.hq_location, "Unknown"), // optional field if you later add it
+    glassdoorRating: safeString(prep?.glassdoor_rating, "N/A"), // optional field if you later add it
+    truthNote:
+      companyType === "unknown" || sizeBucket === "unknown"
+        ? "Guildy couldn’t confidently infer company details from email alone."
+        : "",
+    assumptions,
+  }
+
+  const interviewPrep = {
+    // JobDetailPanel typically shows two columns of questions; keep it stable
+    stageFocus:
+      stageFocus ||
+      `Prep focus is based on inferred stage. If this is wrong, re-sync or reply to the email thread so Guildy sees more context.`,
+    roleContext: `${roleTitle} @ ${companyName} (${roleArchetype !== "other" ? roleArchetype : "role"})`,
+    keyGoals: safeArrayStrings(prep?.key_goals, 6),
+    questionsTheyMightAsk: safeArrayStrings(prep?.questions_they_might_ask, 6),
+    questionsYouShouldAsk: safeArrayStrings(prep?.questions_you_should_ask, 6),
+    storiesToPrepare: safeArrayStrings(prep?.stories_to_prepare, 6),
+    portfolioAngles: safeArrayStrings(prep?.portfolio_angles, 6),
+    homeworkNext24h: safeArrayStrings(prep?.homework_next_24h, 6),
+    redFlagsToWatch: safeArrayStrings(prep?.red_flags_to_watch, 6),
+    assumptions,
+  }
+
+  const nextAction = safeOneSentence(insights?.next_action, "")
+  const why = safeOneSentence(insights?.why, "")
+  const tone = safeString(insights?.tone, "")
+  const responseLikelihood = safeString(insights?.response_likelihood, "")
+  const urgency = safeString(insights?.urgency, "")
+
+  const insightsPack = {
+    nextAction: nextAction || "Next action not available yet.",
+    why: why || "",
+    tone: tone || "",
+    responseLikelihood: responseLikelihood || "",
+    urgency: urgency || "",
+  }
+
+  return { interviewPrep, companyIntel, insightsPack }
+}
+
 function rowToJob(row: any): Job {
   const uiStage = stageBucketToUiStage(row?.stage, row?.stage_detail)
 
@@ -47,12 +125,17 @@ function rowToJob(row: any): Job {
   const lastEmailFrom = row?.last_email_from ? safeString(row.last_email_from) : ""
   const lastEmailSnippet = row?.last_email_snippet ? safeString(row.last_email_snippet) : ""
 
-  // IMPORTANT: do NOT attach unknown shapes to Job.
-  // JobDetailPanel might assume a strict schema and crash.
+  const { interviewPrep, companyIntel, insightsPack } = mapPrepAndIntel(row)
+
+  // IMPORTANT: keep a strict, stable Job shape so JobDetailPanel never explodes.
   return {
     id: row?.id,
     title: row?.role || "Interview",
-    company: { name: row?.company || "Unknown company" },
+    company: {
+      name: row?.company || "Unknown company",
+      // Optional extras if your Job type supports them; harmless if ignored downstream
+      ...(companyIntel ? { intel: companyIntel } : {}),
+    } as any,
     stage: uiStage,
     status: "WAITING" as Status,
     appliedAt: lastEmailAt || undefined,
@@ -66,9 +149,11 @@ function rowToJob(row: any): Job {
         }
       : undefined,
     notes: "",
-    interviewPrep: undefined,
+    interviewPrep: (interviewPrep as any) || undefined,
+    // Some UIs show this as the orange "Next Action" banner
+    ...(insightsPack ? { insights: insightsPack } : {}),
     recentNews: [],
-  }
+  } as any
 }
 
 function MarketingConnect() {
@@ -86,8 +171,15 @@ function MarketingConnect() {
           Track every pipeline. Prep every round. Close the offer.
         </h1>
         <p className="mt-3 text-gray-600">
-          Connect Gmail to auto-build your job pipelines and keep stages accurate.
+          Connect Gmail to auto-build your job pipelines, keep stages accurate, and generate stage-specific prep that
+          matches the exact company + role.
         </p>
+
+        <ul className="mt-6 space-y-2 text-sm text-gray-700">
+          <li>• Auto-detect stage from real email content (not guesses).</li>
+          <li>• Bespoke prep per stage: recruiter screen → HM → panel/loop → offer.</li>
+          <li>• If Guildy can’t infer company intel, it will say so (no fake data).</li>
+        </ul>
 
         <button
           onClick={() => signIn("google", { callbackUrl: "/pipelines" })}
