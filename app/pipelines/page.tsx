@@ -20,7 +20,7 @@ function safeString(v: any, fallback = ""): string {
   }
 }
 
-function safeArrayStrings(v: any, max = 6): string[] {
+function safeArrayStrings(v: any, max = 8): string[] {
   if (!Array.isArray(v)) return []
   return v
     .map((x) => safeString(x, "").trim())
@@ -28,11 +28,10 @@ function safeArrayStrings(v: any, max = 6): string[] {
     .slice(0, max)
 }
 
-function safeOneSentence(v: any, fallback = ""): string {
-  const s = safeString(v, fallback).trim()
+function safeOneLine(v: any, fallback = ""): string {
+  const s = safeString(v, fallback).replace(/\s+/g, " ").trim()
   if (!s) return fallback
-  // hard cap so UI doesn't explode
-  return s.length > 220 ? s.slice(0, 220).trim() + "…" : s
+  return s.length > 240 ? s.slice(0, 240).trim() + "…" : s
 }
 
 function stageBucketToUiStage(stageRaw: any, stageDetail?: any): Stage {
@@ -51,48 +50,62 @@ function stageBucketToUiStage(stageRaw: any, stageDetail?: any): Stage {
     return "HIRING_MANAGER"
   }
 
+  // fallback
   return "SCREENING"
 }
 
 /**
- * Convert LLM JSON into the strict shapes the UI should render.
- * If LLM couldn't infer something, we say "Unknown" / "Not available" (truthful).
+ * This maps your Supabase columns into what the right panel UI expects.
+ * It is intentionally defensive: missing/invalid JSON => truthful defaults.
  */
-function mapPrepAndIntel(row: any) {
+function mapLLM(row: any) {
   const prep = row?.prep_json ?? null
   const insights = row?.insights_json ?? null
 
-  const companyName = safeString(row?.company, "Unknown company")
-  const roleTitle = safeString(row?.role, "Role")
-
-  const companyType = safeString(prep?.company_type, "unknown")
-  const sizeBucket = safeString(prep?.company_size_bucket, "unknown")
-  const roleArchetype = safeString(prep?.role_archetype, "other")
-  const stageFocus = safeOneSentence(prep?.stage_focus, "")
-
+  // Company intel (truthful)
+  const company_type = safeString(prep?.company_type, "unknown")
+  const company_size_bucket = safeString(prep?.company_size_bucket, "unknown")
+  const hq_location = safeString(prep?.hq_location, "Unknown")
+  const glassdoor_rating = safeString(prep?.glassdoor_rating, "N/A")
   const assumptions = safeArrayStrings(prep?.assumptions, 6)
 
+  const intelTruth =
+    company_type === "unknown" || company_size_bucket === "unknown"
+      ? "Guildy couldn’t confidently infer company details from email alone."
+      : ""
+
   const companyIntel = {
-    industry: companyType !== "unknown" ? companyType : "Unknown",
-    size: sizeBucket !== "unknown" ? sizeBucket : "Unknown",
-    hqLocation: safeString(prep?.hq_location, "Unknown"), // optional field if you later add it
-    glassdoorRating: safeString(prep?.glassdoor_rating, "N/A"), // optional field if you later add it
-    truthNote:
-      companyType === "unknown" || sizeBucket === "unknown"
-        ? "Guildy couldn’t confidently infer company details from email alone."
-        : "",
+    industry: company_type !== "unknown" ? company_type : "Unknown",
+    size: company_size_bucket !== "unknown" ? company_size_bucket : "Unknown",
+    hqLocation: hq_location || "Unknown",
+    glassdoorRating: glassdoor_rating || "N/A",
+    truthNote: intelTruth,
     assumptions,
   }
 
+  // Insights (drives Next Action + email meta)
+  const insightsPack = {
+    nextAction: safeOneLine(insights?.next_action, "Next action not available yet."),
+    why: safeOneLine(insights?.why, ""),
+    tone: safeOneLine(insights?.tone, ""),
+    responseLikelihood: safeOneLine(insights?.response_likelihood, ""),
+    urgency: safeOneLine(insights?.urgency, ""),
+  }
+
+  // Interview prep (drives the two question lists)
+  const stageFocus = safeOneLine(
+    prep?.stage_focus,
+    "Prep focus not available yet. Re-sync after more emails or a scheduling link appears."
+  )
+
   const interviewPrep = {
-    // JobDetailPanel typically shows two columns of questions; keep it stable
-    stageFocus:
-      stageFocus ||
-      `Prep focus is based on inferred stage. If this is wrong, re-sync or reply to the email thread so Guildy sees more context.`,
-    roleContext: `${roleTitle} @ ${companyName} (${roleArchetype !== "other" ? roleArchetype : "role"})`,
+    stageFocus,
     keyGoals: safeArrayStrings(prep?.key_goals, 6),
+
+    // These two names are the ones your UI almost certainly uses
     questionsTheyMightAsk: safeArrayStrings(prep?.questions_they_might_ask, 6),
-    questionsYouShouldAsk: safeArrayStrings(prep?.questions_you_should_ask, 6),
+    questionsYouShouldAskThem: safeArrayStrings(prep?.questions_you_should_ask, 6),
+
     storiesToPrepare: safeArrayStrings(prep?.stories_to_prepare, 6),
     portfolioAngles: safeArrayStrings(prep?.portfolio_angles, 6),
     homeworkNext24h: safeArrayStrings(prep?.homework_next_24h, 6),
@@ -100,60 +113,67 @@ function mapPrepAndIntel(row: any) {
     assumptions,
   }
 
-  const nextAction = safeOneSentence(insights?.next_action, "")
-  const why = safeOneSentence(insights?.why, "")
-  const tone = safeString(insights?.tone, "")
-  const responseLikelihood = safeString(insights?.response_likelihood, "")
-  const urgency = safeString(insights?.urgency, "")
-
-  const insightsPack = {
-    nextAction: nextAction || "Next action not available yet.",
-    why: why || "",
-    tone: tone || "",
-    responseLikelihood: responseLikelihood || "",
-    urgency: urgency || "",
-  }
-
-  return { interviewPrep, companyIntel, insightsPack }
+  return { companyIntel, insightsPack, interviewPrep }
 }
 
 function rowToJob(row: any): Job {
   const uiStage = stageBucketToUiStage(row?.stage, row?.stage_detail)
 
-  const lastEmailSubject = row?.last_email_subject ? safeString(row.last_email_subject) : ""
-  const lastEmailAt = row?.last_email_at ? safeString(row.last_email_at) : ""
-  const lastEmailFrom = row?.last_email_from ? safeString(row.last_email_from) : ""
-  const lastEmailSnippet = row?.last_email_snippet ? safeString(row.last_email_snippet) : ""
+  const companyName = safeString(row?.company, "Unknown company")
+  const roleTitle = safeString(row?.role, "Interview")
 
-  const { interviewPrep, companyIntel, insightsPack } = mapPrepAndIntel(row)
+  const lastEmailSubject = safeString(row?.last_email_subject, "")
+  const lastEmailAt = safeString(row?.last_email_at, "")
+  const lastEmailFrom = safeString(row?.last_email_from, "")
+  const lastEmailSnippet = safeString(row?.last_email_snippet, "")
 
-  // IMPORTANT: keep a strict, stable Job shape so JobDetailPanel never explodes.
-  return {
+  const { companyIntel, insightsPack, interviewPrep } = mapLLM(row)
+
+  // Build a stable object that won't crash JobDetailPanel even if it expects fields.
+  const job: any = {
     id: row?.id,
-    title: row?.role || "Interview",
+    title: roleTitle,
     company: {
-      name: row?.company || "Unknown company",
-      // Optional extras if your Job type supports them; harmless if ignored downstream
-      ...(companyIntel ? { intel: companyIntel } : {}),
-    } as any,
+      name: companyName,
+      industry: companyIntel.industry,
+      size: companyIntel.size,
+      hqLocation: companyIntel.hqLocation,
+      glassdoorRating: companyIntel.glassdoorRating,
+      truthNote: companyIntel.truthNote,
+      assumptions: companyIntel.assumptions,
+    },
     stage: uiStage,
     status: "WAITING" as Status,
     appliedAt: lastEmailAt || undefined,
+
+    // Right-panel “Next Action” banner usually reads this
+    nextAction: insightsPack.nextAction,
+    nextActionWhy: insightsPack.why,
+
+    // Stage detail if you render it anywhere
+    stageDetail: safeString(row?.stage_detail, ""),
+
     lastEmail: lastEmailSubject
       ? {
-          fromName: row?.company ?? "",
+          fromName: companyName,
           fromEmail: lastEmailFrom,
           subject: lastEmailSubject,
           receivedAt: lastEmailAt,
           snippet: lastEmailSnippet,
+
+          // If your UI shows Tone / Likelihood / Urgency under Last Email
+          tone: insightsPack.tone,
+          responseLikelihood: insightsPack.responseLikelihood,
+          urgency: insightsPack.urgency,
         }
       : undefined,
-    notes: "",
-    interviewPrep: (interviewPrep as any) || undefined,
-    // Some UIs show this as the orange "Next Action" banner
-    ...(insightsPack ? { insights: insightsPack } : {}),
+
+    interviewPrep,
     recentNews: [],
-  } as any
+    notes: "",
+  }
+
+  return job as Job
 }
 
 function MarketingConnect() {
@@ -171,14 +191,14 @@ function MarketingConnect() {
           Track every pipeline. Prep every round. Close the offer.
         </h1>
         <p className="mt-3 text-gray-600">
-          Connect Gmail to auto-build your job pipelines, keep stages accurate, and generate stage-specific prep that
-          matches the exact company + role.
+          Connect Gmail to auto-build your pipelines, keep stages accurate, and generate stage-specific prep matched to
+          the company + role. If Guildy can’t infer company intel, it will say so.
         </p>
 
         <ul className="mt-6 space-y-2 text-sm text-gray-700">
-          <li>• Auto-detect stage from real email content (not guesses).</li>
+          <li>• Auto-detect stage from real emails (first reach-out ≠ full loop).</li>
           <li>• Bespoke prep per stage: recruiter screen → HM → panel/loop → offer.</li>
-          <li>• If Guildy can’t infer company intel, it will say so (no fake data).</li>
+          <li>• No fake company intel: Unknown stays Unknown.</li>
         </ul>
 
         <button
@@ -199,9 +219,11 @@ export default function PipelinesPage() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [pageError, setPageError] = useState<string>("")
   const rightPanelRef = useRef<HTMLDivElement>(null)
 
   async function loadPipelines() {
+    setPageError("")
     const userEmail = session?.user?.email
     if (!userEmail) return
 
@@ -213,31 +235,39 @@ export default function PipelinesPage() {
 
     if (error) {
       console.error("loadPipelines error:", error)
+      setPageError("Failed to load pipelines.")
       return
     }
 
     try {
-      if (data && data.length > 0) {
-        const mapped = data.map(rowToJob)
+      if (Array.isArray(data) && data.length > 0) {
+        const mapped = data.map((r) => rowToJob(r))
         setJobs(mapped)
         setSelectedJob(mapped[0])
       } else {
         setJobs([])
         setSelectedJob(null)
       }
-    } catch (e) {
-      console.error("Mapping pipelines crashed. Raw data:", data)
-      throw e
+    } catch (e: any) {
+      console.error("Pipeline mapping crashed:", e)
+      setPageError("Pipelines loaded but UI mapping crashed (bad data shape).")
+      // Do NOT throw (that causes the client-side exception page)
+      setJobs([])
+      setSelectedJob(null)
     }
   }
 
   async function syncGmail() {
     if (status !== "authenticated") return
     setSyncing(true)
+    setPageError("")
     try {
       const res = await fetch("/api/gmail/sync", { method: "POST" })
-      const json = await res.json().catch(() => null)
-      console.log("sync result:", json)
+      // Don't crash if response isn't JSON
+      await res.json().catch(() => null)
+    } catch (e) {
+      console.error("syncGmail failed:", e)
+      setPageError("Sync failed.")
     } finally {
       await loadPipelines()
       setSyncing(false)
@@ -263,15 +293,17 @@ export default function PipelinesPage() {
   return (
     <div className="mx-auto max-w-7xl h-[calc(100vh-64px)] flex flex-col overflow-hidden">
       <div className="p-4 border-b bg-white flex items-center gap-3">
-        <button
-          onClick={syncGmail}
-          disabled={syncing}
-          className="px-4 py-2 bg-black text-white rounded disabled:opacity-50"
-        >
+        <button onClick={syncGmail} disabled={syncing} className="px-4 py-2 bg-black text-white rounded disabled:opacity-50">
           {syncing ? "Syncing Gmail…" : "Sync Gmail"}
         </button>
         <span className="text-sm text-gray-600">Imports recruiting emails into pipelines</span>
       </div>
+
+      {pageError ? (
+        <div className="px-4 py-3 border-b bg-yellow-50 text-sm text-yellow-900">
+          {pageError} (This page now blocks hard crashes so you can keep working.)
+        </div>
+      ) : null}
 
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
         <div className="w-full lg:w-1/2 overflow-y-auto">
