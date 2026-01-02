@@ -14,7 +14,6 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! })
 
 /**
  * DO NOT REMOVE PHRASES.
- * This list = ALL phrases you provided + extra (only additions).
  * We use WEIGHTED scoring so trash doesn't pass.
  */
 const PHRASE_WEIGHTS: Array<{ phrase: string; w: number }> = [
@@ -189,7 +188,7 @@ const ATS_DOMAINS = [
   "@myworkday.com",
 ]
 
-// UI bucket stages (still buckets), LLM returns a bespoke stage_detail too
+// UI bucket stages
 type StageBucket = "APPLIED" | "RECRUITER_SCREEN" | "INTERVIEW" | "OFFER"
 
 function normalize(s: string) {
@@ -257,6 +256,75 @@ const STAGE_ORDER: Record<StageBucket, number> = {
 
 function advanceOnly(prev: StageBucket, next: StageBucket) {
   return STAGE_ORDER[next] > STAGE_ORDER[prev] ? next : prev
+}
+
+// Strong scheduling evidence required to allow INTERVIEW, especially on first-touch
+const STRONG_SCHEDULING_PHRASES = new Set(
+  [
+    "interview request",
+    "interview invitation",
+    "invite you to interview",
+    "interview scheduling",
+    "schedule an interview",
+    "book an interview",
+    "interview availability",
+    "interview slot",
+    "interview time",
+    "interview confirmation",
+    "confirmed interview",
+    "reschedule interview",
+    "interview rescheduled",
+    "calendar invite",
+    "invite attached",
+    "meeting link",
+    "conference link",
+    "zoom interview",
+    "google meet interview",
+    "teams interview",
+  ].map((s) => s.toLowerCase())
+)
+
+function hasStrongSchedulingSignal(blobLower: string, hits: Array<{ phrase: string; w: number }>) {
+  const hitSet = new Set(hits.map((h) => String(h.phrase || "").toLowerCase()))
+  for (const p of STRONG_SCHEDULING_PHRASES) {
+    if (hitSet.has(p)) return true
+  }
+
+  // Link-based / tooling signals (common in real scheduling emails)
+  if (/(zoom\.us\/j\/|meet\.google\.com\/|teams\.microsoft\.com\/|calendly\.com\/)/i.test(blobLower)) {
+    return true
+  }
+
+  // Mild time-patterns ONLY if "interview" also exists (keeps it strict)
+  const hasInterviewWord = blobLower.includes("interview")
+  const hasTimePattern =
+    /\b(\d{1,2}:\d{2}\s*(am|pm)?|\d{1,2}\s*(am|pm))\b/i.test(blobLower) ||
+    /\b(mon|tue|wed|thu|fri|sat|sun)\b/i.test(blobLower)
+  if (hasInterviewWord && hasTimePattern && (blobLower.includes("schedule") || blobLower.includes("calendar"))) {
+    return true
+  }
+
+  return false
+}
+
+function capInterviewIfNoSchedulingEvidence(
+  isNewPipeline: boolean,
+  prevStage: StageBucket,
+  proposed: StageBucket,
+  scheduleStrong: boolean
+): StageBucket {
+  // If the LLM says INTERVIEW but we don't have real scheduling proof,
+  // force it to screening (especially on first-touch).
+  if (proposed === "INTERVIEW" && !scheduleStrong) {
+    return "RECRUITER_SCREEN"
+  }
+
+  // If a brand-new pipeline gets OFFER without strong evidence, keep conservative
+  if (isNewPipeline && proposed === "OFFER" && !scheduleStrong) {
+    return "RECRUITER_SCREEN"
+  }
+
+  return proposed
 }
 
 // Keep pipeline header "company/role" (never sender name/email unless truly unknown)
@@ -349,6 +417,7 @@ export async function POST() {
 
       const fromEmail = extractEmailAddress(fromHeader)
       const blob = `${subject}\n${fromHeader}\n${fromEmail}\n${snippet}`
+      const blobLower = blob.toLowerCase()
 
       const { score, hits } = computeRuleScore(blob)
       const passesRules = shouldSendToLLM(score, hits.length)
@@ -372,8 +441,13 @@ export async function POST() {
               "- Prefer extracting COMPANY + ROLE from the content; do not use sender name/email unless unavoidable.",
               "- Infer BOTH:",
               "  (1) stage_bucket in {APPLIED, RECRUITER_SCREEN, INTERVIEW, OFFER}",
-              "  (2) stage_detail: bespoke to company/role/hiring style (e.g., 'Recruiter screen', 'Hiring manager 1:1', 'Portfolio review', 'System design', 'Panel loop', 'Offer negotiation').",
-              "- Stage must match the email content (outreach/screening => RECRUITER_SCREEN; scheduled rounds => INTERVIEW).",
+              "  (2) stage_detail: bespoke but SHORT (e.g., 'Recruiter screen', 'Hiring manager 1:1', 'Portfolio review', 'System design', 'Panel loop', 'Offer negotiation').",
+              "- Stage must match the email content:",
+              "  * FIRST outreach / general 'next steps' / recruiter intro / phone screen request => RECRUITER_SCREEN",
+              "  * Only set INTERVIEW if there is REAL scheduling evidence (calendar invite, confirmed time, meeting link, requested availability).",
+              "  * Application receipt/update without recruiter outreach => APPLIED",
+              "  * Offer/comp/background check => OFFER",
+              "- If the email mentions 'loop' or 'onsite' but does not include scheduling evidence, do NOT jump to INTERVIEW.",
               "- Use rule hits as supporting evidence.",
             ].join("\n"),
           },
@@ -422,12 +496,29 @@ export async function POST() {
       if (!isInterviewRelated || confidence < 0.7) continue
 
       const { company, role } = safeCompanyRole(decision, fromHeader, subject)
-      const stageBucket = stageBucketFromLLM(decision?.stage_bucket)
 
       const companyN = normalize(company)
       const roleN = normalize(role)
 
-      let match = pipelines.find((p: any) => normalize(p.company) === companyN && normalize(p.role) === roleN)
+      let match = pipelines.find(
+        (p: any) => normalize(p.company) === companyN && normalize(p.role) === roleN
+      )
+
+      const isNewPipeline = !match
+
+      // LLM proposal
+      const llmProposed = stageBucketFromLLM(decision?.stage_bucket)
+
+      // Hard proof required to allow INTERVIEW (prevents "full loop" on first touch)
+      const scheduleStrong = hasStrongSchedulingSignal(blobLower, hits)
+
+      // Conservative cap BEFORE advancing logic
+      const capped = capInterviewIfNoSchedulingEvidence(
+        isNewPipeline,
+        (String(match?.stage || "").toUpperCase() as StageBucket) || "RECRUITER_SCREEN",
+        llmProposed,
+        scheduleStrong
+      )
 
       let pipelineId: string
 
@@ -438,7 +529,7 @@ export async function POST() {
             user_email: userEmail,
             company,
             role,
-            stage: stageBucket,
+            stage: capped,
             last_email_subject: subject,
             last_email_at: new Date().toISOString(),
           })
@@ -454,7 +545,9 @@ export async function POST() {
 
         const prevStage: StageBucket =
           (String(match.stage || "").toUpperCase() as StageBucket) || "RECRUITER_SCREEN"
-        const nextStage = advanceOnly(prevStage, stageBucket)
+
+        // Advance only, but using the capped stage (prevents false jumps)
+        const nextStage = advanceOnly(prevStage, capped)
 
         const { error: updErr } = await supabase
           .from("pipelines")
