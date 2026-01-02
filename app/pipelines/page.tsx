@@ -10,11 +10,21 @@ import { signIn, useSession } from "next-auth/react"
 
 const UI_STAGES: Stage[] = ["SCREENING", "HIRING_MANAGER", "PRESENTATION", "FULL_LOOP", "OFFER_DISCUSSION"]
 
+function safeString(v: any, fallback = ""): string {
+  if (typeof v === "string") return v
+  if (v == null) return fallback
+  try {
+    return String(v)
+  } catch {
+    return fallback
+  }
+}
+
 function stageBucketToUiStage(stageRaw: any, stageDetail?: any): Stage {
-  const s = String(stageRaw || "").toUpperCase().trim()
+  const s = safeString(stageRaw, "").toUpperCase().trim()
   if (UI_STAGES.includes(s as Stage)) return s as Stage
 
-  const d = String(stageDetail || "").toLowerCase()
+  const d = safeString(stageDetail, "").toLowerCase()
 
   if (s === "OFFER") return "OFFER_DISCUSSION"
   if (s === "APPLIED" || s === "RECRUITER_SCREEN") return "SCREENING"
@@ -30,52 +40,54 @@ function stageBucketToUiStage(stageRaw: any, stageDetail?: any): Stage {
 }
 
 function rowToJob(row: any): Job {
-  const uiStage = stageBucketToUiStage(row.stage, row.stage_detail)
+  const uiStage = stageBucketToUiStage(row?.stage, row?.stage_detail)
 
+  const lastEmailSubject = row?.last_email_subject ? safeString(row.last_email_subject) : ""
+  const lastEmailAt = row?.last_email_at ? safeString(row.last_email_at) : ""
+  const lastEmailFrom = row?.last_email_from ? safeString(row.last_email_from) : ""
+  const lastEmailSnippet = row?.last_email_snippet ? safeString(row.last_email_snippet) : ""
+
+  // IMPORTANT: do NOT attach unknown shapes to Job.
+  // JobDetailPanel might assume a strict schema and crash.
   return {
-    id: row.id,
-    title: row.role || "Interview",
-    company: { name: row.company || "Unknown company" },
+    id: row?.id,
+    title: row?.role || "Interview",
+    company: { name: row?.company || "Unknown company" },
     stage: uiStage,
-    status: ("WAITING" as unknown) as Status,
-    appliedAt: row.last_email_at ?? undefined,
-    lastEmail: row.last_email_subject
+    status: "WAITING" as Status,
+    appliedAt: lastEmailAt || undefined,
+    lastEmail: lastEmailSubject
       ? {
-          fromName: row.company ?? "",
-          fromEmail: row.last_email_from ?? "",
-          subject: row.last_email_subject,
-          receivedAt: row.last_email_at ?? "",
-          snippet: row.last_email_snippet ?? "",
+          fromName: row?.company ?? "",
+          fromEmail: lastEmailFrom,
+          subject: lastEmailSubject,
+          receivedAt: lastEmailAt,
+          snippet: lastEmailSnippet,
         }
       : undefined,
     notes: "",
-    // These are rendered by JobDetailPanel if it supports it; otherwise harmless.
-    interviewPrep: (row.prep_json as any) ?? undefined,
+    interviewPrep: undefined,
     recentNews: [],
-    // Optional: if your Job type supports it, JobDetailPanel can use it.
-    insights: (row.insights_json as any) ?? undefined,
-    stageDetail: row.stage_detail ?? undefined,
-  } as any
+  }
 }
 
 function MarketingConnect() {
   return (
     <div className="min-h-[calc(100vh-64px)] flex items-center justify-center px-6">
       <div className="max-w-xl w-full">
-        <div className="text-sm font-semibold tracking-wide text-gray-500">GUILDY</div>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-black text-white flex items-center justify-center font-semibold">
+            g
+          </div>
+          <div className="text-lg font-semibold">guildy</div>
+        </div>
+
+        <h1 className="mt-6 text-3xl font-semibold tracking-tight">
           Track every pipeline. Prep every round. Close the offer.
         </h1>
         <p className="mt-3 text-gray-600">
-          Connect Gmail to auto-build your job pipelines, keep stages accurate, and generate stage-specific interview prep from the latest email.
+          Connect Gmail to auto-build your job pipelines and keep stages accurate.
         </p>
-
-        <ul className="mt-6 space-y-2 text-sm text-gray-700">
-          <li>• Auto pipeline tracking from recruiter threads</li>
-          <li>• Stage inference that won’t jump to “Full loop” without scheduling proof</li>
-          <li>• Bespoke prep for the exact company + role + stage</li>
-          <li>• “Next action” + urgency signals so you don’t drop the ball</li>
-        </ul>
 
         <button
           onClick={() => signIn("google", { callbackUrl: "/pipelines" })}
@@ -83,10 +95,6 @@ function MarketingConnect() {
         >
           Connect Gmail
         </button>
-
-        <div className="mt-3 text-xs text-gray-500">
-          Only reads metadata/snippets to classify recruiting threads and build pipelines.
-        </div>
       </div>
     </div>
   )
@@ -111,24 +119,37 @@ export default function PipelinesPage() {
       .eq("user_email", userEmail)
       .order("last_email_at", { ascending: false })
 
-    if (error) return
+    if (error) {
+      console.error("loadPipelines error:", error)
+      return
+    }
 
-    if (data && data.length > 0) {
-      const mapped = data.map(rowToJob)
-      setJobs(mapped)
-      setSelectedJob(mapped[0])
-    } else {
-      setJobs([])
-      setSelectedJob(null)
+    try {
+      if (data && data.length > 0) {
+        const mapped = data.map(rowToJob)
+        setJobs(mapped)
+        setSelectedJob(mapped[0])
+      } else {
+        setJobs([])
+        setSelectedJob(null)
+      }
+    } catch (e) {
+      console.error("Mapping pipelines crashed. Raw data:", data)
+      throw e
     }
   }
 
   async function syncGmail() {
     if (status !== "authenticated") return
     setSyncing(true)
-    await fetch("/api/gmail/sync", { method: "POST" })
-    await loadPipelines()
-    setSyncing(false)
+    try {
+      const res = await fetch("/api/gmail/sync", { method: "POST" })
+      const json = await res.json().catch(() => null)
+      console.log("sync result:", json)
+    } finally {
+      await loadPipelines()
+      setSyncing(false)
+    }
   }
 
   useEffect(() => {
@@ -157,7 +178,7 @@ export default function PipelinesPage() {
         >
           {syncing ? "Syncing Gmail…" : "Sync Gmail"}
         </button>
-        <span className="text-sm text-gray-600">Imports recruiting emails into pipelines + updates prep</span>
+        <span className="text-sm text-gray-600">Imports recruiting emails into pipelines</span>
       </div>
 
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
