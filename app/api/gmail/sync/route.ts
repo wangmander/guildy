@@ -14,6 +14,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! })
 
 /**
  * DO NOT REMOVE PHRASES.
+ * This list = ALL phrases + extra (only additions).
  * We use WEIGHTED scoring so trash doesn't pass.
  */
 const PHRASE_WEIGHTS: Array<{ phrase: string; w: number }> = [
@@ -174,9 +175,18 @@ const PHRASE_WEIGHTS: Array<{ phrase: string; w: number }> = [
   { phrase: "reference", w: 5 },
   { phrase: "start your role", w: 6 },
   { phrase: "welcome", w: 1 },
+
+  // Extra scheduling additions (ONLY ADD)
+  { phrase: "calendar invitation", w: 8 },
+  { phrase: "calendar hold", w: 7 },
+  { phrase: "invitation attached", w: 6 },
+  { phrase: "confirm your availability", w: 7 },
+  { phrase: "please confirm", w: 5 },
+  { phrase: "scheduled for", w: 7 },
+  { phrase: "confirmed for", w: 7 },
+  { phrase: "meeting is set", w: 7 },
 ]
 
-// ATS / recruiting domains (HUGE signal, but NOT hard-block)
 const ATS_DOMAINS = [
   "@greenhouse.io",
   "@lever.co",
@@ -188,7 +198,7 @@ const ATS_DOMAINS = [
   "@myworkday.com",
 ]
 
-// UI bucket stages
+// Storage bucket stages in DB
 type StageBucket = "APPLIED" | "RECRUITER_SCREEN" | "INTERVIEW" | "OFFER"
 
 function normalize(s: string) {
@@ -227,13 +237,9 @@ function computeRuleScore(text: string) {
   return { score, hits }
 }
 
-/**
- * Gate logic:
- * MUST have some signal: score >= MIN_SCORE OR (>=2 phrase hits)
- */
+// Gate logic: MUST have some signal: score >= MIN_SCORE OR (>=2 phrase hits)
 const MIN_SCORE = 9
 const MIN_HITS = 2
-
 function shouldSendToLLM(ruleScore: number, hitCount: number) {
   return ruleScore >= MIN_SCORE || hitCount >= MIN_HITS
 }
@@ -253,12 +259,11 @@ const STAGE_ORDER: Record<StageBucket, number> = {
   INTERVIEW: 3,
   OFFER: 4,
 }
-
 function advanceOnly(prev: StageBucket, next: StageBucket) {
   return STAGE_ORDER[next] > STAGE_ORDER[prev] ? next : prev
 }
 
-// Strong scheduling evidence required to allow INTERVIEW, especially on first-touch
+// Strong scheduling evidence required to allow INTERVIEW
 const STRONG_SCHEDULING_PHRASES = new Set(
   [
     "interview request",
@@ -275,12 +280,19 @@ const STRONG_SCHEDULING_PHRASES = new Set(
     "reschedule interview",
     "interview rescheduled",
     "calendar invite",
+    "calendar invitation",
+    "calendar hold",
     "invite attached",
+    "invitation attached",
     "meeting link",
     "conference link",
     "zoom interview",
     "google meet interview",
     "teams interview",
+    "scheduled for",
+    "confirmed for",
+    "meeting is set",
+    "confirm your availability",
   ].map((s) => s.toLowerCase())
 )
 
@@ -290,12 +302,12 @@ function hasStrongSchedulingSignal(blobLower: string, hits: Array<{ phrase: stri
     if (hitSet.has(p)) return true
   }
 
-  // Link-based / tooling signals (common in real scheduling emails)
-  if (/(zoom\.us\/j\/|meet\.google\.com\/|teams\.microsoft\.com\/|calendly\.com\/)/i.test(blobLower)) {
+  // Link-based / tooling signals
+  if (/(zoom\.us\/j\/|meet\.google\.com\/|teams\.microsoft\.com\/|calendly\.com\/|goodtime\.io\/|x\.ai\/scheduling)/i.test(blobLower)) {
     return true
   }
 
-  // Mild time-patterns ONLY if "interview" also exists (keeps it strict)
+  // Time-patterns ONLY if interview + schedule/calendar exists
   const hasInterviewWord = blobLower.includes("interview")
   const hasTimePattern =
     /\b(\d{1,2}:\d{2}\s*(am|pm)?|\d{1,2}\s*(am|pm))\b/i.test(blobLower) ||
@@ -307,23 +319,8 @@ function hasStrongSchedulingSignal(blobLower: string, hits: Array<{ phrase: stri
   return false
 }
 
-function capInterviewIfNoSchedulingEvidence(
-  isNewPipeline: boolean,
-  prevStage: StageBucket,
-  proposed: StageBucket,
-  scheduleStrong: boolean
-): StageBucket {
-  // If the LLM says INTERVIEW but we don't have real scheduling proof,
-  // force it to screening (especially on first-touch).
-  if (proposed === "INTERVIEW" && !scheduleStrong) {
-    return "RECRUITER_SCREEN"
-  }
-
-  // If a brand-new pipeline gets OFFER without strong evidence, keep conservative
-  if (isNewPipeline && proposed === "OFFER" && !scheduleStrong) {
-    return "RECRUITER_SCREEN"
-  }
-
+function capInterviewIfNoSchedulingEvidence(proposed: StageBucket, scheduleStrong: boolean): StageBucket {
+  if (proposed === "INTERVIEW" && !scheduleStrong) return "RECRUITER_SCREEN"
   return proposed
 }
 
@@ -335,9 +332,7 @@ function safeCompanyRole(decision: any, fromHeader: string, subject: string) {
   const fromEmail = extractEmailAddress(fromHeader)
   const domain = fromEmail.split("@")[1] || ""
   const heuristicCompany =
-    company ||
-    (domain ? domain.split(".")[0].replace(/[^a-z0-9]/gi, "").toUpperCase() : "") ||
-    ""
+    company || (domain ? domain.split(".")[0].replace(/[^a-z0-9]/gi, "").toUpperCase() : "") || ""
 
   const heuristicRole =
     role ||
@@ -353,6 +348,87 @@ function safeCompanyRole(decision: any, fromHeader: string, subject: string) {
   }
 }
 
+function defaultStageDetail(bucket: StageBucket) {
+  if (bucket === "APPLIED") return "Applied / inbound"
+  if (bucket === "RECRUITER_SCREEN") return "Recruiter screen"
+  if (bucket === "INTERVIEW") return "Hiring manager / interview round"
+  return "Offer / comp discussion"
+}
+
+async function generateInsightsAndPrep(args: {
+  company: string
+  role: string
+  stage_bucket: StageBucket
+  stage_detail: string
+  fromEmail: string
+  subject: string
+  snippet: string
+}) {
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    temperature: 0.2,
+    response_format: { type: "json_object" },
+    messages: [
+      {
+        role: "system",
+        content: [
+          "You are Guildy. Generate BESPOKE interview guidance for a single job opportunity.",
+          "CRITICAL:",
+          "- Return ONLY JSON (no markdown).",
+          "- Be ultra-specific to the company + role + stage_detail.",
+          "- If company size/type is uncertain, make a best-guess but include an 'assumptions' array.",
+          "- No generic fluff; each bullet must be actionable and tailored.",
+          "- Keep lists tight (max 6 items each).",
+          "",
+          "Output JSON shape:",
+          "{",
+          '  "insights": { "tone": "...", "response_likelihood": "LOW|MED|HIGH", "urgency": "LOW|MED|HIGH", "next_action": "1 sentence", "why": "1 sentence" },',
+          '  "prep": {',
+          '    "stage_focus": "1 sentence",',
+          '    "company_type": "startup|enterprise|agency|marketplace|unknown",',
+          '    "company_size_bucket": "1-10|11-50|51-200|201-1000|1000+|unknown",',
+          '    "role_archetype": "product designer|founding designer|ux researcher|eng|pm|other",',
+          '    "key_goals": ["..."],',
+          '    "questions_they_might_ask": ["..."],',
+          '    "questions_you_should_ask": ["..."],',
+          '    "stories_to_prepare": ["..."],',
+          '    "portfolio_angles": ["..."],',
+          '    "homework_next_24h": ["..."],',
+          '    "red_flags_to_watch": ["..."],',
+          '    "assumptions": ["..."]',
+          "  }",
+          "}",
+        ].join("\n"),
+      },
+      {
+        role: "user",
+        content: JSON.stringify(
+          {
+            company: args.company,
+            role: args.role,
+            stage_bucket: args.stage_bucket,
+            stage_detail: args.stage_detail,
+            email_context: {
+              fromEmail: args.fromEmail,
+              subject: args.subject,
+              snippet: args.snippet,
+            },
+          },
+          null,
+          2
+        ),
+      },
+    ],
+  })
+
+  const raw = completion.choices?.[0]?.message?.content || ""
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
 export async function POST() {
   try {
     const session = await getServerSession(authOptions)
@@ -361,7 +437,7 @@ export async function POST() {
     const accessToken = (session as any).accessToken
     const userEmail = session.user?.email
     if (!accessToken || !userEmail) {
-      return NextResponse.json({ error: "MISSING TOKEN OR EMAIL", session }, { status: 401 })
+      return NextResponse.json({ error: "MISSING TOKEN OR EMAIL" }, { status: 401 })
     }
 
     const auth = new google.auth.OAuth2()
@@ -382,6 +458,7 @@ export async function POST() {
     let inserted = 0
     let updated = 0
     let emailsInserted = 0
+    let prepGenerated = 0
 
     // Pull pipelines once
     const { data: existingPipelines } = await supabase
@@ -423,6 +500,9 @@ export async function POST() {
       const passesRules = shouldSendToLLM(score, hits.length)
       if (!passesRules) continue
 
+      const scheduleStrong = hasStrongSchedulingSignal(blobLower, hits)
+
+      // ---- LLM #1: classify + company/role + stage bucket/detail
       llmCalls++
 
       const completion = await openai.chat.completions.create({
@@ -441,13 +521,9 @@ export async function POST() {
               "- Prefer extracting COMPANY + ROLE from the content; do not use sender name/email unless unavoidable.",
               "- Infer BOTH:",
               "  (1) stage_bucket in {APPLIED, RECRUITER_SCREEN, INTERVIEW, OFFER}",
-              "  (2) stage_detail: bespoke but SHORT (e.g., 'Recruiter screen', 'Hiring manager 1:1', 'Portfolio review', 'System design', 'Panel loop', 'Offer negotiation').",
-              "- Stage must match the email content:",
-              "  * FIRST outreach / general 'next steps' / recruiter intro / phone screen request => RECRUITER_SCREEN",
-              "  * Only set INTERVIEW if there is REAL scheduling evidence (calendar invite, confirmed time, meeting link, requested availability).",
-              "  * Application receipt/update without recruiter outreach => APPLIED",
-              "  * Offer/comp/background check => OFFER",
-              "- If the email mentions 'loop' or 'onsite' but does not include scheduling evidence, do NOT jump to INTERVIEW.",
+              "  (2) stage_detail: bespoke to company/role/hiring style (e.g., 'Recruiter screen', 'Hiring manager 1:1', 'Portfolio review', 'System design', 'Panel loop', 'Offer negotiation').",
+              "- Stage must match email content.",
+              "- IMPORTANT: Only use INTERVIEW if the email clearly schedules/sets an interview time or includes a meeting link/calendar invite.",
               "- Use rule hits as supporting evidence.",
             ].join("\n"),
           },
@@ -465,6 +541,7 @@ export async function POST() {
                 ruleEvidence: {
                   score,
                   hits,
+                  scheduleStrong,
                 },
                 outputFormat: {
                   isInterviewRelated: "boolean",
@@ -496,29 +573,32 @@ export async function POST() {
       if (!isInterviewRelated || confidence < 0.7) continue
 
       const { company, role } = safeCompanyRole(decision, fromHeader, subject)
+      const proposedStage = stageBucketFromLLM(decision?.stage_bucket)
+      const cappedStage = capInterviewIfNoSchedulingEvidence(proposedStage, scheduleStrong)
+      const stageDetail = String(decision?.stage_detail || "").trim() || defaultStageDetail(cappedStage)
 
       const companyN = normalize(company)
       const roleN = normalize(role)
 
-      let match = pipelines.find(
-        (p: any) => normalize(p.company) === companyN && normalize(p.role) === roleN
-      )
-
+      let match = pipelines.find((p: any) => normalize(p.company) === companyN && normalize(p.role) === roleN)
       const isNewPipeline = !match
 
-      // LLM proposal
-      const llmProposed = stageBucketFromLLM(decision?.stage_bucket)
+      const receivedAt = dateHeader ? new Date(dateHeader).toISOString() : new Date().toISOString()
 
-      // Hard proof required to allow INTERVIEW (prevents "full loop" on first touch)
-      const scheduleStrong = hasStrongSchedulingSignal(blobLower, hits)
+      // ---- LLM #2: bespoke insights + prep (only for accepted recruiting emails)
+      const prepPack = await generateInsightsAndPrep({
+        company,
+        role,
+        stage_bucket: cappedStage,
+        stage_detail: stageDetail,
+        fromEmail,
+        subject,
+        snippet,
+      })
 
-      // Conservative cap BEFORE advancing logic
-      const capped = capInterviewIfNoSchedulingEvidence(
-        isNewPipeline,
-        (String(match?.stage || "").toUpperCase() as StageBucket) || "RECRUITER_SCREEN",
-        llmProposed,
-        scheduleStrong
-      )
+      const insights_json = prepPack?.insights ?? null
+      const prep_json = prepPack?.prep ?? null
+      if (prep_json || insights_json) prepGenerated++
 
       let pipelineId: string
 
@@ -529,9 +609,14 @@ export async function POST() {
             user_email: userEmail,
             company,
             role,
-            stage: capped,
+            stage: cappedStage,
+            stage_detail: stageDetail,
             last_email_subject: subject,
-            last_email_at: new Date().toISOString(),
+            last_email_at: receivedAt,
+            last_email_from: fromEmail || fromHeader,
+            last_email_snippet: snippet,
+            insights_json,
+            prep_json,
           })
           .select()
           .single()
@@ -545,28 +630,34 @@ export async function POST() {
 
         const prevStage: StageBucket =
           (String(match.stage || "").toUpperCase() as StageBucket) || "RECRUITER_SCREEN"
-
-        // Advance only, but using the capped stage (prevents false jumps)
-        const nextStage = advanceOnly(prevStage, capped)
+        const nextStage = advanceOnly(prevStage, cappedStage)
 
         const { error: updErr } = await supabase
           .from("pipelines")
           .update({
             stage: nextStage,
+            stage_detail: stageDetail,
             last_email_subject: subject,
-            last_email_at: new Date().toISOString(),
+            last_email_at: receivedAt,
+            last_email_from: fromEmail || fromHeader,
+            last_email_snippet: snippet,
+            insights_json,
+            prep_json,
           })
           .eq("id", pipelineId)
 
         if (!updErr) {
           match.stage = nextStage
+          match.stage_detail = stageDetail
           match.last_email_subject = subject
-          match.last_email_at = new Date().toISOString()
+          match.last_email_at = receivedAt
+          match.last_email_from = fromEmail || fromHeader
+          match.last_email_snippet = snippet
+          match.insights_json = insights_json
+          match.prep_json = prep_json
           updated++
         }
       }
-
-      const receivedAt = dateHeader ? new Date(dateHeader).toISOString() : new Date().toISOString()
 
       const { error: emailErr } = await supabase.from("emails").insert({
         user_email: userEmail,
@@ -587,11 +678,12 @@ export async function POST() {
       inserted,
       updated,
       emailsInserted,
+      prepGenerated,
     })
   } catch (err: any) {
-    return NextResponse.json({
-      error: "EXCEPTION",
-      message: err?.message || String(err),
-    })
+    return NextResponse.json(
+      { error: "EXCEPTION", message: err?.message || String(err) },
+      { status: 500 }
+    )
   }
 }
