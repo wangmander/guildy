@@ -1,16 +1,10 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
-import type { Job, Stage, Status } from "@/types"
-import { PipelineCardList } from "@/components/pipeline-card-list"
-import { JobDetailPanel } from "@/components/job-detail-panel"
-import { MobileBottomSheet } from "@/components/mobile-bottom-sheet"
+import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { signIn, useSession } from "next-auth/react"
 
-const UI_STAGES: Stage[] = ["SCREENING", "HIRING_MANAGER", "PRESENTATION", "FULL_LOOP", "OFFER_DISCUSSION"]
-
-function safeString(v: any, fallback = ""): string {
+function s(v: any, fallback = ""): string {
   if (typeof v === "string") return v
   if (v == null) return fallback
   try {
@@ -20,160 +14,23 @@ function safeString(v: any, fallback = ""): string {
   }
 }
 
-function safeArrayStrings(v: any, max = 8): string[] {
+function arr(v: any, max = 10): string[] {
   if (!Array.isArray(v)) return []
-  return v
-    .map((x) => safeString(x, "").trim())
-    .filter(Boolean)
-    .slice(0, max)
+  return v.map((x) => s(x, "").trim()).filter(Boolean).slice(0, max)
 }
 
-function safeOneLine(v: any, fallback = ""): string {
-  const s = safeString(v, fallback).replace(/\s+/g, " ").trim()
-  if (!s) return fallback
-  return s.length > 240 ? s.slice(0, 240).trim() + "…" : s
+function oneLine(v: any, fallback = ""): string {
+  const t = s(v, fallback).replace(/\s+/g, " ").trim()
+  if (!t) return fallback
+  return t.length > 260 ? t.slice(0, 260).trim() + "…" : t
 }
 
-function stageBucketToUiStage(stageRaw: any, stageDetail?: any): Stage {
-  const s = safeString(stageRaw, "").toUpperCase().trim()
-  if (UI_STAGES.includes(s as Stage)) return s as Stage
-
-  const d = safeString(stageDetail, "").toLowerCase()
-
-  if (s === "OFFER") return "OFFER_DISCUSSION"
-  if (s === "APPLIED" || s === "RECRUITER_SCREEN") return "SCREENING"
-
-  if (s === "INTERVIEW") {
-    if (d.includes("portfolio") || d.includes("case") || d.includes("presentation")) return "PRESENTATION"
-    if (d.includes("panel") || d.includes("loop") || d.includes("onsite") || d.includes("on-site")) return "FULL_LOOP"
-    if (d.includes("hiring manager") || d.includes("hm")) return "HIRING_MANAGER"
-    return "HIRING_MANAGER"
+function prettyJson(v: any) {
+  try {
+    return JSON.stringify(v ?? null, null, 2)
+  } catch {
+    return "null"
   }
-
-  // fallback
-  return "SCREENING"
-}
-
-/**
- * This maps your Supabase columns into what the right panel UI expects.
- * It is intentionally defensive: missing/invalid JSON => truthful defaults.
- */
-function mapLLM(row: any) {
-  const prep = row?.prep_json ?? null
-  const insights = row?.insights_json ?? null
-
-  // Company intel (truthful)
-  const company_type = safeString(prep?.company_type, "unknown")
-  const company_size_bucket = safeString(prep?.company_size_bucket, "unknown")
-  const hq_location = safeString(prep?.hq_location, "Unknown")
-  const glassdoor_rating = safeString(prep?.glassdoor_rating, "N/A")
-  const assumptions = safeArrayStrings(prep?.assumptions, 6)
-
-  const intelTruth =
-    company_type === "unknown" || company_size_bucket === "unknown"
-      ? "Guildy couldn’t confidently infer company details from email alone."
-      : ""
-
-  const companyIntel = {
-    industry: company_type !== "unknown" ? company_type : "Unknown",
-    size: company_size_bucket !== "unknown" ? company_size_bucket : "Unknown",
-    hqLocation: hq_location || "Unknown",
-    glassdoorRating: glassdoor_rating || "N/A",
-    truthNote: intelTruth,
-    assumptions,
-  }
-
-  // Insights (drives Next Action + email meta)
-  const insightsPack = {
-    nextAction: safeOneLine(insights?.next_action, "Next action not available yet."),
-    why: safeOneLine(insights?.why, ""),
-    tone: safeOneLine(insights?.tone, ""),
-    responseLikelihood: safeOneLine(insights?.response_likelihood, ""),
-    urgency: safeOneLine(insights?.urgency, ""),
-  }
-
-  // Interview prep (drives the two question lists)
-  const stageFocus = safeOneLine(
-    prep?.stage_focus,
-    "Prep focus not available yet. Re-sync after more emails or a scheduling link appears."
-  )
-
-  const interviewPrep = {
-    stageFocus,
-    keyGoals: safeArrayStrings(prep?.key_goals, 6),
-
-    // These two names are the ones your UI almost certainly uses
-    questionsTheyMightAsk: safeArrayStrings(prep?.questions_they_might_ask, 6),
-    questionsYouShouldAskThem: safeArrayStrings(prep?.questions_you_should_ask, 6),
-
-    storiesToPrepare: safeArrayStrings(prep?.stories_to_prepare, 6),
-    portfolioAngles: safeArrayStrings(prep?.portfolio_angles, 6),
-    homeworkNext24h: safeArrayStrings(prep?.homework_next_24h, 6),
-    redFlagsToWatch: safeArrayStrings(prep?.red_flags_to_watch, 6),
-    assumptions,
-  }
-
-  return { companyIntel, insightsPack, interviewPrep }
-}
-
-function rowToJob(row: any): Job {
-  const uiStage = stageBucketToUiStage(row?.stage, row?.stage_detail)
-
-  const companyName = safeString(row?.company, "Unknown company")
-  const roleTitle = safeString(row?.role, "Interview")
-
-  const lastEmailSubject = safeString(row?.last_email_subject, "")
-  const lastEmailAt = safeString(row?.last_email_at, "")
-  const lastEmailFrom = safeString(row?.last_email_from, "")
-  const lastEmailSnippet = safeString(row?.last_email_snippet, "")
-
-  const { companyIntel, insightsPack, interviewPrep } = mapLLM(row)
-
-  // Build a stable object that won't crash JobDetailPanel even if it expects fields.
-  const job: any = {
-    id: row?.id,
-    title: roleTitle,
-    company: {
-      name: companyName,
-      industry: companyIntel.industry,
-      size: companyIntel.size,
-      hqLocation: companyIntel.hqLocation,
-      glassdoorRating: companyIntel.glassdoorRating,
-      truthNote: companyIntel.truthNote,
-      assumptions: companyIntel.assumptions,
-    },
-    stage: uiStage,
-    status: "WAITING" as Status,
-    appliedAt: lastEmailAt || undefined,
-
-    // Right-panel “Next Action” banner usually reads this
-    nextAction: insightsPack.nextAction,
-    nextActionWhy: insightsPack.why,
-
-    // Stage detail if you render it anywhere
-    stageDetail: safeString(row?.stage_detail, ""),
-
-    lastEmail: lastEmailSubject
-      ? {
-          fromName: companyName,
-          fromEmail: lastEmailFrom,
-          subject: lastEmailSubject,
-          receivedAt: lastEmailAt,
-          snippet: lastEmailSnippet,
-
-          // If your UI shows Tone / Likelihood / Urgency under Last Email
-          tone: insightsPack.tone,
-          responseLikelihood: insightsPack.responseLikelihood,
-          urgency: insightsPack.urgency,
-        }
-      : undefined,
-
-    interviewPrep,
-    recentNews: [],
-    notes: "",
-  }
-
-  return job as Job
 }
 
 function MarketingConnect() {
@@ -191,13 +48,13 @@ function MarketingConnect() {
           Track every pipeline. Prep every round. Close the offer.
         </h1>
         <p className="mt-3 text-gray-600">
-          Connect Gmail to auto-build your pipelines, keep stages accurate, and generate stage-specific prep matched to
-          the company + role. If Guildy can’t infer company intel, it will say so.
+          Connect Gmail to auto-build pipelines, infer stage conservatively, and generate stage-specific prep matched to
+          the exact company + role. If Guildy can’t infer intel, it will say so.
         </p>
 
         <ul className="mt-6 space-y-2 text-sm text-gray-700">
-          <li>• Auto-detect stage from real emails (first reach-out ≠ full loop).</li>
-          <li>• Bespoke prep per stage: recruiter screen → HM → panel/loop → offer.</li>
+          <li>• First reach-out → recruiter screen (not full loop).</li>
+          <li>• Bespoke prep per stage (no generic boilerplate).</li>
           <li>• No fake company intel: Unknown stays Unknown.</li>
         </ul>
 
@@ -215,59 +72,60 @@ function MarketingConnect() {
 export default function PipelinesPage() {
   const { data: session, status } = useSession()
 
-  const [jobs, setJobs] = useState<Job[]>([])
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null)
-  const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false)
+  const [rows, setRows] = useState<any[]>([])
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
-  const [pageError, setPageError] = useState<string>("")
-  const rightPanelRef = useRef<HTMLDivElement>(null)
+  const [loading, setLoading] = useState(false)
+  const [err, setErr] = useState("")
+
+  const selected = useMemo(() => {
+    if (!selectedId) return rows[0] ?? null
+    return rows.find((r) => r?.id === selectedId) ?? rows[0] ?? null
+  }, [rows, selectedId])
 
   async function loadPipelines() {
-    setPageError("")
     const userEmail = session?.user?.email
     if (!userEmail) return
-
-    const { data, error } = await supabase
-      .from("pipelines")
-      .select("*")
-      .eq("user_email", userEmail)
-      .order("last_email_at", { ascending: false })
-
-    if (error) {
-      console.error("loadPipelines error:", error)
-      setPageError("Failed to load pipelines.")
-      return
-    }
-
+    setErr("")
+    setLoading(true)
     try {
-      if (Array.isArray(data) && data.length > 0) {
-        const mapped = data.map((r) => rowToJob(r))
-        setJobs(mapped)
-        setSelectedJob(mapped[0])
-      } else {
-        setJobs([])
-        setSelectedJob(null)
+      const { data, error } = await supabase
+        .from("pipelines")
+        .select("*")
+        .eq("user_email", userEmail)
+        .order("last_email_at", { ascending: false })
+
+      if (error) {
+        console.error(error)
+        setErr("Failed to load pipelines.")
+        setRows([])
+        setSelectedId(null)
+        return
       }
+
+      const list = Array.isArray(data) ? data : []
+      setRows(list)
+      setSelectedId(list?.[0]?.id ?? null)
     } catch (e: any) {
-      console.error("Pipeline mapping crashed:", e)
-      setPageError("Pipelines loaded but UI mapping crashed (bad data shape).")
-      // Do NOT throw (that causes the client-side exception page)
-      setJobs([])
-      setSelectedJob(null)
+      console.error(e)
+      setErr("Failed to load pipelines (exception).")
+      setRows([])
+      setSelectedId(null)
+    } finally {
+      setLoading(false)
     }
   }
 
   async function syncGmail() {
     if (status !== "authenticated") return
+    setErr("")
     setSyncing(true)
-    setPageError("")
     try {
       const res = await fetch("/api/gmail/sync", { method: "POST" })
-      // Don't crash if response isn't JSON
       await res.json().catch(() => null)
     } catch (e) {
-      console.error("syncGmail failed:", e)
-      setPageError("Sync failed.")
+      console.error(e)
+      setErr("Sync failed.")
     } finally {
       await loadPipelines()
       setSyncing(false)
@@ -286,51 +144,220 @@ export default function PipelinesPage() {
     )
   }
 
-  if (status !== "authenticated") {
-    return <MarketingConnect />
-  }
+  if (status !== "authenticated") return <MarketingConnect />
+
+  const prep = selected?.prep_json ?? null
+  const insights = selected?.insights_json ?? null
+
+  const companyType = s(prep?.company_type, "unknown")
+  const companySize = s(prep?.company_size_bucket, "unknown")
+  const truthNote =
+    companyType === "unknown" || companySize === "unknown"
+      ? "Guildy couldn’t confidently infer company details from email alone."
+      : ""
 
   return (
     <div className="mx-auto max-w-7xl h-[calc(100vh-64px)] flex flex-col overflow-hidden">
       <div className="p-4 border-b bg-white flex items-center gap-3">
-        <button onClick={syncGmail} disabled={syncing} className="px-4 py-2 bg-black text-white rounded disabled:opacity-50">
+        <button
+          onClick={syncGmail}
+          disabled={syncing}
+          className="px-4 py-2 bg-black text-white rounded disabled:opacity-50"
+        >
           {syncing ? "Syncing Gmail…" : "Sync Gmail"}
         </button>
         <span className="text-sm text-gray-600">Imports recruiting emails into pipelines</span>
+        {loading ? <span className="text-sm text-gray-400 ml-auto">Loading…</span> : null}
       </div>
 
-      {pageError ? (
-        <div className="px-4 py-3 border-b bg-yellow-50 text-sm text-yellow-900">
-          {pageError} (This page now blocks hard crashes so you can keep working.)
-        </div>
+      {err ? (
+        <div className="px-4 py-3 border-b bg-yellow-50 text-sm text-yellow-900">{err}</div>
       ) : null}
 
       <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
-        <div className="w-full lg:w-1/2 overflow-y-auto">
-          <PipelineCardList
-            jobs={jobs}
-            selectedJobId={selectedJob?.id}
-            onSelect={(job) => {
-              setSelectedJob(job)
-              setIsMobileSheetOpen(true)
-            }}
-            onActionClick={(job) => {
-              setSelectedJob(job)
-              setIsMobileSheetOpen(true)
-            }}
-          />
+        {/* LEFT: list */}
+        <div className="w-full lg:w-1/2 overflow-y-auto border-r bg-white">
+          {rows.length === 0 ? (
+            <div className="p-6 text-sm text-gray-600">
+              No pipelines yet. Hit <b>Sync Gmail</b>.
+            </div>
+          ) : (
+            <div className="divide-y">
+              {rows.map((r) => {
+                const isSel = (r?.id ?? null) === (selected?.id ?? null)
+                return (
+                  <button
+                    key={r.id}
+                    onClick={() => setSelectedId(r.id)}
+                    className={`w-full text-left p-4 hover:bg-gray-50 ${
+                      isSel ? "bg-gray-50" : "bg-white"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-medium">
+                          {s(r.company, "Unknown")} — {s(r.role, "Interview")}
+                        </div>
+                        <div className="text-xs text-gray-600 mt-1">
+                          Stage: <b>{s(r.stage, "")}</b>
+                          {r.stage_detail ? (
+                            <>
+                              {" "}
+                              · <span className="text-gray-500">{s(r.stage_detail, "")}</span>
+                            </>
+                          ) : null}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          {s(r.last_email_subject, "")}
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-500 whitespace-nowrap">
+                        {r.last_email_at ? new Date(r.last_email_at).toLocaleString() : ""}
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
 
-        <div ref={rightPanelRef} className="hidden lg:block w-1/2 bg-white">
-          <JobDetailPanel job={selectedJob} onSaveNotes={() => {}} />
-        </div>
+        {/* RIGHT: details */}
+        <div className="w-full lg:w-1/2 overflow-y-auto bg-white">
+          {!selected ? (
+            <div className="p-6 text-sm text-gray-600">Select a pipeline.</div>
+          ) : (
+            <div className="p-6 space-y-6">
+              <div>
+                <div className="text-xl font-semibold">
+                  {s(selected.company, "Unknown")} — {s(selected.role, "Interview")}
+                </div>
+                <div className="text-sm text-gray-600 mt-1">
+                  Stage: <b>{s(selected.stage, "")}</b>
+                  {selected.stage_detail ? (
+                    <>
+                      {" "}
+                      · <span className="text-gray-500">{s(selected.stage_detail, "")}</span>
+                    </>
+                  ) : null}
+                </div>
+              </div>
 
-        <MobileBottomSheet
-          isOpen={isMobileSheetOpen}
-          onClose={() => setIsMobileSheetOpen(false)}
-          job={selectedJob}
-          onSaveNotes={() => {}}
-        />
+              {/* Next action (insights_json) */}
+              <div className="border rounded p-4">
+                <div className="text-sm font-semibold">Next Action (LLM)</div>
+                <div className="mt-2 text-sm">{oneLine(insights?.next_action, "Not available yet.")}</div>
+                {insights?.why ? <div className="mt-2 text-xs text-gray-600">{oneLine(insights?.why, "")}</div> : null}
+                <div className="mt-3 text-xs text-gray-500 flex flex-wrap gap-3">
+                  {insights?.tone ? <span>Tone: {s(insights.tone)}</span> : null}
+                  {insights?.response_likelihood ? (
+                    <span>Likelihood: {s(insights.response_likelihood)}</span>
+                  ) : null}
+                  {insights?.urgency ? <span>Urgency: {s(insights.urgency)}</span> : null}
+                </div>
+              </div>
+
+              {/* Company intel */}
+              <div className="border rounded p-4">
+                <div className="text-sm font-semibold">Company Intel (truthful)</div>
+                <div className="mt-2 text-sm text-gray-700">
+                  Type: <b>{companyType !== "unknown" ? companyType : "Unknown"}</b> · Size:{" "}
+                  <b>{companySize !== "unknown" ? companySize : "Unknown"}</b>
+                </div>
+                {truthNote ? <div className="mt-2 text-xs text-gray-600">{truthNote}</div> : null}
+                {arr(prep?.assumptions, 6).length ? (
+                  <div className="mt-3">
+                    <div className="text-xs font-semibold text-gray-700">Assumptions</div>
+                    <ul className="mt-2 text-xs text-gray-600 list-disc pl-5 space-y-1">
+                      {arr(prep?.assumptions, 6).map((x, i) => (
+                        <li key={i}>{x}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* Stage-specific prep */}
+              <div className="border rounded p-4">
+                <div className="text-sm font-semibold">Stage Prep (LLM)</div>
+                <div className="mt-2 text-sm text-gray-700">
+                  {oneLine(prep?.stage_focus, "Not available yet. Re-sync after more recruiting emails exist.")}
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-xs font-semibold text-gray-700">They might ask</div>
+                    <ul className="mt-2 text-xs text-gray-600 list-disc pl-5 space-y-1">
+                      {arr(prep?.questions_they_might_ask, 6).length ? (
+                        arr(prep?.questions_they_might_ask, 6).map((x, i) => <li key={i}>{x}</li>)
+                      ) : (
+                        <li>Not available yet.</li>
+                      )}
+                    </ul>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-gray-700">You should ask</div>
+                    <ul className="mt-2 text-xs text-gray-600 list-disc pl-5 space-y-1">
+                      {arr(prep?.questions_you_should_ask, 6).length ? (
+                        arr(prep?.questions_you_should_ask, 6).map((x, i) => <li key={i}>{x}</li>)
+                      ) : (
+                        <li>Not available yet.</li>
+                      )}
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-xs font-semibold text-gray-700">Stories to prepare</div>
+                    <ul className="mt-2 text-xs text-gray-600 list-disc pl-5 space-y-1">
+                      {arr(prep?.stories_to_prepare, 6).length ? (
+                        arr(prep?.stories_to_prepare, 6).map((x, i) => <li key={i}>{x}</li>)
+                      ) : (
+                        <li>Not available yet.</li>
+                      )}
+                    </ul>
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-gray-700">Next 24h homework</div>
+                    <ul className="mt-2 text-xs text-gray-600 list-disc pl-5 space-y-1">
+                      {arr(prep?.homework_next_24h, 6).length ? (
+                        arr(prep?.homework_next_24h, 6).map((x, i) => <li key={i}>{x}</li>)
+                      ) : (
+                        <li>Not available yet.</li>
+                      )}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Last email */}
+              <div className="border rounded p-4">
+                <div className="text-sm font-semibold">Last Email</div>
+                <div className="mt-2 text-xs text-gray-500">
+                  From: {s(selected.last_email_from, "")}
+                </div>
+                <div className="mt-1 text-sm">{s(selected.last_email_subject, "")}</div>
+                {selected.last_email_snippet ? (
+                  <div className="mt-2 text-xs text-gray-600">{s(selected.last_email_snippet, "")}</div>
+                ) : null}
+              </div>
+
+              {/* Raw JSON (debug) */}
+              <details className="border rounded p-4">
+                <summary className="text-sm font-semibold cursor-pointer">Raw LLM JSON (debug)</summary>
+                <div className="mt-3">
+                  <div className="text-xs font-semibold text-gray-700">prep_json</div>
+                  <pre className="mt-2 text-xs bg-gray-50 p-3 rounded overflow-auto">{prettyJson(prep)}</pre>
+                </div>
+                <div className="mt-4">
+                  <div className="text-xs font-semibold text-gray-700">insights_json</div>
+                  <pre className="mt-2 text-xs bg-gray-50 p-3 rounded overflow-auto">{prettyJson(insights)}</pre>
+                </div>
+              </details>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
