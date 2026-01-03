@@ -1,37 +1,15 @@
 "use client"
 
+import React from "react"
 import type { Job } from "@/types"
-import { Card } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
-import { useEffect, useMemo, useState } from "react"
-import {
-  ExternalLink,
-  Calendar,
-  Mail,
-  MapPin,
-  User,
-  Target,
-  HelpCircle,
-  Lightbulb,
-  Building2,
-  Clock,
-  Briefcase,
-  MessageCircle,
-  BookOpen,
-  Star,
-  Activity,
-} from "lucide-react"
+import { Mail, Sparkles, Building2, Newspaper, LineChart } from "lucide-react"
 
-interface JobDetailPanelProps {
+type Props = {
   job: Job | null
-  onSaveNotes: (jobId: string, notes: string) => void | Promise<void> // allow async
-  isMobile?: boolean
-  idPrefix?: string
+  onSaveNotes?: (notes: string) => void
 }
 
-function s(v: any, fallback = ""): string {
+function safeStr(v: any, fallback = ""): string {
   if (typeof v === "string") return v
   if (v == null) return fallback
   try {
@@ -41,672 +19,485 @@ function s(v: any, fallback = ""): string {
   }
 }
 
-function safeDate(v: any): Date | null {
-  if (!v) return null
-  const d = new Date(v)
-  return isNaN(d.getTime()) ? null : d
+function safeArr(v: any): any[] {
+  return Array.isArray(v) ? v : []
 }
 
-function arr(v: any): string[] {
-  if (!Array.isArray(v)) return []
-  return v.map((x) => s(x, "").trim()).filter(Boolean)
+function titleCase(s: string) {
+  return s
+    .toLowerCase()
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((w) => w[0]?.toUpperCase() + w.slice(1))
+    .join(" ")
 }
 
-function firstChar(v: any): string {
-  const t = s(v, "").trim()
-  return t ? t.charAt(0).toUpperCase() : "?"
+function stageLabel(stage: any): string {
+  const s = safeStr(stage, "")
+  if (!s) return "Unknown stage"
+  const u = s.toUpperCase()
+  if (u.includes("APPLIED")) return "Applied"
+  if (u.includes("RECRUITER") || u.includes("SCREEN")) return "Screening"
+  if (u.includes("HIRING")) return "Hiring manager"
+  if (u.includes("PRESENT")) return "Presentation"
+  if (u.includes("FULL")) return "Full loop"
+  if (u.includes("OFFER")) return "Offer discussion"
+  if (u.includes("INTERVIEW")) return "Interview"
+  return titleCase(s)
 }
 
-function maxDate(...dates: Array<Date | null | undefined>): Date | null {
-  const xs = dates.filter((d): d is Date => !!d && !isNaN(d.getTime()))
-  if (!xs.length) return null
-  return new Date(Math.max(...xs.map((d) => d.getTime())))
+function statusLabel(status: any): string {
+  const s = safeStr(status, "")
+  if (!s) return "Unknown"
+  return titleCase(s)
 }
 
-function daysSince(d: Date | null): number | null {
-  if (!d) return null
-  const ms = Date.now() - d.getTime()
-  return Math.max(0, Math.floor(ms / (1000 * 60 * 60 * 24)))
+function Pill({
+  children,
+  tone,
+}: {
+  children: React.ReactNode
+  tone?: "neutral" | "purple" | "orange" | "green"
+}) {
+  const base =
+    "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium"
+  const cls =
+    tone === "purple"
+      ? "border-purple-200 bg-purple-50 text-purple-700"
+      : tone === "orange"
+        ? "border-orange-200 bg-orange-50 text-orange-700"
+        : tone === "green"
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-gray-200 bg-gray-50 text-gray-700"
+  return <span className={`${base} ${cls}`}>{children}</span>
 }
 
-type WaitingOn = "you" | "them" | "unknown"
-type StageMeta = {
-  key: string
-  label: string
-  stepIndex: number // 0..3 for timeline
-  terminal?: boolean
-  waitingOnDefault: WaitingOn
-  followUpDays: number
-  typicalNextEtaDays: number
+function SectionCard({
+  title,
+  icon,
+  children,
+  className = "",
+}: {
+  title: string
+  icon?: React.ReactNode
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <div className={`rounded-xl border bg-white shadow-sm ${className}`}>
+      <div className="flex items-center gap-2 border-b px-4 py-3">
+        {icon}
+        <div className="text-sm font-semibold text-gray-900">{title}</div>
+      </div>
+      <div className="px-4 py-4">{children}</div>
+    </div>
+  )
 }
 
-const STAGE_META: Record<string, StageMeta> = {
-  APPLIED: { key: "APPLIED", label: "Applied", stepIndex: 0, waitingOnDefault: "them", followUpDays: 7, typicalNextEtaDays: 7 },
-  RECRUITER: { key: "RECRUITER", label: "Recruiter", stepIndex: 1, waitingOnDefault: "them", followUpDays: 4, typicalNextEtaDays: 5 },
-  SCREEN: { key: "SCREEN", label: "Screen", stepIndex: 2, waitingOnDefault: "them", followUpDays: 3, typicalNextEtaDays: 5 },
-  INTERVIEW: { key: "INTERVIEW", label: "Interview", stepIndex: 2, waitingOnDefault: "them", followUpDays: 3, typicalNextEtaDays: 4 },
-  TAKE_HOME: { key: "TAKE_HOME", label: "Take-home", stepIndex: 2, waitingOnDefault: "you", followUpDays: 2, typicalNextEtaDays: 3 },
-  ONSITE: { key: "ONSITE", label: "Onsite", stepIndex: 2, waitingOnDefault: "them", followUpDays: 3, typicalNextEtaDays: 5 },
-  OFFER: { key: "OFFER", label: "Offer", stepIndex: 3, waitingOnDefault: "you", followUpDays: 2, typicalNextEtaDays: 2 },
-  REJECTED: { key: "REJECTED", label: "Rejected", stepIndex: 3, terminal: true, waitingOnDefault: "unknown", followUpDays: 0, typicalNextEtaDays: 0 },
-  WITHDREW: { key: "WITHDREW", label: "Withdrew", stepIndex: 3, terminal: true, waitingOnDefault: "unknown", followUpDays: 0, typicalNextEtaDays: 0 },
-  UNKNOWN: { key: "UNKNOWN", label: "Unknown", stepIndex: 0, waitingOnDefault: "unknown", followUpDays: 5, typicalNextEtaDays: 7 },
+function Bullets({ items, empty }: { items: any[]; empty: string }) {
+  const list = safeArr(items).filter((x) => safeStr(x, "").trim())
+  if (!list.length) return <div className="text-sm text-gray-500">{empty}</div>
+  return (
+    <ul className="space-y-2 text-sm text-gray-700">
+      {list.map((x, i) => (
+        <li key={i} className="flex gap-2">
+          <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-gray-400" />
+          <span>{safeStr(x)}</span>
+        </li>
+      ))}
+    </ul>
+  )
 }
 
-function normalizeStage(rawStage: string, rawStatus: string): StageMeta {
-  const st = s(rawStage, "").trim().toUpperCase()
-  const status = s(rawStatus, "").trim().toUpperCase()
-
-  if (status === "REJECTED" || st.includes("REJECT")) return STAGE_META.REJECTED
-  if (status === "WITHDREW" || st.includes("WITHDRAW")) return STAGE_META.WITHDREW
-  if (st.includes("OFFER")) return STAGE_META.OFFER
-  if (st.includes("ONSITE")) return STAGE_META.ONSITE
-  if (st.includes("TAKE") || st.includes("HOME") || st.includes("ASSIGNMENT")) return STAGE_META.TAKE_HOME
-  if (st.includes("TECH") || st.includes("INTERVIEW") || st.includes("FINAL") || st.includes("LOOP")) return STAGE_META.INTERVIEW
-  if (st.includes("SCREEN") || st.includes("PHONE") || st.includes("CALL")) return STAGE_META.SCREEN
-  if (st.includes("RECRUITER") || st.includes("HR") || st.includes("TALENT")) return STAGE_META.RECRUITER
-  if (st.includes("APPLIED") || st.includes("SUBMIT")) return STAGE_META.APPLIED
-
-  return STAGE_META.UNKNOWN
-}
-
-function computeFollowUp(meta: StageMeta, status: string, lastTouchAt: Date | null, meetingDate: Date | null) {
-  const sStatus = s(status, "").toUpperCase()
-  // If a meeting is scheduled in the future, you’re not “overdue”
-  if (meetingDate && meetingDate.getTime() > Date.now()) {
-    return { due: null as Date | null, label: "Meeting scheduled" }
-  }
-  if (!lastTouchAt || meta.terminal || meta.followUpDays <= 0) {
-    return { due: null as Date | null, label: "" }
-  }
-  // If your system sets NEEDS_REPLY, that overrides
-  if (sStatus === "NEEDS_REPLY") {
-    return { due: new Date(Date.now()), label: "Reply now" }
-  }
-  const due = new Date(lastTouchAt.getTime() + meta.followUpDays * 24 * 60 * 60 * 1000)
-  const overdue = due.getTime() <= Date.now()
-  return { due: overdue ? due : null, label: overdue ? "Follow up" : "" }
-}
-
-function clamp(n: number, a: number, b: number) {
-  return Math.max(a, Math.min(b, n))
-}
-
-export function JobDetailPanel({ job, onSaveNotes, isMobile = false, idPrefix = "desktop" }: JobDetailPanelProps) {
-  const [notes, setNotes] = useState("")
-  const [isEditing, setIsEditing] = useState(false)
-
-  useEffect(() => {
-    setNotes(s((job as any)?.notes, ""))
-    setIsEditing(false)
-  }, [job?.id])
-
+export function JobDetailPanel({ job, onSaveNotes }: Props) {
+  // IMPORTANT: no hooks in this component. It must be 100% render-deterministic to avoid React #310.
   if (!job) {
     return (
-      <div className="px-4 py-6">
-        <div className="flex items-center justify-center">
-          <div className="text-center text-gray-500">
-            <p className="text-lg font-medium">Select a job to view details</p>
-            <p className="text-sm">Choose a pipeline from the left to see more information</p>
-          </div>
+      <div className="h-full min-h-0 overflow-y-auto p-6">
+        <div className="rounded-xl border bg-white p-6 text-sm text-gray-600">
+          Select a pipeline to see details.
         </div>
       </div>
     )
   }
 
   const j: any = job as any
+  const companyName = safeStr(j?.company?.name, "Unknown company")
+  const roleTitle = safeStr(j?.title, "Interview")
+  const stage = stageLabel(j?.stage)
+  const status = statusLabel(j?.status)
 
-  const companyName =
-    s(j?.company?.name, "") ||
-    s(j?.companyName, "") ||
-    s(j?.company, "") ||
-    "Unknown company"
-
-  const title =
-    s(j?.title, "") ||
-    s(j?.role, "") ||
-    "Interview"
-
-  const location =
-    s(j?.location, "") ||
-    s(j?.company?.location, "") ||
-    "Unknown"
-
-  const industry =
-    s(j?.industry, "") ||
-    s(j?.company?.industry, "") ||
-    "Unknown"
-
-  const stageRaw = s(j?.stage, "") || "UNKNOWN"
-  const statusRaw = s(j?.status, "") || "UNKNOWN"
-
-  // LLM fields
-  const insights = j?.insights || j?.insights_json || {}
-  const prep = j?.interviewPrep || j?.prep_json || {}
-
-  const nextActionLLM =
-    s(insights?.nextAction, "") ||
-    s(insights?.next_action, "") ||
-    s(prep?.nextAction, "") ||
-    s(prep?.next_action, "") ||
+  const prep: any = j?.interviewPrep || {}
+  const insights: any = prep?.insights || {}
+  const companyType = safeStr(
+    j?.company?.type || prep?.company_type || prep?.companyType,
+    "Unknown",
+  )
+  const companySize = safeStr(
+    j?.company?.size || prep?.company_size_bucket || prep?.companySizeBucket,
+    "Unknown",
+  )
+  const companySummary =
+    safeStr(j?.company?.intelSummary, "") ||
+    safeStr(prep?.company_intel_summary, "") ||
+    safeStr(prep?.companyIntelSummary, "") ||
     ""
 
-  const why =
-    s(insights?.why, "") ||
-    s(insights?.rationale, "") ||
+  const truthfulNote = safeStr(
+    j?.company?.truthfulNote || prep?.truthful_note || prep?.truthfulNote,
+    "",
+  )
+
+  const nextAction =
+    safeStr(insights?.nextAction, "") ||
+    safeStr(prep?.next_action, "") ||
+    safeStr(prep?.nextAction, "") ||
     ""
 
-  const tone =
-    s(insights?.tone, "") ||
-    s(prep?.tone, "")
-
+  const why = safeStr(insights?.why || insights?.rationale || insights?.reasoning, "")
+  const tone = safeStr(prep?.tone || insights?.tone, "")
+  const urgency = safeStr(prep?.urgency || insights?.urgency, "")
   const responseLikelihood =
-    s(insights?.responseLikelihood, "") ||
-    s(insights?.response_likelihood, "") ||
-    ""
+    safeStr(prep?.response_likelihood || prep?.responseLikelihood, "") ||
+    safeStr(insights?.response_likelihood || insights?.responseLikelihood, "")
 
-  const urgency =
-    s(insights?.urgency, "") || ""
+  const lastEmail: any = j?.lastEmail || {}
+  const lastSubject = safeStr(lastEmail?.subject, "")
+  const lastFrom = safeStr(lastEmail?.fromName || lastEmail?.fromEmail, "")
+  const lastSnippet = safeStr(lastEmail?.snippet, "")
+  const lastAt = safeStr(lastEmail?.receivedAt, "")
 
-  // Optional richer “pipeline intelligence” fields (if you pass them)
-  const stageConfidence =
-    s(insights?.stageConfidence, "") ||
-    s(insights?.stage_confidence, "") ||
-    ""
+  const prepFocus = safeStr(prep?.stage_focus || prep?.stageFocus, "")
+  const qThey = safeArr(
+    prep?.questions_they_might_ask?.length
+      ? prep?.questions_they_might_ask
+      : prep?.questionsTheyMightAsk,
+  )
+  const qYou = safeArr(
+    prep?.questions_you_should_ask?.length
+      ? prep?.questions_you_should_ask
+      : prep?.questionsYouShouldAsk,
+  )
+  const stories = safeArr(
+    prep?.stories_to_prepare?.length ? prep?.stories_to_prepare : prep?.storiesToPrepare,
+  )
+  const homework = safeArr(
+    prep?.homework_next_24h?.length ? prep?.homework_next_24h : prep?.homeworkNext24h,
+  )
+  const emphasize = safeArr(prep?.what_to_emphasize || prep?.whatToEmphasize)
+  const topics = safeArr(
+    prep?.common_topics || prep?.commonInterviewTopics || prep?.topics || prep?.tags,
+  ).slice(0, 8)
+  const recentNews = safeArr(j?.recentNews || prep?.recent_news || prep?.recentNews).slice(
+    0,
+    3,
+  )
 
-  const stageReason =
-    s(insights?.stageReason, "") ||
-    s(insights?.stage_reason, "") ||
-    ""
-
-  const signals: Array<{ label?: string; type?: string; confidence?: any; at?: any }> =
-    Array.isArray(insights?.signals) ? insights.signals :
-    Array.isArray(insights?.stageSignals) ? insights.stageSignals :
-    Array.isArray(insights?.stage_signals) ? insights.stage_signals :
-    []
-
-  // Scheduled meeting
-  const scheduledMeeting = j?.scheduledMeeting || j?.scheduled_meeting || null
-  const meetingType = s(scheduledMeeting?.type, "")
-  const meetingDate = safeDate(scheduledMeeting?.date)
-  const meetingDuration = s(scheduledMeeting?.duration, "")
-  const meetingLink = s(scheduledMeeting?.meetingLink, "") || s(scheduledMeeting?.meeting_link, "")
-
-  // Last email
-  const lastEmail = j?.lastEmail || null
-  const lastEmailSubject = s(lastEmail?.subject, "")
-  const lastEmailFromName = s(lastEmail?.fromName, "")
-  const lastEmailFromEmail = s(lastEmail?.fromEmail, "")
-  const lastEmailSnippet = s(lastEmail?.snippet, "")
-  const lastEmailReceived = safeDate(lastEmail?.receivedAt)
-
-  // Dates
-  const appliedAt = safeDate(j?.appliedAt)
-  const lastTouchAt = useMemo(() => maxDate(lastEmailReceived, meetingDate, appliedAt), [lastEmailReceived, meetingDate, appliedAt])
-  const daysSinceTouch = daysSince(lastTouchAt)
-
-  const stageMeta = useMemo(() => normalizeStage(stageRaw, statusRaw), [stageRaw, statusRaw])
-  const followUp = useMemo(() => computeFollowUp(stageMeta, statusRaw, lastTouchAt, meetingDate), [stageMeta, statusRaw, lastTouchAt, meetingDate])
-
-  // Who are we waiting on?
-  const waitingOn: WaitingOn = useMemo(() => {
-    const st = s(statusRaw, "").toUpperCase()
-    if (st === "NEEDS_REPLY") return "you"
-    if (stageMeta.terminal) return "unknown"
-    // If take-home and no meeting, likely waiting on you
-    if (stageMeta.key === "TAKE_HOME") return "you"
-    return stageMeta.waitingOnDefault
-  }, [statusRaw, stageMeta])
-
-  // ETA guess (only if we have a touchpoint)
-  const nextEtaDate = useMemo(() => {
-    if (!lastTouchAt || stageMeta.terminal) return null
-    return new Date(lastTouchAt.getTime() + stageMeta.typicalNextEtaDays * 24 * 60 * 60 * 1000)
-  }, [lastTouchAt, stageMeta])
-
-  const computedNextAction = useMemo(() => {
-    if (meetingDate && meetingType) return `Prepare for ${meetingType} (${meetingDate.toLocaleString()})`
-    if (nextActionLLM) return nextActionLLM
-    if (followUp.due) return `Follow up (due ${followUp.due.toLocaleDateString()})`
-    if (s(statusRaw, "").toUpperCase() === "NEEDS_REPLY") return "Reply to the latest email (confirm next step + availability)."
-    if (waitingOn === "you") return "Complete the requested action (reply / take-home / scheduling) and log it in Notes."
-    if (waitingOn === "them") return "Wait. If no response by follow-up threshold, send a short follow-up."
-    return "Add job posting link + recruiter name and re-sync to unlock stage-specific prep."
-  }, [meetingDate, meetingType, nextActionLLM, followUp.due, statusRaw, waitingOn])
-
-  const handleSaveNotes = async () => {
-    if (!j?.id) return
-    try {
-      await onSaveNotes(j.id, notes)
-    } finally {
-      setIsEditing(false)
-    }
-  }
-
-  // Prep content (same as your existing logic)
-  const prepFocus = s(prep?.stage_focus, "") || s(prep?.stageFocus, "") || ""
-
-  const questionsTheyAsk =
-    arr(prep?.questions_they_might_ask).length ? arr(prep?.questions_they_might_ask) : arr(prep?.questionsTheyMightAsk)
-
-  const questionsYouAsk =
-    arr(prep?.questions_you_should_ask).length ? arr(prep?.questions_you_should_ask) : arr(prep?.questionsYouShouldAsk)
-
-  const storiesToPrepare =
-    arr(prep?.stories_to_prepare).length ? arr(prep?.stories_to_prepare) : arr(prep?.storiesToPrepare)
-
-  const homeworkNext =
-    arr(prep?.homework_next_24h).length ? arr(prep?.homework_next_24h) : arr(prep?.homeworkNext24h)
-
-  const interviewer = prep?.interviewer || null
-  const interviewerName = s(interviewer?.name, "")
-  const interviewerRole = s(interviewer?.role, "")
-  const interviewerBio = s(interviewer?.bio, "")
-  const interviewerGoals = arr(interviewer?.goals)
-
-  const sampleQuestions = arr(prep?.sampleQuestions).length ? arr(prep?.sampleQuestions) : arr(prep?.sample_questions)
-  const emphasizeTips = arr(prep?.tips).length ? arr(prep?.tips) : arr(prep?.what_to_emphasize)
-
-  // ✅ IMPORTANT: do NOT default companyIntel to prep
-  const companyIntel = j?.companyIntel || j?.company?.intel || {}
-  const companyType =
-    s(companyIntel?.companyType, "") ||
-    s(companyIntel?.company_type, "") ||
-    "Unknown"
-
-  const companySize =
-    s(companyIntel?.companySizeBucket, "") ||
-    s(companyIntel?.company_size_bucket, "") ||
-    s(companyIntel?.companySize, "") ||
-    "Unknown"
-
-  const companyIntelSummary =
-    s(companyIntel?.companyIntelSummary, "") ||
-    s(companyIntel?.company_intel_summary, "") ||
-    s(j?.company?.intelSummary, "") ||
-    ""
-
-  const truthfulNote =
-    s(companyIntel?.truthfulNote, "") ||
-    s(companyIntel?.truthful_note, "") ||
-    s(j?.company?.truthfulNote, "") ||
-    ""
-
-  const glassdoorRating = j?.company?.glassdoorRating
-  const hasGlassdoor = typeof glassdoorRating === "number" && !isNaN(glassdoorRating)
-
-  const recentNews = Array.isArray(j?.recentNews) ? j.recentNews : []
-  const postingUrl = s(j?.postingUrl, "") || s(j?.posting_url, "")
-
-  const nextEtaText = s(j?.nextEtaText, "") || s(j?.next_eta_text, "") || ""
-  const jobType = s(j?.jobType, "") || s(j?.job_type, "") || ""
-
-  const containerClass = "px-4 py-3"
-  const cardClass = "p-3 mb-3"
-
-  // Timeline steps: real progress by stageMeta
-  const timelineSteps = [
-    { label: "Applied" },
-    { label: "Recruiter" },
-    { label: "Interview" },
-    { label: "Offer" },
-  ]
-  const currentStep = clamp(stageMeta.stepIndex, 0, timelineSteps.length - 1)
+  const appliedAt = safeStr(j?.appliedAt, "")
 
   return (
-    <div className={containerClass}>
-      <div className="mb-3">
-        <div className="flex items-start gap-4 mb-4">
-          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center text-2xl font-medium flex-shrink-0">
-            {firstChar(companyName)}
+    <div className="h-full min-h-0 overflow-y-auto p-6">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="text-2xl font-semibold tracking-tight text-gray-900">
+            {companyName}
           </div>
-          <div className="flex-1 min-w-0 pt-1">
-            <h1 className="text-3xl font-bold text-gray-900 truncate">{companyName}</h1>
-            <p className="text-xl text-gray-600 truncate">{title}</p>
-            <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
-              <div className="flex items-center gap-1 min-w-0">
-                <MapPin className="w-4 h-4 flex-shrink-0" />
-                <span className="truncate">{location}</span>
-              </div>
-              <div className="truncate">{industry}</div>
-            </div>
+          <div className="mt-1 text-gray-600">{roleTitle}</div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Pill tone="purple">{stage}</Pill>
+            <Pill>{status}</Pill>
+            {companyType !== "Unknown" ? <Pill tone="orange">{companyType}</Pill> : null}
+            {companySize !== "Unknown" ? <Pill tone="orange">{companySize}</Pill> : null}
           </div>
-        </div>
-
-        <div className="flex gap-2 mb-3 flex-wrap">
-          <Badge variant="secondary">{stageMeta.label}</Badge>
-          <Badge variant={s(statusRaw).toUpperCase() === "SCHEDULED" ? "default" : "outline"}>
-            {s(statusRaw, "UNKNOWN").replace(/_/g, " ")}
-          </Badge>
-          <Badge variant="outline">
-            Waiting on: <span className="ml-1 font-semibold">{waitingOn}</span>
-          </Badge>
-          {daysSinceTouch != null ? (
-            <Badge variant="outline">
-              Last touch: <span className="ml-1 font-semibold">{daysSinceTouch}d</span>
-            </Badge>
-          ) : null}
-        </div>
-
-        {/* Next Action Banner */}
-        <div className="bg-orange-50 border border-orange-200 rounded-lg p-2">
-          <p className="text-sm font-medium text-orange-800">
-            <span className="font-semibold">Next Action:</span> {computedNextAction}
-          </p>
-          {why ? <p className="text-xs text-orange-700 mt-1">{why}</p> : null}
         </div>
       </div>
 
-      {/* Pipeline Intelligence (NEW) */}
-      <Card className={`${cardClass} bg-slate-50 border-slate-200`}>
-        <div className="flex items-center gap-2 mb-2">
-          <Activity className="w-5 h-5 text-slate-700" />
-          <span className="font-semibold text-slate-900">Pipeline Intelligence</span>
+      {/* Next Action */}
+      <div className="mt-4 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
+        <div className="text-xs font-semibold text-orange-800">Next Action</div>
+        <div className="mt-1 text-sm text-orange-900">
+          {nextAction ||
+            "No next action generated yet. Re-sync after a new email arrives or add the job link/context."}
         </div>
-
-        <div className="grid grid-cols-2 gap-3 mb-2">
-          <div>
-            <p className="text-xs text-gray-500 mb-0.5">Stage confidence</p>
-            <p className="text-sm font-medium text-gray-900">{stageConfidence || "Unknown"}</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-500 mb-0.5">Next ETA</p>
-            <p className="text-sm font-medium text-gray-900">
-              {nextEtaText || (nextEtaDate ? nextEtaDate.toLocaleDateString() : "TBD")}
-            </p>
-          </div>
-        </div>
-
-        {stageReason ? (
-          <div className="bg-white rounded-lg p-2 border border-slate-100 mb-2">
-            <p className="text-xs font-semibold text-gray-900 mb-0.5">Why this stage</p>
-            <p className="text-sm text-gray-700">{stageReason}</p>
-          </div>
-        ) : null}
-
-        {signals.length ? (
-          <div className="bg-white rounded-lg p-2 border border-slate-100">
-            <p className="text-xs font-semibold text-gray-900 mb-1">Thread signals</p>
-            <ul className="text-sm text-gray-700 space-y-1">
-              {signals.slice(0, 6).map((sig, i) => (
-                <li key={i} className="flex items-start gap-2">
-                  <span className="text-slate-500 mt-0.5">•</span>
-                  <span>
-                    {sig.label || sig.type || "Signal"}{" "}
-                    {sig.confidence != null ? <span className="text-gray-400">(conf {String(sig.confidence)})</span> : null}
-                    {sig.at ? <span className="text-gray-400"> — {safeDate(sig.at)?.toLocaleString() || String(sig.at)}</span> : null}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : (
-          <p className="text-sm text-gray-600">
-            No extracted signals yet. If this job came from Gmail, add parsed “signals” (>=2 keyword matches) to unlock stage reasoning.
-          </p>
-        )}
-      </Card>
-
-      {/* Upcoming Meeting */}
-      {meetingDate && meetingType ? (
-        <Card className={`${cardClass} bg-blue-50 border-blue-200`}>
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-blue-600" />
-              <span className="font-semibold text-blue-900">Upcoming Meeting</span>
-            </div>
-            {meetingDuration ? (
-              <Badge variant="outline" className="bg-white text-blue-700 border-blue-300">
-                {meetingDuration} min
-              </Badge>
-            ) : null}
-          </div>
-          <p className="text-base font-medium text-blue-900 mb-1">{meetingType}</p>
-          <div className="flex items-center gap-2 text-sm text-blue-700 mb-2">
-            <Clock className="w-4 h-4" />
-            {meetingDate.toLocaleString()}
-          </div>
-          {meetingLink ? (
-            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" asChild>
-              <a href={meetingLink} target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="w-3 h-3 mr-1" />
-                Join Meeting
-              </a>
-            </Button>
-          ) : null}
-        </Card>
-      ) : null}
+        {why ? <div className="mt-1 text-xs text-orange-800/80">{why}</div> : null}
+      </div>
 
       {/* Last Email */}
-      {lastEmailSubject ? (
-        <Card className={cardClass}>
-          <div className="flex items-center gap-2 mb-2">
-            <Mail className="w-5 h-5 text-green-600" />
-            <span className="font-semibold">Last Email</span>
+      <div className="mt-4">
+        <SectionCard title="Last Email" icon={<Mail className="h-4 w-4 text-emerald-600" />}>
+          <div className="text-sm font-semibold text-gray-900">
+            {lastSubject || "No email subject available"}
           </div>
-          <p className="text-sm font-semibold text-gray-900 mb-0.5">{lastEmailSubject}</p>
-          {(lastEmailFromName || lastEmailFromEmail) ? (
-            <p className="text-sm text-gray-600 mb-1">
-              From: {lastEmailFromName || "Unknown"}{" "}
-              {lastEmailFromEmail ? <span className="text-gray-400">({lastEmailFromEmail})</span> : null}
-            </p>
+          <div className="mt-2 text-xs text-gray-500">
+            {lastFrom ? `From: ${lastFrom}` : "From: Unknown"}
+          </div>
+          {lastSnippet ? (
+            <div className="mt-3 whitespace-pre-wrap text-sm text-gray-700">{lastSnippet}</div>
           ) : null}
-          {lastEmailSnippet ? <p className="text-sm text-gray-700 mb-2 leading-relaxed">{lastEmailSnippet}</p> : null}
-          {lastEmailReceived ? <p className="text-xs text-gray-500 mb-2">{lastEmailReceived.toLocaleString()}</p> : null}
+          {lastAt ? <div className="mt-3 text-xs text-gray-500">{lastAt}</div> : null}
 
-          <div className="bg-gray-50 rounded-lg p-2 space-y-1">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">Tone:</span>
-              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                {tone || "Unknown"}
-              </Badge>
+          <div className="mt-4 grid grid-cols-3 gap-3">
+            <div className="rounded-lg bg-gray-50 px-3 py-2">
+              <div className="text-[11px] font-semibold text-gray-500">Tone</div>
+              <div className="mt-0.5 text-xs text-gray-800">{tone || "—"}</div>
             </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">Response Likelihood:</span>
-              <span className="font-medium text-gray-900">{responseLikelihood || "Unknown"}</span>
-            </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">Urgency:</span>
-              <span className="font-medium text-orange-600">{urgency || "Unknown"}</span>
-            </div>
-          </div>
-        </Card>
-      ) : null}
-
-      {/* Interview Preparation (your existing block stays; unchanged) */}
-      {/* ... keep your Interview Prep Card as-is ... */}
-
-      {/* Company Intel (truthful topics) */}
-      <Card id={`${idPrefix}-company-intel`} className={cardClass}>
-        <div className="flex items-center gap-2 mb-3">
-          <Building2 className="w-5 h-5 text-yellow-600" />
-          <span className="font-semibold">Company Intel</span>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3 mb-3">
-          <div>
-            <p className="text-xs text-gray-500 mb-0.5">Industry</p>
-            <p className="text-sm font-medium text-gray-900">{industry}</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-500 mb-0.5">Size</p>
-            <p className="text-sm font-medium text-gray-900">{companySize}</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-500 mb-0.5">HQ Location</p>
-            <p className="text-sm font-medium text-gray-900">{location}</p>
-          </div>
-          <div>
-            <p className="text-xs text-gray-500 mb-0.5">Glassdoor Rating</p>
-            <div className="flex items-center gap-1">
-              <span className="text-sm font-medium text-gray-900">
-                {hasGlassdoor ? String(glassdoorRating) : "N/A"}
-              </span>
-              {hasGlassdoor ? <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" /> : null}
-            </div>
-          </div>
-        </div>
-
-        {truthfulNote ? (
-          <div className="bg-yellow-50 rounded-lg p-2 mb-2">
-            <p className="text-sm text-yellow-800">{truthfulNote}</p>
-          </div>
-        ) : null}
-
-        {companyType !== "Unknown" || companyIntelSummary ? (
-          <div className="bg-yellow-50 rounded-lg p-2 mb-2">
-            <p className="text-xs font-semibold text-yellow-900 mb-0.5">Summary</p>
-            <p className="text-sm text-yellow-800">
-              {companyIntelSummary || `Type: ${companyType}`}
-            </p>
-          </div>
-        ) : (
-          <div className="bg-yellow-50 rounded-lg p-2 mb-2">
-            <p className="text-sm text-yellow-800">No company intel yet. Add job posting + team name, then re-sync.</p>
-          </div>
-        )}
-
-        <div className="bg-yellow-50 rounded-lg p-2 mb-2">
-          <p className="text-xs font-semibold text-yellow-900 mb-0.5">Recent News</p>
-          {recentNews.length > 0 ? (
-            recentNews.slice(0, 5).map((news: any, index: number) => {
-              const t = s(news?.title, "")
-              const u = s(news?.url, "")
-              if (!t) return null
-              return u ? (
-                <a
-                  key={index}
-                  href={u}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block text-sm text-yellow-800 hover:underline hover:text-yellow-900 mb-1 last:mb-0"
-                >
-                  {t} <ExternalLink className="inline w-3 h-3 ml-0.5" />
-                </a>
-              ) : (
-                <p key={index} className="text-sm text-yellow-800 mb-1 last:mb-0">
-                  {t}
-                </p>
-              )
-            })
-          ) : (
-            <p className="text-sm text-yellow-800">No recent news available.</p>
-          )}
-        </div>
-
-        <div>
-          <p className="text-xs font-semibold text-gray-900 mb-1">Common Interview Topics</p>
-          <div className="flex flex-wrap gap-2">
-            {arr(companyIntel?.common_topics).length ? (
-              arr(companyIntel?.common_topics).slice(0, 8).map((t: string, i: number) => (
-                <Badge key={i} variant="outline" className="text-xs border-yellow-200 bg-yellow-50 text-yellow-800">
-                  {t}
-                </Badge>
-              ))
-            ) : (
-              <p className="text-sm text-gray-600">No topic tags yet.</p>
-            )}
-          </div>
-        </div>
-      </Card>
-
-      {/* Timeline Overview (REAL progress) */}
-      <Card className={cardClass}>
-        <div className="flex items-center gap-2 mb-4">
-          <Activity className="w-5 h-5 text-gray-900" />
-          <span className="font-semibold text-lg">Timeline Overview</span>
-        </div>
-
-        <div className="space-y-3 mb-4">
-          {timelineSteps.map((step, idx) => {
-            const filled = idx <= currentStep
-            return (
-              <div key={step.label} className="flex items-center gap-4">
-                <span className="w-20 text-sm text-gray-500">{step.label}</span>
-                <div className={`flex-1 h-2.5 rounded-full ${filled ? "bg-blue-600" : "bg-gray-100"}`} />
-                <span className="w-28 text-right text-sm text-gray-500">
-                  {idx === 0 ? (appliedAt ? appliedAt.toLocaleDateString() : "TBD")
-                    : idx === 2 ? (meetingDate ? meetingDate.toLocaleDateString() : "—")
-                    : idx === currentStep ? (nextEtaDate ? nextEtaDate.toLocaleDateString() : "—")
-                    : "—"}
-                </span>
+            <div className="rounded-lg bg-gray-50 px-3 py-2">
+              <div className="text-[11px] font-semibold text-gray-500">
+                Response Likelihood
               </div>
-            )
-          })}
-        </div>
-
-        <p className="text-sm text-gray-600">
-          {stageMeta.terminal
-            ? `Terminal stage: ${stageMeta.label}.`
-            : nextEtaDate
-              ? `Estimated next movement by ${nextEtaDate.toLocaleDateString()} (based on last touch + typical cycle).`
-              : "Timeline estimates appear once stage signals exist."}
-        </p>
-      </Card>
-
-      {/* Job Details + Notes */}
-      <Card className={cardClass}>
-        <details className="mb-2">
-          <summary className="font-semibold cursor-pointer flex items-center gap-2">
-            <Briefcase className="w-4 h-4 text-indigo-600" />
-            Job Details
-          </summary>
-          <div className="mt-2 space-y-1 text-sm pl-6">
-            <div className="flex justify-between gap-4">
-              <span className="text-gray-600">Applied:</span>
-              <span>{appliedAt ? appliedAt.toLocaleDateString() : "TBD"}</span>
+              <div className="mt-0.5 text-xs text-gray-800">{responseLikelihood || "—"}</div>
             </div>
-            <div className="flex justify-between gap-4">
-              <span className="text-gray-600">Next ETA:</span>
-              <span>{nextEtaText || (nextEtaDate ? nextEtaDate.toLocaleDateString() : "TBD")}</span>
+            <div className="rounded-lg bg-gray-50 px-3 py-2">
+              <div className="text-[11px] font-semibold text-gray-500">Urgency</div>
+              <div className="mt-0.5 text-xs text-gray-800">{urgency || "—"}</div>
             </div>
-            <div className="flex justify-between gap-4">
-              <span className="text-gray-600">Job Type:</span>
-              <span>{jobType || "TBD"}</span>
-            </div>
-
-            {postingUrl ? (
-              <Button size="sm" variant="outline" className="mt-2 w-full bg-transparent" asChild>
-                <a href={postingUrl} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="w-3 h-3 mr-1" />
-                  View Job Posting
-                </a>
-              </Button>
-            ) : null}
           </div>
-        </details>
+        </SectionCard>
+      </div>
 
-        <details open={isMobile}>
-          <summary className="font-semibold cursor-pointer">Notes</summary>
-          <div className="mt-2 pl-6">
-            {!isEditing ? (
-              <>
-                <p className="text-sm text-gray-700 whitespace-pre-wrap mb-2">{notes || "No notes added yet."}</p>
-                <Button size="sm" variant="outline" onClick={() => setIsEditing(true)}>
-                  Edit Notes
-                </Button>
-              </>
-            ) : (
-              <div className="space-y-2">
-                <Textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Add your notes about this job..."
-                  className="min-h-[100px]"
-                />
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => setIsEditing(false)}>
-                    Cancel
-                  </Button>
-                  <Button size="sm" onClick={handleSaveNotes}>
-                    Save
-                  </Button>
+      {/* Interview Prep */}
+      <div className="mt-4">
+        <SectionCard
+          title="Interview Preparation"
+          icon={<Sparkles className="h-4 w-4 text-purple-600" />}
+          className="border-purple-200"
+        >
+          <div className="rounded-lg bg-purple-50 px-3 py-2">
+            <div className="text-[11px] font-semibold text-purple-700">Prep Focus</div>
+            <div className="mt-0.5 text-sm text-purple-900">
+              {prepFocus ||
+                "No stage-specific focus generated yet. Re-sync after a message with clear signals (schedule, round, role scope)."}
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="rounded-xl border border-purple-100 bg-white p-4">
+              <div className="text-sm font-semibold text-gray-900">
+                Questions They Might Ask You
+              </div>
+              <div className="mt-3">
+                <Bullets items={qThey} empty="No role-specific questions generated yet." />
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-orange-100 bg-orange-50 p-4">
+              <div className="text-sm font-semibold text-gray-900">
+                Questions You Should Ask Them
+              </div>
+              <div className="mt-3">
+                <Bullets items={qYou} empty="No targeted questions generated yet." />
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="rounded-xl border bg-white p-4">
+              <div className="text-sm font-semibold text-gray-900">What to Emphasize</div>
+              <div className="mt-3">
+                <Bullets items={emphasize} empty="No emphasis tips available yet." />
+              </div>
+            </div>
+
+            <div className="rounded-xl border bg-white p-4">
+              <div className="text-sm font-semibold text-gray-900">Stories + Homework</div>
+              <div className="mt-3">
+                <div className="text-xs font-semibold text-gray-500">Stories to prepare</div>
+                <div className="mt-2">
+                  <Bullets items={stories} empty="No stories suggested yet." />
+                </div>
+
+                <div className="mt-4 text-xs font-semibold text-gray-500">
+                  Next 24h homework
+                </div>
+                <div className="mt-2">
+                  <Bullets items={homework} empty="No homework generated yet." />
                 </div>
               </div>
-            )}
+            </div>
           </div>
-        </details>
-      </Card>
+
+          <div className="mt-4 text-xs text-gray-500">
+            AI Tip: If the prep feels generic, your thread may lack role/team context. Add the
+            job posting link + team name in the thread and re-sync.
+          </div>
+        </SectionCard>
+      </div>
+
+      {/* Company intel */}
+      <div className="mt-4">
+        <SectionCard title="Company Intel" icon={<Building2 className="h-4 w-4 text-amber-600" />}>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="text-xs font-semibold text-gray-500">Industry</div>
+              <div className="mt-1 text-sm text-gray-800">
+                {safeStr(prep?.industry, "Unknown") || "Unknown"}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-gray-500">Size</div>
+              <div className="mt-1 text-sm text-gray-800">{companySize || "Unknown"}</div>
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-gray-500">HQ Location</div>
+              <div className="mt-1 text-sm text-gray-800">
+                {safeStr(prep?.hq_location || prep?.hqLocation, "Unknown") || "Unknown"}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-gray-500">Glassdoor Rating</div>
+              <div className="mt-1 text-sm text-gray-800">
+                {safeStr(prep?.glassdoor_rating || prep?.glassdoorRating, "N/A") || "N/A"}
+              </div>
+            </div>
+          </div>
+
+          {companySummary ? (
+            <div className="mt-4 rounded-lg bg-amber-50 px-3 py-2">
+              <div className="text-[11px] font-semibold text-amber-800">Summary</div>
+              <div className="mt-0.5 text-sm text-amber-950">{companySummary}</div>
+            </div>
+          ) : (
+            <div className="mt-4 rounded-lg bg-amber-50 px-3 py-2">
+              <div className="text-[11px] font-semibold text-amber-800">Summary</div>
+              <div className="mt-0.5 text-sm text-amber-950">
+                No verified company info available.
+              </div>
+            </div>
+          )}
+
+          {truthfulNote ? <div className="mt-2 text-xs text-gray-500">{truthfulNote}</div> : null}
+
+          <div className="mt-4 rounded-lg bg-gray-50 px-3 py-2">
+            <div className="flex items-center gap-2">
+              <Newspaper className="h-4 w-4 text-gray-500" />
+              <div className="text-[11px] font-semibold text-gray-500">Recent News</div>
+            </div>
+            <div className="mt-2">
+              {recentNews.length ? (
+                <ul className="space-y-1 text-sm text-gray-700">
+                  {recentNews.map((n: any, i: number) => (
+                    <li key={i}>{safeStr(n?.title || n)}</li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="text-sm text-gray-500">No recent news available.</div>
+              )}
+            </div>
+          </div>
+
+          {topics.length ? (
+            <div className="mt-4">
+              <div className="text-xs font-semibold text-gray-500">Common Interview Topics</div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {topics.map((t: any, i: number) => (
+                  <span
+                    key={i}
+                    className="rounded-full border bg-white px-2.5 py-1 text-xs text-gray-700"
+                  >
+                    {safeStr(t)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </SectionCard>
+      </div>
+
+      {/* Timeline overview */}
+      <div className="mt-4">
+        <SectionCard title="Timeline Overview" icon={<LineChart className="h-4 w-4 text-slate-600" />}>
+          <div className="grid grid-cols-4 gap-3 text-xs text-gray-600">
+            <div>
+              <div className="font-semibold text-gray-900">Applied</div>
+              <div className="mt-1">{appliedAt ? "Day 0" : "—"}</div>
+            </div>
+            <div>
+              <div className="font-semibold text-gray-900">Recruiter</div>
+              <div className="mt-1">—</div>
+            </div>
+            <div>
+              <div className="font-semibold text-gray-900">Interview</div>
+              <div className="mt-1">—</div>
+            </div>
+            <div>
+              <div className="font-semibold text-gray-900">Offer</div>
+              <div className="mt-1">—</div>
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            <div>
+              <div className="mb-1 flex items-center justify-between text-xs text-gray-600">
+                <span>Applied</span>
+                <span className="text-gray-400">Day 0</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-gray-100">
+                <div className="h-2 w-full rounded-full bg-blue-600" />
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-1 flex items-center justify-between text-xs text-gray-600">
+                <span>Recruiter</span>
+                <span className="text-gray-400">—</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-gray-100">
+                <div className="h-2 w-3/4 rounded-full bg-blue-600" />
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-1 flex items-center justify-between text-xs text-gray-600">
+                <span>Interview</span>
+                <span className="text-gray-400">—</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-gray-100">
+                <div className="h-2 w-1/2 rounded-full bg-blue-600" />
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-1 flex items-center justify-between text-xs text-gray-600">
+                <span>Offer</span>
+                <span className="text-gray-400">—</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-gray-100">
+                <div className="h-2 w-1/4 rounded-full bg-blue-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3 text-xs text-gray-500">
+            This timeline is a placeholder until we track round dates per pipeline.
+          </div>
+        </SectionCard>
+      </div>
+
+      {/* Job details + notes */}
+      <div className="mt-4">
+        <SectionCard title="Job Details" icon={<Building2 className="h-4 w-4 text-gray-600" />}>
+          <details>
+            <summary className="cursor-pointer select-none text-sm font-semibold text-gray-900">
+              Notes
+            </summary>
+            <div className="mt-3">
+              <textarea
+                className="w-full rounded-lg border p-3 text-sm outline-none focus:ring-2 focus:ring-purple-200"
+                rows={4}
+                placeholder="Add notes…"
+                defaultValue={safeStr(j?.notes, "")}
+                onBlur={(e) => onSaveNotes?.(e.currentTarget.value)}
+              />
+              <div className="mt-2 text-xs text-gray-500">
+                Notes save on blur (you can wire this to Supabase later).
+              </div>
+            </div>
+          </details>
+        </SectionCard>
+      </div>
     </div>
   )
 }
+
+export default JobDetailPanel
