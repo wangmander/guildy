@@ -8,13 +8,6 @@ import { MobileBottomSheet } from "@/components/mobile-bottom-sheet"
 import { supabase } from "@/lib/supabaseClient"
 import { signIn, useSession } from "next-auth/react"
 
-/**
- * IMPORTANT:
- * - This page must NEVER crash the whole /pipelines route.
- * - JobDetailPanel crashes if interviewPrep exists but is missing nested fields (e.g. interviewer.goals.map). :contentReference[oaicite:0]{index=0}
- * - So we normalize job.interviewPrep to a safe shape (or set it undefined).
- */
-
 const UI_STAGES = ["SCREENING", "HIRING_MANAGER", "PRESENTATION", "FULL_LOOP", "OFFER_DISCUSSION"] as const
 
 function safeStr(v: any, fallback = ""): string {
@@ -46,50 +39,31 @@ function pick(obj: any, keys: string[]): any {
   return undefined
 }
 
-/**
- * Normalize whatever is in DB into the UI stage set used by the pipeline cards.
- * If DB already stores UI stages, we keep them.
- */
 function stageBucketToUiStage(rawStage: any, stageDetail?: any): Stage {
   const s = safeStr(rawStage, "").toUpperCase()
   const detail = safeStr(stageDetail, "").toUpperCase()
 
-  // already a UI stage?
   if ((UI_STAGES as readonly string[]).includes(s)) return s as Stage
 
-  // infer from detail first (more reliable than bucket names when LLM adds hints)
   if (detail.includes("OFFER") || detail.includes("NEGOTIAT")) return "OFFER_DISCUSSION" as Stage
   if (detail.includes("FULL LOOP") || detail.includes("LOOP") || detail.includes("ONSITE")) return "FULL_LOOP" as Stage
   if (detail.includes("PRESENT")) return "PRESENTATION" as Stage
   if (detail.includes("HIRING MANAGER") || detail.includes("HM")) return "HIRING_MANAGER" as Stage
 
-  // infer from bucket-ish stage strings
   if (s.includes("OFFER")) return "OFFER_DISCUSSION" as Stage
-  if (s.includes("FULL_LOOP") || s.includes("ONSITE")) return "FULL_LOOP" as Stage
+  if (s.includes("FULL_LOOP") || s.includes("ONSITE") || s.includes("LOOP")) return "FULL_LOOP" as Stage
   if (s.includes("PRESENT")) return "PRESENTATION" as Stage
-  if (s.includes("HIRING_MANAGER")) return "HIRING_MANAGER" as Stage
+  if (s.includes("HIRING_MANAGER") || s === "HM") return "HIRING_MANAGER" as Stage
 
-  // default conservative
   return "SCREENING" as Stage
 }
 
-/**
- * JobDetailPanel expects:
- * interviewPrep.interviewer.goals.map(...)
- * interviewPrep.sampleQuestions.map(...)
- * interviewPrep.tips.map(...)
- * :contentReference[oaicite:1]{index=1}
- */
 function normalizeInterviewPrep(prepAny: any): any | undefined {
   if (!prepAny || typeof prepAny !== "object") return undefined
 
-  // Case A: your newer “bespoke” shape
-  const stageFocus = safeStr(
-    pick(prepAny, ["stageFocus", "prepFocus", "focus", "stage_focus"]) ?? "",
-    ""
-  )
+  const stageFocus = safeStr(pick(prepAny, ["stageFocus", "prepFocus", "focus", "stage_focus"]) ?? "", "")
 
-  const qTheyAsk = safeArr<string>(pick(prepAny, ["questionsTheyMightAsk", "theyMightAsk", "questions_they_might_ask"]))
+  const qTheyAsk = safeArr<string>(pick(prepAny, ["questionsTheyMightAsk", "theyMightAsk", "questions_they_might_ask_you"]))
     .map((x) => safeStr(x).trim())
     .filter(Boolean)
 
@@ -109,13 +83,11 @@ function normalizeInterviewPrep(prepAny: any): any | undefined {
     .map((x) => safeStr(x).trim())
     .filter(Boolean)
 
-  // If we have bespoke fields, map into the JobDetailPanel expected shape.
   if (stageFocus || qTheyAsk.length || qYouAsk.length || emphasize.length || stories.length || homework.length) {
     const sampleQuestions = qTheyAsk.length ? qTheyAsk : []
     const tips = emphasize.length ? emphasize : []
 
     return {
-      // We keep your bespoke stuff too (JobDetailPanel can be updated later to use these directly)
       stageFocus,
       questionsTheyMightAsk: qTheyAsk,
       questionsYouShouldAskThem: qYouAsk,
@@ -123,19 +95,19 @@ function normalizeInterviewPrep(prepAny: any): any | undefined {
       storiesToPrepare: stories,
       homeworkNext24h: homework,
 
-      // Minimum safe shape for current JobDetailPanel:
       interviewer: {
         name: safeStr(pick(prepAny, ["interviewerName", "interviewer_name"]) ?? "Interviewer", "Interviewer"),
         role: safeStr(pick(prepAny, ["interviewerRole", "interviewer_role"]) ?? "Hiring Team", "Hiring Team"),
         bio: safeStr(pick(prepAny, ["interviewerBio", "interviewer_bio"]) ?? "", ""),
-        goals: safeArr<string>(pick(prepAny, ["interviewerGoals", "interviewer_goals"])).map((x) => safeStr(x)).filter(Boolean),
+        goals: safeArr<string>(pick(prepAny, ["interviewerGoals", "interviewer_goals"]))
+          .map((x) => safeStr(x))
+          .filter(Boolean),
       },
       sampleQuestions,
       tips,
     }
   }
 
-  // Case B: already in JobDetailPanel shape (ensure it’s safe)
   const interviewer = pick(prepAny, ["interviewer"])
   const sampleQuestions = safeArr<string>(pick(prepAny, ["sampleQuestions", "sample_questions"]))
   const tips = safeArr<string>(pick(prepAny, ["tips"]))
@@ -146,7 +118,9 @@ function normalizeInterviewPrep(prepAny: any): any | undefined {
         name: safeStr(pick(interviewer, ["name"]) ?? "Interviewer", "Interviewer"),
         role: safeStr(pick(interviewer, ["role"]) ?? "Hiring Team", "Hiring Team"),
         bio: safeStr(pick(interviewer, ["bio"]) ?? "", ""),
-        goals: safeArr<string>(pick(interviewer, ["goals"])).map((x) => safeStr(x)).filter(Boolean),
+        goals: safeArr<string>(pick(interviewer, ["goals"]))
+          .map((x) => safeStr(x))
+          .filter(Boolean),
       },
       sampleQuestions: sampleQuestions.map((x) => safeStr(x)).filter(Boolean),
       tips: tips.map((x) => safeStr(x)).filter(Boolean),
@@ -185,7 +159,6 @@ function rowToJob(row: any): Job {
 
   const postingUrl = safeStr(pick(row, ["job_posting_url", "posting_url", "postingUrl"]) ?? "")
 
-  // Company intel (optional) — must be truthful if missing.
   const companyIntelRaw =
     pick(insightsRaw, ["companyIntel", "company_intel"]) ??
     pick(prepRaw, ["companyIntel", "company_intel"]) ??
@@ -193,9 +166,7 @@ function rowToJob(row: any): Job {
     null
 
   const companyIntel = companyIntelRaw && typeof companyIntelRaw === "object" ? companyIntelRaw : null
-
   const recentNews = safeArr<any>(pick(companyIntel, ["recentNews", "recent_news", "news"]))
-
   const interviewPrep = normalizeInterviewPrep(prepRaw)
 
   const job: any = {
@@ -230,11 +201,9 @@ function rowToJob(row: any): Job {
 
     notes: safeStr(pick(row, ["notes"]) ?? "", ""),
 
-    // LLM outputs:
-    interviewPrep, // safe shape or undefined
+    interviewPrep,
     recentNews,
 
-    // optional, future-proof:
     companyIntel: companyIntel || undefined,
     insights: insightsRaw || undefined,
   }
@@ -311,14 +280,16 @@ function LoggedOutConnect() {
 
 export default function PipelinesPage() {
   const { data: session, status } = useSession()
-
   const userEmail = useMemo(() => session?.user?.email ?? "", [session?.user?.email])
 
   const [jobs, setJobs] = useState<Job[]>([])
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [lastSyncText, setLastSyncText] = useState<string>("")
   const rightPanelRef = useRef<HTMLDivElement>(null)
+
+  const lastSyncRunRef = useRef<number>(0)
 
   async function loadPipelines() {
     if (!userEmail) return
@@ -332,20 +303,51 @@ export default function PipelinesPage() {
     if (error) return
 
     const mapped = (data ?? []).map(rowToJob)
-
     setJobs(mapped)
-    setSelectedJob(mapped.length ? mapped[0] : null)
+    setSelectedJob((prev) => {
+      if (!mapped.length) return null
+      if (!prev) return mapped[0]
+      const stillThere = mapped.find((j) => j.id === prev.id)
+      return stillThere ?? mapped[0]
+    })
   }
 
-  async function syncGmail() {
+  async function syncGmailAndReload(force = false) {
+    if (status !== "authenticated") return
+    const now = Date.now()
+    if (!force && now - lastSyncRunRef.current < 30_000) return // throttle
+    lastSyncRunRef.current = now
+
     setSyncing(true)
     try {
       await fetch("/api/gmail/sync", { method: "POST" })
       await loadPipelines()
+      setLastSyncText(new Date().toLocaleString())
     } finally {
       setSyncing(false)
     }
   }
+
+  useEffect(() => {
+    if (status !== "authenticated") return
+
+    // On first load/refresh: sync, then load
+    syncGmailAndReload(true)
+
+    // Periodic auto-sync while page is open
+    const id = window.setInterval(() => {
+      syncGmailAndReload(false)
+    }, 600_000) // 10 minutes
+
+    // On tab focus: sync
+    const onFocus = () => syncGmailAndReload(true)
+    window.addEventListener("focus", onFocus)
+
+    return () => {
+      window.clearInterval(id)
+      window.removeEventListener("focus", onFocus)
+    }
+  }, [status, userEmail])
 
   useEffect(() => {
     if (status === "authenticated") loadPipelines()
@@ -365,47 +367,51 @@ export default function PipelinesPage() {
 
   return (
     <div className="mx-auto max-w-7xl h-[calc(100vh-64px)] flex flex-col overflow-hidden">
-      <div className="p-4 border-b bg-white flex items-center gap-3">
-        <button
-          onClick={syncGmail}
-          disabled={syncing || status !== "authenticated"}
-          className="px-4 py-2 bg-black text-white rounded disabled:opacity-50"
-        >
-          {syncing ? "Syncing Gmail…" : "Sync Gmail"}
-        </button>
-        <span className="text-sm text-gray-600">Imports recruiting emails into pipelines</span>
+      {/* No manual sync button (testing-only). Status line only. */}
+      <div className="p-4 border-b bg-white flex items-center justify-between gap-3">
+        <div className="text-sm text-gray-700">
+          <span className="font-medium">Auto-sync</span>
+          <span className="text-gray-500"> · checks Gmail periodically</span>
+        </div>
+        <div className="text-xs text-gray-500">
+          {syncing ? "Syncing…" : lastSyncText ? `Last sync: ${lastSyncText}` : "Waiting…"}
+        </div>
       </div>
 
-      {/* MIN-H-0 fixes scroll + prevents right panel from trapping height */}
-      <div className="flex flex-col lg:flex-row flex-1 min-h-0 overflow-hidden">
-        <div className="w-full lg:w-1/2 min-h-0 overflow-y-auto">
-          <PipelineCardList
-            jobs={jobs}
-            selectedJobId={selectedJob?.id}
-            onSelect={(job) => {
-              setSelectedJob(job)
-              setIsMobileSheetOpen(true)
-            }}
-            onActionClick={(job) => {
-              setSelectedJob(job)
-              setIsMobileSheetOpen(true)
-            }}
-          />
-        </div>
+      {/* DESKTOP: one shared scroll container so BOTH columns scroll together */}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <div className="h-full lg:overflow-y-auto">
+          <div className="flex flex-col lg:flex-row min-h-full">
+            {/* Mobile: list scrolls. Desktop: parent scrolls. */}
+            <div className="w-full lg:w-1/2 min-h-0 overflow-y-auto lg:overflow-visible">
+              <PipelineCardList
+                jobs={jobs}
+                selectedJobId={selectedJob?.id}
+                onSelect={(job) => {
+                  setSelectedJob(job)
+                  setIsMobileSheetOpen(true)
+                }}
+                onActionClick={(job) => {
+                  setSelectedJob(job)
+                  setIsMobileSheetOpen(true)
+                }}
+              />
+            </div>
 
-        {/* overflow-y-auto restores the right panel scroll */}
-        <div ref={rightPanelRef} className="hidden lg:block w-1/2 min-h-0 bg-white overflow-y-auto">
-          <PanelErrorBoundary>
-            <JobDetailPanel job={selectedJob} onSaveNotes={() => {}} />
-          </PanelErrorBoundary>
-        </div>
+            <div ref={rightPanelRef} className="hidden lg:block w-1/2 min-h-full bg-white">
+              <PanelErrorBoundary>
+                <JobDetailPanel job={selectedJob} onSaveNotes={() => {}} />
+              </PanelErrorBoundary>
+            </div>
 
-        <MobileBottomSheet
-          isOpen={isMobileSheetOpen}
-          onClose={() => setIsMobileSheetOpen(false)}
-          job={selectedJob}
-          onSaveNotes={() => {}}
-        />
+            <MobileBottomSheet
+              isOpen={isMobileSheetOpen}
+              onClose={() => setIsMobileSheetOpen(false)}
+              job={selectedJob}
+              onSaveNotes={() => {}}
+            />
+          </div>
+        </div>
       </div>
     </div>
   )
