@@ -201,8 +201,10 @@ type Stage =
   | "OFFER_DISCUSSION"
   | "REJECTED"
 
-const MIN_SCORE = 9
-const MIN_HITS = 2
+// Lowered gates to avoid missing interview-related emails that only have 1 strong signal.
+// (This increases detection, does not reduce it.)
+const MIN_SCORE = 6
+const MIN_HITS = 1
 
 function normalize(s: string) {
   return (s || "")
@@ -218,7 +220,6 @@ function normalizeForMatch(s: string) {
 }
 
 function splitIntoChunks(words: string[]) {
-  // Prefer 3-grams, then 2-grams, then 1-grams (filtered)
   const chunks: string[] = []
   const join = (a: string[]) => a.join(" ").trim()
 
@@ -280,7 +281,6 @@ function buildShortPhraseWeights(list: Array<{ phrase: string; w: number }>): Sh
 
     const words = normalize(raw).split(" ").filter(Boolean)
 
-    // Always use <=3 word phrases directly (exact match with word boundaries)
     if (words.length <= 3) {
       const chunk = words.join(" ")
       const key = `${chunk}|${chunk}`
@@ -291,25 +291,20 @@ function buildShortPhraseWeights(list: Array<{ phrase: string; w: number }>): Sh
       continue
     }
 
-    // For 4+ word phrases: DO NOT require rigid exact match.
-    // Instead, generate overlapping 2–3 word chunks (plus selective 1-word chunks) and cap total contribution to the original weight.
     const parent = words.join(" ")
     const cap = w
-
     const chunks = splitIntoChunks(words)
 
     for (const c of chunks) {
       const cw = c.split(" ").filter(Boolean).length
       if (cw === 0) continue
 
-      // Filter noisy 1-word chunks
       if (cw === 1) {
         const tok = c
         if (tok.length <= 3) continue
         if (stop.has(tok)) continue
       }
 
-      // Weights by chunk size (bounded, conservative)
       let chunkW = 1
       if (cw === 3) chunkW = Math.max(2, Math.round(w * 0.6))
       else if (cw === 2) chunkW = Math.max(2, Math.round(w * 0.5))
@@ -325,7 +320,6 @@ function buildShortPhraseWeights(list: Array<{ phrase: string; w: number }>): Sh
   return out
 }
 
-// Build once at module load (fast)
 const SHORT_PHRASE_WEIGHTS: ShortPhrase[] = buildShortPhraseWeights(PHRASE_WEIGHTS)
 
 function scoreEmailText(textLower: string) {
@@ -396,9 +390,7 @@ function advanceOnly(prev: StageBucket, next: StageBucket): StageBucket {
   const ni = order.indexOf(next)
   if (pi === -1) return next
   if (ni === -1) return prev
-  // REJECTED always wins
   if (next === "REJECTED") return "REJECTED"
-  // otherwise don't regress
   return ni >= pi ? next : prev
 }
 
@@ -418,6 +410,47 @@ function safeJsonParse<T>(s: any): T | null {
   }
 }
 
+function decodeBase64Url(data: string) {
+  const normalized = data.replace(/-/g, "+").replace(/_/g, "/")
+  const pad = normalized.length % 4
+  const padded = pad ? normalized + "=".repeat(4 - pad) : normalized
+  return Buffer.from(padded, "base64").toString("utf-8")
+}
+
+function stripHtml(html: string) {
+  return html
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function extractBodyFromPayload(payload: any): { text: string; html: string } {
+  let text = ""
+  let html = ""
+
+  function walk(part: any) {
+    if (!part) return
+    const mime = (part.mimeType || "").toLowerCase()
+    const bodyData = part.body?.data
+
+    if (bodyData && typeof bodyData === "string") {
+      const decoded = decodeBase64Url(bodyData)
+      if (mime === "text/plain") text += "\n" + decoded
+      if (mime === "text/html") html += "\n" + decoded
+    }
+
+    const parts = part.parts
+    if (Array.isArray(parts)) {
+      for (const p of parts) walk(p)
+    }
+  }
+
+  walk(payload)
+  return { text: text.trim(), html: html.trim() }
+}
+
 async function estimateStageFromLLM(input: {
   subject: string
   snippet: string
@@ -427,6 +460,7 @@ async function estimateStageFromLLM(input: {
   offerStrong: boolean
   score: number
   hits: Array<{ phrase: string; w: number }>
+  bodyExcerpt: string
 }) {
   const sys = "You are an expert recruiter ops assistant. Output ONLY strict JSON. Do not add extra keys."
   const prompt = `Infer the current interview stage bucket from this single email.
@@ -456,6 +490,9 @@ From: ${input.fromEmail}
 To (user): ${input.userEmail}
 Subject: ${input.subject}
 Snippet: ${input.snippet}
+
+Body excerpt:
+${input.bodyExcerpt}
 
 Signals:
 scheduleStrong=${input.scheduleStrong}
@@ -496,6 +533,7 @@ async function generateInsightsAndPrep(input: {
   snippet: string
   fromEmail: string
   receivedAt: string
+  bodyExcerpt: string
 }) {
   const sys = "You are Guildy, a job pipeline + interview prep assistant. Output ONLY strict JSON. Do not hallucinate company facts."
   const prompt = `Generate bespoke, stage-specific insights + interview prep for THIS job.
@@ -544,6 +582,9 @@ From=${input.fromEmail}
 Subject=${input.subject}
 Snippet=${input.snippet}
 ReceivedAt=${input.receivedAt}
+
+Body excerpt:
+${input.bodyExcerpt}
 `
 
   const res = await openai.chat.completions.create({
@@ -556,8 +597,7 @@ ReceivedAt=${input.receivedAt}
   })
 
   const txt = res.choices?.[0]?.message?.content || ""
-  const parsed = safeJsonParse<any>(txt)
-  return parsed
+  return safeJsonParse<any>(txt)
 }
 
 export async function POST() {
@@ -575,9 +615,12 @@ export async function POST() {
     auth.setCredentials({ access_token: accessToken })
     const gmail = google.gmail({ version: "v1", auth })
 
-    const MAX_MESSAGES_PER_RUN = 250
+    const MAX_MESSAGES_PER_RUN = 400
     const PAGE_SIZE = 100
-    const SAFETY_LOOKBACK_DAYS = 7
+    const SAFETY_LOOKBACK_DAYS = 21 // bigger buffer so you never miss long threads
+
+    const nowMs = Date.now()
+    const nowUnix = Math.floor(nowMs / 1000)
 
     const { data: lastEmailRows } = await supabase
       .from("emails")
@@ -586,15 +629,16 @@ export async function POST() {
       .order("received_at", { ascending: false })
       .limit(1)
 
-    const lastReceivedAt = lastEmailRows?.[0]?.received_at
-      ? new Date(lastEmailRows[0].received_at).getTime()
+    const lastReceivedAtMs = lastEmailRows?.[0]?.received_at ? new Date(lastEmailRows[0].received_at).getTime() : null
+
+    // If DB has a future timestamp (bad parse), ignore it and fall back to wide scan.
+    const safeLastMs = lastReceivedAtMs && lastReceivedAtMs <= nowMs + 60_000 ? lastReceivedAtMs : null
+
+    const afterUnix = safeLastMs
+      ? Math.floor((safeLastMs - SAFETY_LOOKBACK_DAYS * 24 * 60 * 60 * 1000) / 1000)
       : null
 
-    const afterUnix = lastReceivedAt
-      ? Math.floor((lastReceivedAt - SAFETY_LOOKBACK_DAYS * 24 * 60 * 60 * 1000) / 1000)
-      : null
-
-    const qBase = afterUnix ? `after:${afterUnix}` : "newer_than:365d"
+    const qBase = afterUnix && afterUnix <= nowUnix ? `after:${afterUnix}` : "newer_than:5y"
     const q = `${qBase} -in:chats`
 
     let pageToken: string | undefined = undefined
@@ -624,6 +668,7 @@ export async function POST() {
     let updated = 0
     let emailsInserted = 0
     let prepGenerated = 0
+    let acceptedCount = 0
 
     const { data: existingPipelines } = await supabase
       .from("pipelines")
@@ -646,8 +691,7 @@ export async function POST() {
       const full = await gmail.users.messages.get({
         userId: "me",
         id: msg.id,
-        format: "metadata",
-        metadataHeaders: ["From", "Subject", "Date"],
+        format: "full",
       })
 
       const headers = full.data.payload?.headers ?? []
@@ -659,19 +703,34 @@ export async function POST() {
       const fromEmailMatch = fromHeader.match(/<([^>]+)>/)
       const fromEmail = (fromEmailMatch?.[1] || fromHeader || "").trim()
 
-      const textLower = `${subject}\n${snippet}\n${fromHeader}`.toLowerCase()
+      const internalDateMs = full.data.internalDate ? Number(full.data.internalDate) : NaN
+      const receivedAt = Number.isFinite(internalDateMs)
+        ? new Date(internalDateMs).toISOString()
+        : dateHeader
+          ? new Date(dateHeader).toISOString()
+          : new Date().toISOString()
+
+      const payload = full.data.payload
+      const { text: bodyTextPlain, html: bodyHtml } = extractBodyFromPayload(payload)
+      const bodyText = bodyTextPlain || (bodyHtml ? stripHtml(bodyHtml) : "")
+      const bodyExcerpt = bodyText.slice(0, 2500)
+
+      const textLower = `${subject}\n${snippet}\n${fromHeader}\n${bodyText}`.toLowerCase()
       const { score, hits } = scoreEmailText(textLower)
 
       const scheduleStrong =
         textLower.includes("schedule an interview") ||
         textLower.includes("calendar invite") ||
+        textLower.includes("calendar invitation") ||
         textLower.includes("availability") ||
         textLower.includes("zoom") ||
         textLower.includes("google meet") ||
         textLower.includes("teams") ||
         textLower.includes("book time") ||
         textLower.includes("phone screen") ||
-        textLower.includes("screening call")
+        textLower.includes("screening call") ||
+        textLower.includes("interview time") ||
+        textLower.includes("interview slot")
 
       const offerStrong =
         textLower.includes("offer letter") ||
@@ -679,10 +738,12 @@ export async function POST() {
         textLower.includes("equity") ||
         textLower.includes("salary") ||
         textLower.includes("signing bonus") ||
-        textLower.includes("employment offer")
+        textLower.includes("employment offer") ||
+        textLower.includes("offer")
 
       const accepted = score >= MIN_SCORE || hits.length >= MIN_HITS
       if (!accepted) continue
+      acceptedCount++
 
       const stageGuess = await estimateStageFromLLM({
         subject,
@@ -693,6 +754,7 @@ export async function POST() {
         offerStrong,
         score,
         hits,
+        bodyExcerpt,
       })
       llmCalls++
 
@@ -711,8 +773,6 @@ export async function POST() {
       let match = pipelines.find((p: any) => normalize(p.company) === companyN && normalize(p.role) === roleN)
       const isNewPipeline = !match
 
-      const receivedAt = dateHeader ? new Date(dateHeader).toISOString() : new Date().toISOString()
-
       const prepPack = await generateInsightsAndPrep({
         company,
         role,
@@ -722,6 +782,7 @@ export async function POST() {
         snippet,
         fromEmail,
         receivedAt,
+        bodyExcerpt,
       })
       prepGenerated++
 
@@ -756,9 +817,18 @@ export async function POST() {
       } else {
         pipelineId = match.id
 
-        const prevStage: StageBucket =
-          (String(match.stage || "").toUpperCase() as StageBucket) || "RECRUITER_SCREEN"
-        const nextStage = advanceOnly(prevStage, cappedStage)
+        // Your DB stores UI stage strings; keep monotonic progression at the bucket level as best-effort.
+        const prevBucket: StageBucket = (() => {
+          const s = String(match.stage || "").toUpperCase()
+          if (s.includes("REJECT")) return "REJECTED"
+          if (s.includes("OFFER")) return "OFFER"
+          if (s.includes("FULL_LOOP") || s.includes("LOOP") || s.includes("ONSITE")) return "LOOP"
+          if (s.includes("ASSESS")) return "ASSESSMENT"
+          if (s.includes("HM") || s.includes("HIRING")) return "HM_SCREEN"
+          return "RECRUITER_SCREEN"
+        })()
+
+        const nextStage = advanceOnly(prevBucket, cappedStage)
 
         const { error: updErr } = await supabase
           .from("pipelines")
@@ -775,7 +845,7 @@ export async function POST() {
           .eq("id", pipelineId)
 
         if (!updErr) {
-          match.stage = nextStage
+          match.stage = stageBucketToUiStage(nextStage)
           match.stage_detail = stageDetail
           match.last_email_subject = subject
           match.last_email_at = receivedAt
@@ -801,13 +871,14 @@ export async function POST() {
     }
 
     return NextResponse.json({
+      q,
       scanned,
+      acceptedCount,
       llmCalls,
       inserted,
       updated,
       emailsInserted,
       prepGenerated,
-      q,
     })
   } catch (err: any) {
     return NextResponse.json({ error: "EXCEPTION", message: err?.message || String(err) }, { status: 500 })
