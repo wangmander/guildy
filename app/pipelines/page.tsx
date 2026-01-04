@@ -53,8 +53,9 @@ function stageBucketToUiStage(rawStage: any, stageDetail?: any): Stage {
   if (s.includes("OFFER")) return "OFFER_DISCUSSION" as Stage
   if (s.includes("FULL_LOOP") || s.includes("ONSITE") || s.includes("LOOP")) return "FULL_LOOP" as Stage
   if (s.includes("PRESENT")) return "PRESENTATION" as Stage
-  if (s.includes("HIRING_MANAGER") || s === "HM") return "HIRING_MANAGER" as Stage
+  if (s.includes("HIRING_MANAGER") || s === "HM" || s.includes("HIRING")) return "HIRING_MANAGER" as Stage
 
+  // Keep Screen as last resort. We will FILTER OUT junk pipelines before mapping so this doesn't look hardcoded.
   return "SCREENING" as Stage
 }
 
@@ -130,6 +131,76 @@ function normalizeInterviewPrep(prepAny: any): any | undefined {
   return undefined
 }
 
+// Filter out obvious junk pipelines so they don't appear as "Screening by default"
+function isLikelyInterviewRow(row: any): boolean {
+  const subject = safeStr(pick(row, ["last_email_subject", "lastEmailSubject"]) ?? "").toLowerCase()
+  const snippet = safeStr(pick(row, ["last_email_snippet", "lastEmailSnippet"]) ?? "").toLowerCase()
+  const company = safeStr(pick(row, ["company", "company_name"]) ?? "").toLowerCase()
+  const role = safeStr(pick(row, ["role", "title"]) ?? "").toLowerCase()
+
+  const prepRaw =
+    safeJson(pick(row, ["prep_json", "interview_prep_json", "prep", "interview_prep"])) ??
+    safeJson(pick(row, ["llm_prep_json", "llm_prep"])) ??
+    null
+
+  const insightsRaw =
+    safeJson(pick(row, ["insights_json", "insights"])) ??
+    safeJson(pick(row, ["llm_insights_json", "llm_insights"])) ??
+    null
+
+  const stageDetail = safeStr(pick(row, ["stage_detail", "stageDetail"]) ?? "")
+
+  // If LLM ever ran + produced prep/insights/stage detail, keep it.
+  if (prepRaw || insightsRaw || stageDetail) return true
+
+  // Interview keyword sniff (basic, strong)
+  const text = `${subject} ${snippet}`
+  const hasSignals =
+    text.includes("interview") ||
+    text.includes("schedule") ||
+    text.includes("availability") ||
+    text.includes("screen") ||
+    text.includes("recruiter") ||
+    text.includes("hiring manager") ||
+    text.includes("take-home") ||
+    text.includes("assessment") ||
+    text.includes("case study") ||
+    text.includes("onsite") ||
+    text.includes("panel") ||
+    text.includes("final round") ||
+    text.includes("next steps") ||
+    text.includes("move forward")
+
+  if (hasSignals) return true
+
+  // Junk commerce / notifications
+  const junk =
+    subject.startsWith("ordered:") ||
+    subject.includes("your order") ||
+    subject.includes("receipt") ||
+    subject.includes("invoice") ||
+    subject.includes("shipment") ||
+    subject.includes("delivered") ||
+    subject.includes("tracking") ||
+    subject.includes("payment") ||
+    subject.includes("statement") ||
+    subject.includes("security alert") ||
+    subject.includes("verification code") ||
+    subject.includes("one-time password") ||
+    subject.includes("otp") ||
+    subject.includes("newsletter") ||
+    snippet.includes("unsubscribe")
+
+  if (junk) return false
+
+  // If company is a big retailer + role unknown, hide until it has interview signals
+  const retailish = ["amazon", "ebay", "coinbase", "draftkings"].some((x) => company.includes(x))
+  if (retailish && (!role || role === "unknown" || role === "interview")) return false
+
+  // default: don't show (prevents junk showing as screening)
+  return false
+}
+
 function rowToJob(row: any): Job {
   const companyName = safeStr(pick(row, ["company", "company_name"]) ?? "Unknown company", "Unknown company")
   const roleTitle = safeStr(pick(row, ["role", "title"]) ?? "Interview", "Interview")
@@ -200,10 +271,8 @@ function rowToJob(row: any): Job {
       : undefined,
 
     notes: safeStr(pick(row, ["notes"]) ?? "", ""),
-
     interviewPrep,
     recentNews,
-
     companyIntel: companyIntel || undefined,
     insights: insightsRaw || undefined,
   }
@@ -286,10 +355,7 @@ export default function PipelinesPage() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false)
   const [syncing, setSyncing] = useState(false)
-  const [lastSyncText, setLastSyncText] = useState<string>("")
   const rightPanelRef = useRef<HTMLDivElement>(null)
-
-  const lastSyncRunRef = useRef<number>(0)
 
   async function loadPipelines() {
     if (!userEmail) return
@@ -302,7 +368,9 @@ export default function PipelinesPage() {
 
     if (error) return
 
-    const mapped = (data ?? []).map(rowToJob)
+    const filtered = (data ?? []).filter(isLikelyInterviewRow)
+    const mapped = filtered.map(rowToJob)
+
     setJobs(mapped)
     setSelectedJob((prev) => {
       if (!mapped.length) return null
@@ -312,41 +380,45 @@ export default function PipelinesPage() {
     })
   }
 
-  async function syncGmailAndReload(force = false) {
-    if (status !== "authenticated") return
-    const now = Date.now()
-    if (!force && now - lastSyncRunRef.current < 30_000) return // throttle
-    lastSyncRunRef.current = now
-
+  async function syncGmail() {
     setSyncing(true)
     try {
-      await fetch("/api/gmail/sync", { method: "POST" })
-      await loadPipelines()
-      setLastSyncText(new Date().toLocaleString())
+      const res = await fetch("/api/gmail/sync", { method: "POST" })
+      if (!res.ok) {
+        console.error("Gmail sync failed", await res.text())
+      }
     } finally {
       setSyncing(false)
     }
   }
 
+  const syncInFlightRef = useRef(false)
+
+  async function syncAndReload(reason: "initial" | "interval" | "manual") {
+    if (status !== "authenticated") return
+    if (syncInFlightRef.current) return
+    syncInFlightRef.current = true
+    try {
+      await syncGmail()
+      await loadPipelines()
+    } finally {
+      syncInFlightRef.current = false
+    }
+  }
+
   useEffect(() => {
     if (status !== "authenticated") return
+    syncAndReload("initial")
 
-    // On first load/refresh: sync, then load
-    syncGmailAndReload(true)
-
-    // Periodic auto-sync while page is open
-    const id = window.setInterval(() => {
-      syncGmailAndReload(false)
-    }, 600_000) // 10 minutes
-
-    // On tab focus: sync
-    const onFocus = () => syncGmailAndReload(true)
+    const id = window.setInterval(() => syncAndReload("interval"), 10 * 60 * 1000)
+    const onFocus = () => syncAndReload("manual")
     window.addEventListener("focus", onFocus)
 
     return () => {
       window.clearInterval(id)
       window.removeEventListener("focus", onFocus)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, userEmail])
 
   useEffect(() => {
@@ -367,23 +439,23 @@ export default function PipelinesPage() {
 
   return (
     <div className="mx-auto max-w-7xl h-[calc(100vh-64px)] flex flex-col overflow-hidden">
-      {/* No manual sync button (testing-only). Status line only. */}
-      <div className="p-4 border-b bg-white flex items-center justify-between gap-3">
-        <div className="text-sm text-gray-700">
-          <span className="font-medium">Auto-sync</span>
-          <span className="text-gray-500"> · checks Gmail periodically</span>
-        </div>
-        <div className="text-xs text-gray-500">
-          {syncing ? "Syncing…" : lastSyncText ? `Last sync: ${lastSyncText}` : "Waiting…"}
+      {/* Header: move Syncing… next to Auto-sync */}
+      <div className="p-4 border-b bg-white">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-700">Auto-sync — checks Gmail periodically</span>
+            {syncing ? <span className="text-sm text-gray-500">Syncing…</span> : null}
+          </div>
+          <span className="text-sm text-gray-600">Imports recruiting emails into pipelines</span>
         </div>
       </div>
 
-      {/* DESKTOP: one shared scroll container so BOTH columns scroll together */}
-      <div className="flex-1 min-h-0 overflow-hidden">
-        <div className="h-full lg:overflow-y-auto">
-          <div className="flex flex-col lg:flex-row min-h-full">
-            {/* Mobile: list scrolls. Desktop: parent scrolls. */}
-            <div className="w-full lg:w-1/2 min-h-0 overflow-y-auto lg:overflow-visible">
+      {/* Single shared scroll so left + right move together */}
+      <div className="flex-1 overflow-y-auto bg-[#F5F5F0]">
+        <div className="flex flex-col lg:flex-row gap-6 p-4">
+          {/* Left column padding fixed */}
+          <div className="w-full lg:w-1/2 min-w-0">
+            <div className="px-2">
               <PipelineCardList
                 jobs={jobs}
                 selectedJobId={selectedJob?.id}
@@ -397,21 +469,22 @@ export default function PipelinesPage() {
                 }}
               />
             </div>
+          </div>
 
-            <div ref={rightPanelRef} className="hidden lg:block w-1/2 min-h-full bg-white">
-              <PanelErrorBoundary>
-                <JobDetailPanel job={selectedJob} onSaveNotes={() => {}} />
-              </PanelErrorBoundary>
-            </div>
-
-            <MobileBottomSheet
-              isOpen={isMobileSheetOpen}
-              onClose={() => setIsMobileSheetOpen(false)}
-              job={selectedJob}
-              onSaveNotes={() => {}}
-            />
+          {/* Right column */}
+          <div ref={rightPanelRef} className="hidden lg:block w-full lg:w-1/2 min-w-0">
+            <PanelErrorBoundary>
+              <JobDetailPanel job={selectedJob} onSaveNotes={() => {}} />
+            </PanelErrorBoundary>
           </div>
         </div>
+
+        <MobileBottomSheet
+          isOpen={isMobileSheetOpen}
+          onClose={() => setIsMobileSheetOpen(false)}
+          job={selectedJob}
+          onSaveNotes={() => {}}
+        />
       </div>
     </div>
   )
