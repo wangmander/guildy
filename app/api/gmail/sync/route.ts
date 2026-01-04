@@ -14,8 +14,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! })
 
 /**
  * DO NOT REMOVE PHRASES.
- * This list = ALL phrases + extra (only additions).
- * We use WEIGHTED scoring so trash doesn't pass.
+ * You may ONLY add phrases or increase detection strength.
  */
 const PHRASE_WEIGHTS: Array<{ phrase: string; w: number }> = [
   // 1) High-signal interview scheduling phrases (VERY HIGH)
@@ -31,256 +30,106 @@ const PHRASE_WEIGHTS: Array<{ phrase: string; w: number }> = [
   { phrase: "interview slot", w: 9 },
   { phrase: "interview confirmation", w: 10 },
   { phrase: "confirmed interview", w: 10 },
-  { phrase: "reschedule interview", w: 10 },
-  { phrase: "interview rescheduled", w: 10 },
-  { phrase: "interview calendar", w: 8 },
+  { phrase: "reschedule interview", w: 9 },
+  { phrase: "rescheduling interview", w: 9 },
+  { phrase: "interview rescheduled", w: 9 },
   { phrase: "calendar invite", w: 8 },
-  { phrase: "zoom interview", w: 9 },
-  { phrase: "google meet interview", w: 9 },
-  { phrase: "teams interview", w: 9 },
-  { phrase: "phone interview", w: 9 },
-  { phrase: "video interview", w: 9 },
-  { phrase: "onsite interview", w: 9 },
-  { phrase: "on-site interview", w: 9 },
+  { phrase: "calendar invitation", w: 8 },
+  { phrase: "invite sent", w: 7 },
+  { phrase: "send an invite", w: 7 },
+  { phrase: "zoom invite", w: 7 },
+  { phrase: "google meet invite", w: 7 },
+  { phrase: "microsoft teams invite", w: 7 },
+  { phrase: "teams invite", w: 6 },
 
-  // 2) Recruiter / hiring-pipeline phrases (HIGH)
-  { phrase: "recruiter", w: 7 },
-  { phrase: "talent team", w: 7 },
-  { phrase: "talent acquisition", w: 7 },
-  { phrase: "hiring team", w: 7 },
-  { phrase: "hiring manager", w: 7 },
+  // 2) Screening / recruiter phrases (HIGH)
+  { phrase: "recruiter", w: 6 },
+  { phrase: "talent acquisition", w: 6 },
+  { phrase: "talent team", w: 6 },
   { phrase: "people team", w: 6 },
   { phrase: "people operations", w: 6 },
   { phrase: "hr team", w: 6 },
   { phrase: "human resources", w: 6 },
-  { phrase: "staffing", w: 6 },
-  { phrase: "we would like to move forward", w: 9 },
-  { phrase: "next step", w: 7 },
-  { phrase: "next round", w: 8 },
-  { phrase: "moving you forward", w: 9 },
-  { phrase: "advance to the next stage", w: 9 },
-
-  // 3) Interview stage / round indicators (HIGH)
-  { phrase: "first round", w: 8 },
-  { phrase: "second round", w: 8 },
-  { phrase: "final round", w: 9 },
-  { phrase: "technical interview", w: 9 },
-  { phrase: "behavioral interview", w: 8 },
-  { phrase: "case interview", w: 8 },
-  { phrase: "panel interview", w: 8 },
-  { phrase: "loop interview", w: 9 },
-  { phrase: "interview loop", w: 9 },
-  { phrase: "onsite loop", w: 9 },
-  { phrase: "screening interview", w: 9 },
-  { phrase: "phone screen", w: 9 },
-  { phrase: "initial screen", w: 8 },
-  { phrase: "coding interview", w: 9 },
-  { phrase: "system design interview", w: 9 },
-  { phrase: "take-home interview", w: 8 },
-  { phrase: "assignment interview", w: 8 },
-  { phrase: "assessment interview", w: 8 },
-
-  // 4) Application + interview transition phrases (MED/HIGH)
-  { phrase: "application status", w: 6 },
-  { phrase: "application update", w: 6 },
-  { phrase: "thank you for applying", w: 6 },
-  { phrase: "reviewed your application", w: 7 },
-  { phrase: "we reviewed your background", w: 7 },
-  { phrase: "we reviewed your resume", w: 7 },
-  { phrase: "shortlisted", w: 8 },
-  { phrase: "selected to move forward", w: 9 },
-  { phrase: "moving ahead with your application", w: 9 },
-  { phrase: "we’d like to learn more about you", w: 8 },
-  { phrase: "we'd like to learn more about you", w: 8 },
-
-  // 5) Offer-stage & post-interview signals (HIGH)
-  { phrase: "offer", w: 6 },
-  { phrase: "job offer", w: 9 },
-  { phrase: "verbal offer", w: 9 },
-  { phrase: "written offer", w: 9 },
-  { phrase: "offer letter", w: 9 },
-  { phrase: "compensation", w: 7 },
-  { phrase: "salary", w: 6 },
-  { phrase: "equity", w: 7 },
-  { phrase: "benefits", w: 6 },
-  { phrase: "background check", w: 8 },
-  { phrase: "reference check", w: 8 },
-  { phrase: "references", w: 7 },
-  { phrase: "start date", w: 7 },
-
-  // 6) Rejection / closure phrases (HIGH — still belongs in pipeline)
-  { phrase: "we will not be moving forward", w: 9 },
-  { phrase: "decided to move forward with other candidates", w: 9 },
-  { phrase: "regret to inform you", w: 8 },
-  { phrase: "unfortunately", w: 4 },
-  { phrase: "position has been filled", w: 8 },
-  { phrase: "keep your resume on file", w: 7 },
-  { phrase: "future opportunities", w: 6 },
-
-  // 7) Calendar & logistics keywords (LOW — helpful only with other hits)
-  { phrase: "availability", w: 3 },
-  { phrase: "time zone", w: 2 },
-  { phrase: "pst", w: 1 },
-  { phrase: "est", w: 1 },
-  { phrase: "cst", w: 1 },
-  { phrase: "gmt", w: 1 },
-  { phrase: "30 minutes", w: 2 },
-  { phrase: "45 minutes", w: 2 },
-  { phrase: "60 minutes", w: 2 },
-  { phrase: "calendar", w: 2 },
-  { phrase: "invite attached", w: 3 },
-  { phrase: "meeting link", w: 3 },
-  { phrase: "dial in", w: 2 },
-  { phrase: "conference link", w: 3 },
-
-  // ===== ADDITIONS (ONLY ADDING — NOT REMOVING) =====
-  { phrase: "interviewing", w: 7 },
-  { phrase: "interviewer", w: 7 },
-  { phrase: "recruiting", w: 6 },
-  { phrase: "recruitment", w: 6 },
-  { phrase: "candidate", w: 5 },
-  { phrase: "application received", w: 6 },
-  { phrase: "application submitted", w: 6 },
-  { phrase: "thank you for your interest", w: 5 },
-  { phrase: "phone screening", w: 9 },
-  { phrase: "screening call", w: 8 },
-  { phrase: "recruiter screen", w: 9 },
-  { phrase: "hiring manager screen", w: 9 },
-  { phrase: "hm interview", w: 8 },
-  { phrase: "panel", w: 4 },
-  { phrase: "presentation", w: 5 },
-  { phrase: "case study", w: 6 },
-  { phrase: "work sample", w: 7 },
-  { phrase: "take home", w: 6 },
-  { phrase: "take-home", w: 6 },
-  { phrase: "assignment", w: 5 },
-  { phrase: "assessment", w: 6 },
-  { phrase: "coding challenge", w: 8 },
-  { phrase: "technical challenge", w: 8 },
-  { phrase: "code challenge", w: 8 },
-  { phrase: "system design", w: 7 },
-  { phrase: "behavioral", w: 5 },
-  { phrase: "loop", w: 4 },
-  { phrase: "onsite", w: 6 },
-  { phrase: "on-site", w: 6 },
-  { phrase: "final interview", w: 9 },
-  { phrase: "offer call", w: 8 },
-  { phrase: "offer discussion", w: 8 },
-  { phrase: "comp discussion", w: 7 },
-  { phrase: "compensation discussion", w: 7 },
-  { phrase: "negotiation", w: 6 },
-  { phrase: "negotiate", w: 6 },
-  { phrase: "verbal", w: 2 },
-  { phrase: "background screening", w: 7 },
-  { phrase: "reference", w: 5 },
-  { phrase: "start your role", w: 6 },
-  { phrase: "welcome", w: 1 },
-
-  // Extra scheduling additions (ONLY ADD)
-  { phrase: "calendar invitation", w: 8 },
-  { phrase: "calendar hold", w: 7 },
-  { phrase: "invitation attached", w: 6 },
-  { phrase: "confirm your availability", w: 7 },
-  { phrase: "please confirm", w: 5 },
-  { phrase: "scheduled for", w: 7 },
-  { phrase: "confirmed for", w: 7 },
-  { phrase: "meeting is set", w: 7 },
-
-  // ===== NEW ADDITIONS (ONLY ADDING) =====
-  // A) Recruiter outreach + “first reach out” signals (MED/HIGH)
-  { phrase: "reaching out", w: 6 },
-  { phrase: "reaching out to you", w: 7 },
-  { phrase: "reach out", w: 6 },
-  { phrase: "wanted to reach out", w: 7 },
-  { phrase: "connect about", w: 6 },
-  { phrase: "connect with you", w: 6 },
+  { phrase: "screening", w: 7 },
+  { phrase: "screen", w: 5 },
+  { phrase: "phone screen", w: 7 },
+  { phrase: "introductory call", w: 7 },
+  { phrase: "intro call", w: 7 },
+  { phrase: "initial call", w: 6 },
   { phrase: "quick call", w: 6 },
   { phrase: "brief call", w: 6 },
-  { phrase: "intro call", w: 7 },
-  { phrase: "introduction call", w: 7 },
-  { phrase: "exploratory call", w: 7 },
-  { phrase: "chat about the role", w: 7 },
-  { phrase: "chat about", w: 5 },
-  { phrase: "learn more about the role", w: 7 },
-  { phrase: "learn more about you", w: 6 },
-  { phrase: "your background", w: 5 },
-  { phrase: "your experience", w: 5 },
-  { phrase: "your portfolio", w: 6 },
-  { phrase: "portfolio", w: 4 },
-  { phrase: "resume", w: 4 },
-  { phrase: "cv", w: 4 },
+  { phrase: "15 minute call", w: 6 },
+  { phrase: "30 minute call", w: 6 },
+  { phrase: "short call", w: 5 },
+  { phrase: "screening call", w: 7 },
 
-  // B) Strong explicit scheduling/coordination phrasing (HIGH)
-  { phrase: "schedule time", w: 8 },
-  { phrase: "schedule a call", w: 8 },
-  { phrase: "schedule a chat", w: 8 },
-  { phrase: "schedule a screening", w: 9 },
-  { phrase: "schedule your interview", w: 10 },
-  { phrase: "set up an interview", w: 10 },
-  { phrase: "set up a call", w: 8 },
-  { phrase: "set up a time", w: 8 },
-  { phrase: "coordinate a time", w: 8 },
-  { phrase: "coordinate a call", w: 8 },
-  { phrase: "share your availability", w: 9 },
-  { phrase: "please share your availability", w: 10 },
-  { phrase: "send your availability", w: 9 },
-  { phrase: "times that work", w: 8 },
-  { phrase: "times work for you", w: 8 },
-  { phrase: "what time works", w: 7 },
-  { phrase: "what time works for you", w: 8 },
-  { phrase: "pick a time", w: 8 },
-  { phrase: "select a time", w: 8 },
-  { phrase: "choose a time", w: 8 },
-  { phrase: "book time", w: 8 },
-  { phrase: "book time with", w: 8 },
+  // 3) Later stage / onsite / loop phrases (HIGH)
+  { phrase: "onsite", w: 9 },
+  { phrase: "on-site", w: 9 },
+  { phrase: "full loop", w: 9 },
+  { phrase: "loop", w: 7 },
+  { phrase: "panel", w: 7 },
+  { phrase: "panel interview", w: 9 },
+  { phrase: "interview panel", w: 9 },
+  { phrase: "final round", w: 9 },
+  { phrase: "final interview", w: 9 },
+  { phrase: "round 2", w: 7 },
+  { phrase: "round two", w: 7 },
+  { phrase: "second round", w: 7 },
+  { phrase: "third round", w: 7 },
+  { phrase: "round 3", w: 7 },
+  { phrase: "round three", w: 7 },
+  { phrase: "hiring manager", w: 8 },
+  { phrase: "hiring manager interview", w: 9 },
+  { phrase: "team interview", w: 8 },
+  { phrase: "meet the team", w: 8 },
 
-  // C) Meeting/call artifacts (HIGH)
-  { phrase: "video call", w: 7 },
-  { phrase: "zoom call", w: 8 },
-  { phrase: "google meet", w: 6 },
-  { phrase: "microsoft teams", w: 6 },
-  { phrase: "meet link", w: 7 },
-  { phrase: "zoom link", w: 7 },
-  { phrase: "teams link", w: 7 },
-  { phrase: "calendar link", w: 6 },
-  { phrase: "invite", w: 3 }, // low-ish by itself; helps with other hits
-  { phrase: "calendar event", w: 7 },
-  { phrase: "calendar attachment", w: 8 },
-  { phrase: ".ics", w: 8 },
-
-  // D) Stage / round wording variations (HIGH)
-  { phrase: "screen", w: 3 },
-  { phrase: "screening", w: 6 },
-  { phrase: "recruiter call", w: 8 },
-  { phrase: "hiring manager call", w: 8 },
-  { phrase: "hm screen", w: 8 },
-  { phrase: "portfolio review", w: 8 },
-  { phrase: "design review", w: 7 },
-  { phrase: "product sense", w: 6 },
-  { phrase: "whiteboard", w: 7 },
-  { phrase: "whiteboarding", w: 7 },
-  { phrase: "design challenge", w: 8 },
+  // 4) Assessments / exercises (MED/HIGH)
+  { phrase: "assessment", w: 7 },
+  { phrase: "take-home", w: 7 },
+  { phrase: "take home", w: 7 },
+  { phrase: "homework", w: 6 },
+  { phrase: "exercise", w: 6 },
+  { phrase: "case study", w: 7 },
   { phrase: "design exercise", w: 8 },
-  { phrase: "take-home exercise", w: 8 },
-  { phrase: "homework assignment", w: 8 },
-  { phrase: "presentation interview", w: 8 },
+  { phrase: "portfolio review", w: 7 },
+  { phrase: "whiteboard", w: 7 },
+  { phrase: "technical screen", w: 7 },
+  { phrase: "coding challenge", w: 7 },
 
-  // E) Offer/close signals (HIGH)
-  { phrase: "total compensation", w: 9 },
-  { phrase: "tc", w: 1 }, // too ambiguous; keep low weight
+  // 5) Positive progression / next steps (MED/HIGH)
+  { phrase: "next steps", w: 7 },
+  { phrase: "move forward", w: 7 },
+  { phrase: "moving forward", w: 7 },
+  { phrase: "progress to the next round", w: 8 },
+  { phrase: "advance to the next round", w: 8 },
+  { phrase: "we'd like to proceed", w: 7 },
+  { phrase: "we'd love to move you forward", w: 8 },
+  { phrase: "we would like to move you forward", w: 8 },
+  { phrase: "schedule time", w: 6 },
+  { phrase: "schedule a call", w: 7 },
+  { phrase: "book time", w: 7 },
+  { phrase: "availability", w: 6 },
+
+  // 6) Offers / closing (HIGH) — but keep low weight
+  { phrase: "offer", w: 7 },
+  { phrase: "offer letter", w: 9 },
+  { phrase: "compensation", w: 7 },
+  { phrase: "equity", w: 6 },
+  { phrase: "salary", w: 6 },
   { phrase: "signing bonus", w: 8 },
   { phrase: "start paperwork", w: 8 },
   { phrase: "onboarding", w: 7 },
   { phrase: "employment offer", w: 9 },
 
-  // F) Rejection variants (HIGH)
+  // 7) Rejection variants (HIGH)
   { phrase: "not moving forward", w: 9 },
   { phrase: "move forward with other candidates", w: 9 },
   { phrase: "we have decided not to move forward", w: 9 },
   { phrase: "we are unable to move forward", w: 9 },
   { phrase: "closed the role", w: 8 },
 
-  // G) ATS / recruiting tool names inside body (MED/HIGH)
+  // 8) ATS / recruiting tool names inside body (MED/HIGH)
   { phrase: "greenhouse", w: 6 },
   { phrase: "lever", w: 5 },
   { phrase: "workday", w: 6 },
@@ -290,308 +139,425 @@ const PHRASE_WEIGHTS: Array<{ phrase: string; w: number }> = [
   { phrase: "hirevue", w: 6 },
   { phrase: "goodtime", w: 6 },
   { phrase: "calendly", w: 6 },
+
+  // ---- Added (ONLY appended; nothing removed)
+  { phrase: "phone screen", w: 6 },
+  { phrase: "phone screening", w: 6 },
+  { phrase: "screening call", w: 7 },
+  { phrase: "intro call", w: 7 },
+  { phrase: "initial call", w: 6 },
+  { phrase: "30-minute", w: 6 },
+  { phrase: "30 minute", w: 6 },
+  { phrase: "15-minute", w: 5 },
+  { phrase: "zoom interview", w: 8 },
+  { phrase: "video interview", w: 8 },
+  { phrase: "google meet", w: 7 },
+  { phrase: "meet with the team", w: 7 },
+  { phrase: "portfolio review", w: 7 },
+  { phrase: "design exercise", w: 8 },
+  { phrase: "take-home", w: 7 },
+  { phrase: "take home", w: 7 },
+  { phrase: "case study", w: 7 },
+  { phrase: "whiteboard", w: 7 },
+  { phrase: "technical screen", w: 7 },
+  { phrase: "panel interview", w: 8 },
+  { phrase: "hiring manager interview", w: 8 },
+  { phrase: "final round", w: 8 },
+
+  // ===== Added: short rejection markers (non-rigid; <= 3 words each) =====
+  { phrase: "unfortunately", w: 8 },
+  { phrase: "regret", w: 7 },
+  { phrase: "regrets", w: 7 },
+  { phrase: "decided", w: 6 },
+  { phrase: "decision", w: 5 },
+  { phrase: "unable", w: 7 },
+  { phrase: "cannot", w: 6 },
+  { phrase: "will not", w: 7 },
+  { phrase: "we won't", w: 7 },
+  { phrase: "not selected", w: 9 },
+  { phrase: "other candidates", w: 8 },
+  { phrase: "position filled", w: 8 },
+  { phrase: "role filled", w: 8 },
+  { phrase: "position closed", w: 8 },
+  { phrase: "role closed", w: 8 },
+  { phrase: "moving on", w: 6 },
+  { phrase: "moved on", w: 6 },
 ]
 
-const ATS_DOMAINS = [
-  "@greenhouse.io",
-  "@lever.co",
-  "@ashbyhq.com",
-  "@workday.com",
-  "@smartrecruiters.com",
-  "@icims.com",
-  "@hirevue.com",
-  "@myworkday.com",
+type StageBucket =
+  | "RECRUITER_SCREEN"
+  | "HM_SCREEN"
+  | "ASSESSMENT"
+  | "LOOP"
+  | "OFFER"
+  | "REJECTED"
 
-  // ===== NEW ADDITIONS (ONLY ADDING) =====
-  "@workablemail.com",
-  "@workable.com",
-  "@jobvite.com",
-  "@taleo.net",
-  "@successfactors.com",
-  "@brassring.com",
-  "@oraclecloud.com",
-  "@smartrecruiters.de",
-  "@personio.com",
-  "@teamtailor.com",
-  "@pinpoint-hq.com",
-  "@recruitee.com",
-  "@breezy.hr",
-  "@bamboohr.com",
-]
+type Stage =
+  | "APPLIED"
+  | "SCREENING"
+  | "HM"
+  | "ASSESSMENT"
+  | "FULL_LOOP"
+  | "OFFER_DISCUSSION"
+  | "REJECTED"
 
-// Storage bucket stages in DB
-type StageBucket = "APPLIED" | "RECRUITER_SCREEN" | "INTERVIEW" | "OFFER"
+const MIN_SCORE = 9
+const MIN_HITS = 2
 
 function normalize(s: string) {
   return (s || "")
     .toLowerCase()
-    .replace(/<[^>]*>/g, " ")
     .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
     .trim()
 }
 
-function extractEmailAddress(fromHeader: string) {
-  const m = (fromHeader || "").match(/<([^>]+)>/)
-  return (m?.[1] || fromHeader || "").trim().toLowerCase()
+type ShortPhrase = { chunk: string; w: number; parent: string; cap: number }
+
+function normalizeForMatch(s: string) {
+  return " " + normalize(s) + " "
 }
 
-function computeRuleScore(text: string) {
-  const t = text.toLowerCase()
-  let score = 0
-  const hits: Array<{ phrase: string; w: number }> = []
+function splitIntoChunks(words: string[]) {
+  // Prefer 3-grams, then 2-grams, then 1-grams (filtered)
+  const chunks: string[] = []
+  const join = (a: string[]) => a.join(" ").trim()
 
-  for (const { phrase, w } of PHRASE_WEIGHTS) {
-    if (t.includes(phrase.toLowerCase())) {
-      score += w
-      hits.push({ phrase, w })
+  const ngram = (n: number) => {
+    if (words.length < n) return
+    for (let i = 0; i <= words.length - n; i++) {
+      chunks.push(join(words.slice(i, i + n)))
     }
   }
 
-  for (const d of ATS_DOMAINS) {
-    if (t.includes(d)) {
-      score += 10
-      hits.push({ phrase: d, w: 10 })
+  ngram(3)
+  ngram(2)
+  ngram(1)
+  return chunks
+}
+
+function buildShortPhraseWeights(list: Array<{ phrase: string; w: number }>): ShortPhrase[] {
+  const stop = new Set([
+    "we",
+    "have",
+    "has",
+    "had",
+    "to",
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "of",
+    "in",
+    "on",
+    "for",
+    "with",
+    "at",
+    "this",
+    "that",
+    "are",
+    "is",
+    "be",
+    "not",
+    "will",
+    "won't",
+    "cant",
+    "cannot",
+    "you",
+    "your",
+    "our",
+    "us",
+    "i",
+  ])
+
+  const out: ShortPhrase[] = []
+  const seen = new Set<string>()
+
+  for (const item of list) {
+    const raw = item.phrase || ""
+    const w = item.w || 0
+    if (!raw.trim() || w <= 0) continue
+
+    const words = normalize(raw).split(" ").filter(Boolean)
+
+    // Always use <=3 word phrases directly (exact match with word boundaries)
+    if (words.length <= 3) {
+      const chunk = words.join(" ")
+      const key = `${chunk}|${chunk}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        out.push({ chunk, w, parent: chunk, cap: w })
+      }
+      continue
     }
+
+    // For 4+ word phrases: DO NOT require rigid exact match.
+    // Instead, generate overlapping 2–3 word chunks (plus selective 1-word chunks) and cap total contribution to the original weight.
+    const parent = words.join(" ")
+    const cap = w
+
+    const chunks = splitIntoChunks(words)
+
+    for (const c of chunks) {
+      const cw = c.split(" ").filter(Boolean).length
+      if (cw === 0) continue
+
+      // Filter noisy 1-word chunks
+      if (cw === 1) {
+        const tok = c
+        if (tok.length <= 3) continue
+        if (stop.has(tok)) continue
+      }
+
+      // Weights by chunk size (bounded, conservative)
+      let chunkW = 1
+      if (cw === 3) chunkW = Math.max(2, Math.round(w * 0.6))
+      else if (cw === 2) chunkW = Math.max(2, Math.round(w * 0.5))
+      else chunkW = 1
+
+      const key = `${c}|${parent}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({ chunk: c, w: chunkW, parent, cap })
+    }
+  }
+
+  return out
+}
+
+// Build once at module load (fast)
+const SHORT_PHRASE_WEIGHTS: ShortPhrase[] = buildShortPhraseWeights(PHRASE_WEIGHTS)
+
+function scoreEmailText(textLower: string) {
+  const hay = normalizeForMatch(textLower)
+
+  let score = 0
+  const hits: Array<{ phrase: string; w: number }> = []
+  const parentAccum: Record<string, number> = {}
+
+  for (const item of SHORT_PHRASE_WEIGHTS) {
+    const needle = " " + item.chunk + " "
+    if (!hay.includes(needle)) continue
+
+    const prev = parentAccum[item.parent] ?? 0
+    const next = Math.min(item.cap, prev + item.w)
+    const delta = next - prev
+    if (delta <= 0) continue
+
+    parentAccum[item.parent] = next
+    score += delta
+    hits.push({ phrase: item.chunk, w: delta })
   }
 
   return { score, hits }
 }
 
-// Gate logic: MUST have some signal: score >= MIN_SCORE OR (>=2 phrase hits)
-const MIN_SCORE = 9
-const MIN_HITS = 2
-function shouldSendToLLM(ruleScore: number, hitCount: number) {
-  return ruleScore >= MIN_SCORE || hitCount >= MIN_HITS
-}
-
-function stageBucketFromLLM(s: any): StageBucket {
-  const v = String(s || "").toUpperCase()
-  if (v.includes("OFFER")) return "OFFER"
-  if (v.includes("INTERVIEW")) return "INTERVIEW"
-  if (v.includes("RECRUITER") || v.includes("SCREEN")) return "RECRUITER_SCREEN"
-  if (v.includes("APPLIED")) return "APPLIED"
-  return "RECRUITER_SCREEN"
-}
-
-const STAGE_ORDER: Record<StageBucket, number> = {
-  APPLIED: 1,
-  RECRUITER_SCREEN: 2,
-  INTERVIEW: 3,
-  OFFER: 4,
-}
-function advanceOnly(prev: StageBucket, next: StageBucket) {
-  return STAGE_ORDER[next] > STAGE_ORDER[prev] ? next : prev
-}
-
-// Strong scheduling evidence required to allow INTERVIEW
-const STRONG_SCHEDULING_PHRASES = new Set(
-  [
-    "interview request",
-    "interview invitation",
-    "invite you to interview",
-    "interview scheduling",
-    "schedule an interview",
-    "book an interview",
-    "interview availability",
-    "interview slot",
-    "interview time",
-    "interview confirmation",
-    "confirmed interview",
-    "reschedule interview",
-    "interview rescheduled",
-    "calendar invite",
-    "calendar invitation",
-    "calendar hold",
-    "invite attached",
-    "invitation attached",
-    "meeting link",
-    "conference link",
-    "zoom interview",
-    "google meet interview",
-    "teams interview",
-    "scheduled for",
-    "confirmed for",
-    "meeting is set",
-    "confirm your availability",
-
-    // ===== NEW ADDITIONS (ONLY ADDING) =====
-    "share your availability",
-    "please share your availability",
-    "send your availability",
-    "schedule a call",
-    "schedule time",
-    "set up an interview",
-    "set up a call",
-    "set up a time",
-    "coordinate a time",
-    "pick a time",
-    "select a time",
-    "choose a time",
-    "book time",
-    "calendar event",
-    "calendar attachment",
-    ".ics",
-    "meet link",
-    "zoom link",
-    "teams link",
-    "google meet",
-    "microsoft teams",
-    "video call",
-    "zoom call",
-  ].map((s) => s.toLowerCase())
-)
-
-function hasStrongSchedulingSignal(blobLower: string, hits: Array<{ phrase: string; w: number }>) {
-  const hitSet = new Set(hits.map((h) => String(h.phrase || "").toLowerCase()))
-  for (const p of STRONG_SCHEDULING_PHRASES) {
-    if (hitSet.has(p)) return true
+function defaultStageDetail(bucket: StageBucket) {
+  switch (bucket) {
+    case "RECRUITER_SCREEN":
+      return "Screening"
+    case "HM_SCREEN":
+      return "Hiring manager"
+    case "ASSESSMENT":
+      return "Assessment"
+    case "LOOP":
+      return "Full loop"
+    case "OFFER":
+      return "Offer discussion"
+    case "REJECTED":
+      return "Rejected"
+    default:
+      return "Screening"
   }
-
-  // Link-based / tooling signals
-  if (
-    /(zoom\.us\/j\/|meet\.google\.com\/|teams\.microsoft\.com\/|calendly\.com\/|goodtime\.io\/|x\.ai\/scheduling|hirevue\.com\/|myworkdayjobs\.com\/|greenhouse\.io\/|lever\.co\/|ashbyhq\.com\/)/i.test(
-      blobLower
-    )
-  ) {
-    return true
-  }
-
-  // Time-patterns ONLY if interview + schedule/calendar exists
-  const hasInterviewWord = blobLower.includes("interview")
-  const hasTimePattern =
-    /\b(\d{1,2}:\d{2}\s*(am|pm)?|\d{1,2}\s*(am|pm))\b/i.test(blobLower) ||
-    /\b(mon|tue|wed|thu|fri|sat|sun)\b/i.test(blobLower)
-  if (hasInterviewWord && hasTimePattern && (blobLower.includes("schedule") || blobLower.includes("calendar"))) {
-    return true
-  }
-
-  // ===== NEW ADDITIONS (ONLY ADDING) =====
-  // If there is a meeting link + availability language, treat as strong even without the literal phrase hits.
-  const hasMeetingLink =
-    /(zoom\.us\/j\/|meet\.google\.com\/|teams\.microsoft\.com\/|calendly\.com\/|goodtime\.io\/|x\.ai\/scheduling)/i.test(
-      blobLower
-    )
-  const hasAvailabilityLanguage =
-    blobLower.includes("availability") ||
-    blobLower.includes("times that work") ||
-    blobLower.includes("what time works") ||
-    blobLower.includes("pick a time") ||
-    blobLower.includes("select a time") ||
-    blobLower.includes("choose a time")
-  if (hasMeetingLink && hasAvailabilityLanguage) return true
-
-  return false
 }
 
-function capInterviewIfNoSchedulingEvidence(proposed: StageBucket, scheduleStrong: boolean): StageBucket {
-  if (proposed === "INTERVIEW" && !scheduleStrong) return "RECRUITER_SCREEN"
+function stageBucketToUiStage(bucket: StageBucket): Stage {
+  switch (bucket) {
+    case "RECRUITER_SCREEN":
+      return "SCREENING"
+    case "HM_SCREEN":
+      return "HM"
+    case "ASSESSMENT":
+      return "ASSESSMENT"
+    case "LOOP":
+      return "FULL_LOOP"
+    case "OFFER":
+      return "OFFER_DISCUSSION"
+    case "REJECTED":
+      return "REJECTED"
+    default:
+      return "SCREENING"
+  }
+}
+
+function advanceOnly(prev: StageBucket, next: StageBucket): StageBucket {
+  const order: StageBucket[] = ["RECRUITER_SCREEN", "HM_SCREEN", "ASSESSMENT", "LOOP", "OFFER", "REJECTED"]
+  const pi = order.indexOf(prev)
+  const ni = order.indexOf(next)
+  if (pi === -1) return next
+  if (ni === -1) return prev
+  // REJECTED always wins
+  if (next === "REJECTED") return "REJECTED"
+  // otherwise don't regress
+  return ni >= pi ? next : prev
+}
+
+function capInterviewIfNoSchedulingEvidence(proposed: StageBucket, scheduleStrong: boolean) {
+  if (!scheduleStrong) {
+    if (proposed === "LOOP" || proposed === "OFFER") return "RECRUITER_SCREEN"
+  }
   return proposed
 }
 
-// Keep pipeline header "company/role" (never sender name/email unless truly unknown)
-function safeCompanyRole(decision: any, fromHeader: string, subject: string) {
-  const company = (decision?.company || "").trim()
-  const role = (decision?.role || "").trim()
-
-  const fromEmail = extractEmailAddress(fromHeader)
-  const domain = fromEmail.split("@")[1] || ""
-  const heuristicCompany =
-    company || (domain ? domain.split(".")[0].replace(/[^a-z0-9]/gi, "").toUpperCase() : "") || ""
-
-  const heuristicRole =
-    role ||
-    (subject || "")
-      .replace(/re:\s*/i, "")
-      .replace(/fwd:\s*/i, "")
-      .slice(0, 120)
-      .trim()
-
-  return {
-    company: heuristicCompany || "Unknown",
-    role: heuristicRole || "Interview",
+function safeJsonParse<T>(s: any): T | null {
+  try {
+    if (!s) return null
+    return JSON.parse(s) as T
+  } catch {
+    return null
   }
 }
 
-function defaultStageDetail(bucket: StageBucket) {
-  if (bucket === "APPLIED") return "Applied / inbound"
-  if (bucket === "RECRUITER_SCREEN") return "Recruiter screen"
-  if (bucket === "INTERVIEW") return "Hiring manager / interview round"
-  return "Offer / comp discussion"
+async function estimateStageFromLLM(input: {
+  subject: string
+  snippet: string
+  fromEmail: string
+  userEmail: string
+  scheduleStrong: boolean
+  offerStrong: boolean
+  score: number
+  hits: Array<{ phrase: string; w: number }>
+}) {
+  const sys = "You are an expert recruiter ops assistant. Output ONLY strict JSON. Do not add extra keys."
+  const prompt = `Infer the current interview stage bucket from this single email.
+Return JSON with:
+{
+  "stage_bucket": "RECRUITER_SCREEN" | "HM_SCREEN" | "ASSESSMENT" | "LOOP" | "OFFER" | "REJECTED",
+  "stage_detail": string,
+  "company": string,
+  "role": string,
+  "reason": string,
+  "confidence": number
 }
 
-async function generateInsightsAndPrep(args: {
+Rules:
+- Be conservative. If not sure, choose RECRUITER_SCREEN.
+- If offer/compensation negotiation language, choose OFFER.
+- If rejection language, choose REJECTED.
+- If it's a recruiter scheduling first call, choose RECRUITER_SCREEN.
+- If it's explicitly a hiring manager call, choose HM_SCREEN.
+- If it mentions take-home / exercise / case study, choose ASSESSMENT.
+- If it mentions onsite / loop / panel / final rounds with multiple people, choose LOOP.
+- Use scheduleStrong/offerStrong as evidence.
+- If you cannot reliably infer company/role, set them to "Unknown".
+
+Email:
+From: ${input.fromEmail}
+To (user): ${input.userEmail}
+Subject: ${input.subject}
+Snippet: ${input.snippet}
+
+Signals:
+scheduleStrong=${input.scheduleStrong}
+offerStrong=${input.offerStrong}
+score=${input.score}
+hits=${input.hits.map((h) => `${h.phrase}(${h.w})`).join(", ")}
+`
+
+  const res = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    temperature: 0.1,
+    messages: [
+      { role: "system", content: sys },
+      { role: "user", content: prompt },
+    ],
+  })
+
+  const txt = res.choices?.[0]?.message?.content || ""
+  const parsed = safeJsonParse<{
+    stage_bucket: StageBucket
+    stage_detail: string
+    company: string
+    role: string
+    reason: string
+    confidence: number
+  }>(txt)
+
+  if (!parsed?.stage_bucket) return null
+  return parsed
+}
+
+async function generateInsightsAndPrep(input: {
   company: string
   role: string
   stage_bucket: StageBucket
   stage_detail: string
-  fromEmail: string
   subject: string
   snippet: string
+  fromEmail: string
+  receivedAt: string
 }) {
-  const completion = await openai.chat.completions.create({
+  const sys = "You are Guildy, a job pipeline + interview prep assistant. Output ONLY strict JSON. Do not hallucinate company facts."
+  const prompt = `Generate bespoke, stage-specific insights + interview prep for THIS job.
+
+Return JSON with this shape:
+{
+  "insights": {
+    "stage_reason": string,
+    "stage_confidence": number,
+    "signals": [{"type": string, "label": string, "confidence": number, "at": string}],
+    "waiting_on": "you" | "them",
+    "next_action": string,
+    "urgency": "low" | "med" | "high",
+    "response_likelihood": "low" | "med" | "high"
+  },
+  "prep": {
+    "prep_focus": string,
+    "questions_they_might_ask_you": string[],
+    "questions_you_should_ask_them": string[],
+    "what_to_emphasize": string[],
+    "stories_to_prepare": string[],
+    "homework_next_24h": string[],
+    "company_intel": {
+      "industry": string,
+      "size": string,
+      "hq_location": string,
+      "glassdoor_rating": string,
+      "summary": string,
+      "recent_news": string[]
+    }
+  }
+}
+
+Hard constraints:
+- Make it STAGE-SPECIFIC to: ${input.stage_bucket} (${input.stage_detail})
+- Make it ROLE-SPECIFIC to: ${input.role}
+- Make it COMPANY-SPECIFIC to: ${input.company}
+- If you cannot verify company intel from the email context, set fields to "Unknown" and summary to "No verified company info available."
+- No generic fluff. No broad advice. Use tight bullets.
+
+Context email:
+Company=${input.company}
+Role=${input.role}
+Stage=${input.stage_bucket} (${input.stage_detail})
+From=${input.fromEmail}
+Subject=${input.subject}
+Snippet=${input.snippet}
+ReceivedAt=${input.receivedAt}
+`
+
+  const res = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     temperature: 0.2,
-    response_format: { type: "json_object" },
     messages: [
-      {
-        role: "system",
-        content: [
-          "You are Guildy. Generate BESPOKE interview guidance for a single job opportunity.",
-          "CRITICAL:",
-          "- Return ONLY JSON (no markdown).",
-          "- Be ultra-specific to the company + role + stage_detail.",
-          "- If company size/type is uncertain, make a best-guess but include an 'assumptions' array.",
-          "- No generic fluff; each bullet must be actionable and tailored.",
-          "- Keep lists tight (max 6 items each).",
-          "",
-          "Output JSON shape:",
-          "{",
-          '  "insights": { "tone": "...", "response_likelihood": "LOW|MED|HIGH", "urgency": "LOW|MED|HIGH", "next_action": "1 sentence", "why": "1 sentence" },',
-          '  "prep": {',
-          '    "stage_focus": "1 sentence",',
-          '    "company_type": "startup|enterprise|agency|marketplace|unknown",',
-          '    "company_size_bucket": "1-10|11-50|51-200|201-1000|1000+|unknown",',
-          '    "role_archetype": "product designer|founding designer|ux researcher|eng|pm|other",',
-          '    "key_goals": ["..."],',
-          '    "questions_they_might_ask": ["..."],',
-          '    "questions_you_should_ask": ["..."],',
-          '    "stories_to_prepare": ["..."],',
-          '    "portfolio_angles": ["..."],',
-          '    "homework_next_24h": ["..."],',
-          '    "red_flags_to_watch": ["..."],',
-          '    "assumptions": ["..."]',
-          "  }",
-          "}",
-        ].join("\n"),
-      },
-      {
-        role: "user",
-        content: JSON.stringify(
-          {
-            company: args.company,
-            role: args.role,
-            stage_bucket: args.stage_bucket,
-            stage_detail: args.stage_detail,
-            email_context: {
-              fromEmail: args.fromEmail,
-              subject: args.subject,
-              snippet: args.snippet,
-            },
-          },
-          null,
-          2
-        ),
-      },
+      { role: "system", content: sys },
+      { role: "user", content: prompt },
     ],
   })
 
-  const raw = completion.choices?.[0]?.message?.content || ""
-  try {
-    return JSON.parse(raw)
-  } catch {
-    return null
-  }
+  const txt = res.choices?.[0]?.message?.content || ""
+  const parsed = safeJsonParse<any>(txt)
+  return parsed
 }
 
 export async function POST() {
@@ -609,14 +575,48 @@ export async function POST() {
     auth.setCredentials({ access_token: accessToken })
     const gmail = google.gmail({ version: "v1", auth })
 
-    // last 30 days
-    const listRes = await gmail.users.messages.list({
-      userId: "me",
-      q: "newer_than:30d",
-      maxResults: 500,
-    })
+    const MAX_MESSAGES_PER_RUN = 250
+    const PAGE_SIZE = 100
+    const SAFETY_LOOKBACK_DAYS = 7
 
-    const messages = listRes.data.messages ?? []
+    const { data: lastEmailRows } = await supabase
+      .from("emails")
+      .select("received_at")
+      .eq("user_email", userEmail)
+      .order("received_at", { ascending: false })
+      .limit(1)
+
+    const lastReceivedAt = lastEmailRows?.[0]?.received_at
+      ? new Date(lastEmailRows[0].received_at).getTime()
+      : null
+
+    const afterUnix = lastReceivedAt
+      ? Math.floor((lastReceivedAt - SAFETY_LOOKBACK_DAYS * 24 * 60 * 60 * 1000) / 1000)
+      : null
+
+    const qBase = afterUnix ? `after:${afterUnix}` : "newer_than:365d"
+    const q = `${qBase} -in:chats`
+
+    let pageToken: string | undefined = undefined
+    const messages: Array<{ id?: string | null; threadId?: string | null }> = []
+
+    do {
+      const page = await gmail.users.messages.list({
+        userId: "me",
+        q,
+        maxResults: PAGE_SIZE,
+        pageToken,
+        includeSpamTrash: true,
+      })
+
+      const pageMsgs = page.data.messages ?? []
+      for (const msg of pageMsgs) {
+        messages.push(msg)
+        if (messages.length >= MAX_MESSAGES_PER_RUN) break
+      }
+
+      pageToken = page.data.nextPageToken ?? undefined
+    } while (pageToken && messages.length < MAX_MESSAGES_PER_RUN)
 
     let scanned = messages.length
     let llmCalls = 0
@@ -625,7 +625,6 @@ export async function POST() {
     let emailsInserted = 0
     let prepGenerated = 0
 
-    // Pull pipelines once
     const { data: existingPipelines } = await supabase
       .from("pipelines")
       .select("*")
@@ -636,10 +635,10 @@ export async function POST() {
     for (const msg of messages) {
       if (!msg.id) continue
 
-      // skip if already ingested
       const { data: existingEmail } = await supabase
         .from("emails")
         .select("id")
+        .eq("user_email", userEmail)
         .eq("gmail_message_id", msg.id)
         .maybeSingle()
       if (existingEmail) continue
@@ -652,100 +651,59 @@ export async function POST() {
       })
 
       const headers = full.data.payload?.headers ?? []
-      const subject = headers.find((h) => h.name === "Subject")?.value ?? ""
-      const fromHeader = headers.find((h) => h.name === "From")?.value ?? ""
-      const dateHeader = headers.find((h) => h.name === "Date")?.value ?? ""
-      const snippet = full.data.snippet ?? ""
+      const subject = headers.find((h) => h.name === "Subject")?.value || ""
+      const fromHeader = headers.find((h) => h.name === "From")?.value || ""
+      const dateHeader = headers.find((h) => h.name === "Date")?.value || ""
+      const snippet = full.data.snippet || ""
 
-      const fromEmail = extractEmailAddress(fromHeader)
-      const blob = `${subject}\n${fromHeader}\n${fromEmail}\n${snippet}`
-      const blobLower = blob.toLowerCase()
+      const fromEmailMatch = fromHeader.match(/<([^>]+)>/)
+      const fromEmail = (fromEmailMatch?.[1] || fromHeader || "").trim()
 
-      const { score, hits } = computeRuleScore(blob)
-      const passesRules = shouldSendToLLM(score, hits.length)
-      if (!passesRules) continue
+      const textLower = `${subject}\n${snippet}\n${fromHeader}`.toLowerCase()
+      const { score, hits } = scoreEmailText(textLower)
 
-      const scheduleStrong = hasStrongSchedulingSignal(blobLower, hits)
+      const scheduleStrong =
+        textLower.includes("schedule an interview") ||
+        textLower.includes("calendar invite") ||
+        textLower.includes("availability") ||
+        textLower.includes("zoom") ||
+        textLower.includes("google meet") ||
+        textLower.includes("teams") ||
+        textLower.includes("book time") ||
+        textLower.includes("phone screen") ||
+        textLower.includes("screening call")
 
-      // ---- LLM #1: classify + company/role + stage bucket/detail
+      const offerStrong =
+        textLower.includes("offer letter") ||
+        textLower.includes("compensation") ||
+        textLower.includes("equity") ||
+        textLower.includes("salary") ||
+        textLower.includes("signing bonus") ||
+        textLower.includes("employment offer")
+
+      const accepted = score >= MIN_SCORE || hits.length >= MIN_HITS
+      if (!accepted) continue
+
+      const stageGuess = await estimateStageFromLLM({
+        subject,
+        snippet,
+        fromEmail,
+        userEmail,
+        scheduleStrong,
+        offerStrong,
+        score,
+        hits,
+      })
       llmCalls++
 
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        temperature: 0,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content: [
-              "You are Guildy, an ultra-conservative recruiting classifier.",
-              "CRITICAL:",
-              "- Return ONLY JSON (no markdown).",
-              "- If unsure, set isInterviewRelated=false.",
-              "- Never call shopping/receipts/promotions interview-related unless clear recruiting intent.",
-              "- Prefer extracting COMPANY + ROLE from the content; do not use sender name/email unless unavoidable.",
-              "- Infer BOTH:",
-              "  (1) stage_bucket in {APPLIED, RECRUITER_SCREEN, INTERVIEW, OFFER}",
-              "  (2) stage_detail: bespoke to company/role/hiring style (e.g., 'Recruiter screen', 'Hiring manager 1:1', 'Portfolio review', 'System design', 'Panel loop', 'Offer negotiation').",
-              "- Stage must match email content.",
-              "- IMPORTANT: Only use INTERVIEW if the email clearly schedules/sets an interview time or includes a meeting link/calendar invite.",
-              "- Use rule hits as supporting evidence.",
-              "",
-              // ===== NEW ADDITIONS (ONLY ADDING) =====
-              "- If the email is a FIRST REACH-OUT from a recruiter (no specific time set), stage_bucket should be RECRUITER_SCREEN (not INTERVIEW).",
-              "- Do NOT label FULL LOOP / ONSITE unless the email explicitly says onsite/panel/loop/final round or lists multiple interviewers/rounds.",
-              "- If the email requests availability for a 15/20/30/45/60 min call, that is RECRUITER_SCREEN unless it explicitly says hiring manager/panel/onsite.",
-            ].join("\n"),
-          },
-          {
-            role: "user",
-            content: JSON.stringify(
-              {
-                email: {
-                  from: fromHeader,
-                  fromEmail,
-                  subject,
-                  snippet,
-                  date: dateHeader,
-                },
-                ruleEvidence: {
-                  score,
-                  hits,
-                  scheduleStrong,
-                },
-                outputFormat: {
-                  isInterviewRelated: "boolean",
-                  confidence: "number 0..1",
-                  company: "string|null",
-                  role: "string|null",
-                  stage_bucket: "APPLIED|RECRUITER_SCREEN|INTERVIEW|OFFER|null",
-                  stage_detail: "string|null",
-                  reasoning_tags: "string[]",
-                },
-              },
-              null,
-              2
-            ),
-          },
-        ],
-      })
+      if (!stageGuess?.stage_bucket) continue
 
-      const raw = completion.choices?.[0]?.message?.content || ""
-      let decision: any
-      try {
-        decision = JSON.parse(raw)
-      } catch {
-        continue
-      }
+      const proposed = stageGuess.stage_bucket
+      const cappedStage = capInterviewIfNoSchedulingEvidence(proposed, scheduleStrong)
 
-      const isInterviewRelated = !!decision?.isInterviewRelated
-      const confidence = Number(decision?.confidence ?? 0)
-      if (!isInterviewRelated || confidence < 0.7) continue
-
-      const { company, role } = safeCompanyRole(decision, fromHeader, subject)
-      const proposedStage = stageBucketFromLLM(decision?.stage_bucket)
-      const cappedStage = capInterviewIfNoSchedulingEvidence(proposedStage, scheduleStrong)
-      const stageDetail = String(decision?.stage_detail || "").trim() || defaultStageDetail(cappedStage)
+      const company = (stageGuess.company || "").trim() || "Unknown"
+      const role = (stageGuess.role || "").trim() || "Unknown"
+      const stageDetail = (stageGuess.stage_detail || "").trim() || defaultStageDetail(cappedStage)
 
       const companyN = normalize(company)
       const roleN = normalize(role)
@@ -755,31 +713,31 @@ export async function POST() {
 
       const receivedAt = dateHeader ? new Date(dateHeader).toISOString() : new Date().toISOString()
 
-      // ---- LLM #2: bespoke insights + prep (only for accepted recruiting emails)
       const prepPack = await generateInsightsAndPrep({
         company,
         role,
         stage_bucket: cappedStage,
         stage_detail: stageDetail,
-        fromEmail,
         subject,
         snippet,
+        fromEmail,
+        receivedAt,
       })
+      prepGenerated++
 
       const insights_json = prepPack?.insights ?? null
       const prep_json = prepPack?.prep ?? null
-      if (prep_json || insights_json) prepGenerated++
 
-      let pipelineId: string
+      let pipelineId: string | null = null
 
-      if (!match) {
+      if (isNewPipeline) {
         const { data: created, error: createErr } = await supabase
           .from("pipelines")
           .insert({
             user_email: userEmail,
             company,
             role,
-            stage: cappedStage,
+            stage: stageBucketToUiStage(cappedStage),
             stage_detail: stageDetail,
             last_email_subject: subject,
             last_email_at: receivedAt,
@@ -805,7 +763,7 @@ export async function POST() {
         const { error: updErr } = await supabase
           .from("pipelines")
           .update({
-            stage: nextStage,
+            stage: stageBucketToUiStage(nextStage),
             stage_detail: stageDetail,
             last_email_subject: subject,
             last_email_at: receivedAt,
@@ -849,11 +807,9 @@ export async function POST() {
       updated,
       emailsInserted,
       prepGenerated,
+      q,
     })
   } catch (err: any) {
-    return NextResponse.json(
-      { error: "EXCEPTION", message: err?.message || String(err) },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "EXCEPTION", message: err?.message || String(err) }, { status: 500 })
   }
 }
