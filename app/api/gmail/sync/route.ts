@@ -182,6 +182,150 @@ const PHRASE_WEIGHTS: Array<{ phrase: string; w: number }> = [
   { phrase: "role closed", w: 8 },
   { phrase: "moving on", w: 6 },
   { phrase: "moved on", w: 6 },
+
+  // ===== NEW: High-signal recruiting phrases (v2) =====
+  { phrase: "job opportunity", w: 8 },
+  { phrase: "job opening", w: 8 },
+  { phrase: "open role", w: 8 },
+  { phrase: "open position", w: 8 },
+  { phrase: "career opportunity", w: 8 },
+  { phrase: "interested in your profile", w: 9 },
+  { phrase: "interested in your background", w: 9 },
+  { phrase: "your application", w: 8 },
+  { phrase: "application status", w: 8 },
+  { phrase: "application update", w: 8 },
+  { phrase: "reviewing your application", w: 9 },
+  { phrase: "received your application", w: 9 },
+  { phrase: "thanks for applying", w: 9 },
+  { phrase: "thank you for applying", w: 9 },
+  { phrase: "following up on this role", w: 10 },
+  { phrase: "following up on your application", w: 10 },
+  { phrase: "reach out about", w: 7 },
+  { phrase: "reaching out about", w: 7 },
+  { phrase: "your resume", w: 7 },
+  { phrase: "your cv", w: 7 },
+  { phrase: "your candidacy", w: 9 },
+  { phrase: "candidate", w: 5 },
+  { phrase: "candidates", w: 5 },
+  { phrase: "hiring for", w: 8 },
+  { phrase: "we are hiring", w: 8 },
+  { phrase: "join our team", w: 7 },
+  { phrase: "join the team", w: 7 },
+  { phrase: "speak with you", w: 6 },
+  { phrase: "chat with you", w: 6 },
+  { phrase: "connect with you", w: 6 },
+  { phrase: "discuss the role", w: 8 },
+  { phrase: "discuss this role", w: 8 },
+  { phrase: "discuss the opportunity", w: 8 },
+  { phrase: "discuss this opportunity", w: 8 },
+  { phrase: "learn more about your experience", w: 8 },
+  { phrase: "great fit", w: 7 },
+  { phrase: "strong fit", w: 7 },
+  { phrase: "good fit", w: 6 },
+]
+
+// ===== NEGATIVE PHRASES: signals this is NOT recruiting =====
+const NEGATIVE_PHRASES: Array<{ phrase: string; w: number }> = [
+  // Orders / Shipping / Receipts
+  { phrase: "your order", w: 15 },
+  { phrase: "order confirmation", w: 15 },
+  { phrase: "order shipped", w: 15 },
+  { phrase: "has shipped", w: 12 },
+  { phrase: "tracking number", w: 15 },
+  { phrase: "track your", w: 12 },
+  { phrase: "delivery update", w: 12 },
+  { phrase: "out for delivery", w: 15 },
+  { phrase: "delivered", w: 10 },
+  { phrase: "shipment", w: 10 },
+  { phrase: "shipping confirmation", w: 15 },
+  { phrase: "receipt", w: 10 },
+  { phrase: "invoice", w: 10 },
+  { phrase: "payment received", w: 12 },
+  { phrase: "payment confirmation", w: 12 },
+  { phrase: "purchase", w: 8 },
+  { phrase: "bought", w: 8 },
+  { phrase: "cart", w: 8 },
+  { phrase: "checkout", w: 8 },
+
+  // Newsletters / Marketing
+  { phrase: "unsubscribe", w: 12 },
+  { phrase: "newsletter", w: 12 },
+  { phrase: "weekly digest", w: 12 },
+  { phrase: "daily digest", w: 12 },
+  { phrase: "weekly update", w: 10 },
+  { phrase: "monthly update", w: 10 },
+  { phrase: "daily deals", w: 15 },
+  { phrase: "special offer", w: 10 },
+  { phrase: "limited time", w: 10 },
+  { phrase: "discount code", w: 12 },
+  { phrase: "promo code", w: 12 },
+  { phrase: "coupon", w: 10 },
+  { phrase: "% off", w: 10 },
+  { phrase: "sale ends", w: 12 },
+  { phrase: "flash sale", w: 12 },
+  { phrase: "black friday", w: 12 },
+  { phrase: "cyber monday", w: 12 },
+  { phrase: "holiday sale", w: 12 },
+
+  // Account / Security notifications
+  { phrase: "verification code", w: 15 },
+  { phrase: "verify your email", w: 12 },
+  { phrase: "confirm your email", w: 10 },
+  { phrase: "one-time password", w: 15 },
+  { phrase: "otp", w: 10 },
+  { phrase: "security alert", w: 12 },
+  { phrase: "password reset", w: 12 },
+  { phrase: "reset your password", w: 12 },
+  { phrase: "new sign-in", w: 10 },
+  { phrase: "login attempt", w: 10 },
+  { phrase: "two-factor", w: 10 },
+  { phrase: "2fa", w: 10 },
+
+  // Financial / Banking (non-recruiting)
+  { phrase: "your statement", w: 12 },
+  { phrase: "account statement", w: 12 },
+  { phrase: "bank statement", w: 12 },
+  { phrase: "credit card", w: 10 },
+  { phrase: "apy", w: 10 },
+  { phrase: "interest rate", w: 8 },
+  { phrase: "your bill", w: 12 },
+  { phrase: "bill is ready", w: 12 },
+  { phrase: "payment due", w: 12 },
+  { phrase: "amount due", w: 12 },
+  { phrase: "auto-pay", w: 10 },
+  { phrase: "direct deposit", w: 8 },
+
+  // Social / Entertainment
+  { phrase: "new episode", w: 12 },
+  { phrase: "now streaming", w: 12 },
+  { phrase: "watch now", w: 10 },
+  { phrase: "new release", w: 8 },
+  { phrase: "your playlist", w: 10 },
+  { phrase: "friend request", w: 12 },
+  { phrase: "tagged you", w: 12 },
+  { phrase: "mentioned you", w: 10 },
+  { phrase: "liked your", w: 10 },
+  { phrase: "commented on", w: 8 },
+
+  // Food / Restaurant
+  { phrase: "your reservation", w: 10 },
+  { phrase: "table for", w: 10 },
+  { phrase: "food delivery", w: 12 },
+  { phrase: "your meal", w: 10 },
+  { phrase: "menu", w: 6 },
+
+  // Travel (non-recruiting)
+  { phrase: "flight confirmation", w: 12 },
+  { phrase: "booking confirmation", w: 10 },
+  { phrase: "hotel reservation", w: 12 },
+  { phrase: "itinerary", w: 8 },
+  { phrase: "check-in", w: 6 },
+
+  // Returns / Refunds
+  { phrase: "return request", w: 12 },
+  { phrase: "refund", w: 10 },
+  { phrase: "return label", w: 12 },
+  { phrase: "exchange", w: 6 },
 ]
 
 type StageBucket =
@@ -191,6 +335,7 @@ type StageBucket =
   | "LOOP"
   | "OFFER"
   | "REJECTED"
+  | "NOT_RECRUITING" // NEW: LLM can reject
 
 type Stage =
   | "APPLIED"
@@ -201,10 +346,11 @@ type Stage =
   | "OFFER_DISCUSSION"
   | "REJECTED"
 
-// Lowered gates to avoid missing interview-related emails that only have 1 strong signal.
-// (This increases detection, does not reduce it.)
-const MIN_SCORE = 6
-const MIN_HITS = 1
+// ===== TIGHTENED GATES =====
+// Require BOTH score threshold AND at least one strong hit
+const MIN_SCORE = 12          // Raised from 6
+const MIN_STRONG_HIT_WEIGHT = 7  // At least one phrase with w >= 7
+const MAX_NEGATIVE_SCORE = 15    // If negative score exceeds this, reject unless recruiting score is very high
 
 function normalize(s: string) {
   return (s || "")
@@ -322,12 +468,30 @@ function buildShortPhraseWeights(list: Array<{ phrase: string; w: number }>): Sh
 
 const SHORT_PHRASE_WEIGHTS: ShortPhrase[] = buildShortPhraseWeights(PHRASE_WEIGHTS)
 
+// Build negative phrase matcher (simpler - just direct matches)
+function scoreNegativePhrases(textLower: string): { score: number; hits: string[] } {
+  const hay = normalizeForMatch(textLower)
+  let score = 0
+  const hits: string[] = []
+
+  for (const item of NEGATIVE_PHRASES) {
+    const needle = " " + normalize(item.phrase) + " "
+    if (hay.includes(needle)) {
+      score += item.w
+      hits.push(item.phrase)
+    }
+  }
+
+  return { score, hits }
+}
+
 function scoreEmailText(textLower: string) {
   const hay = normalizeForMatch(textLower)
 
   let score = 0
   const hits: Array<{ phrase: string; w: number }> = []
   const parentAccum: Record<string, number> = {}
+  let strongestHitWeight = 0
 
   for (const item of SHORT_PHRASE_WEIGHTS) {
     const needle = " " + item.chunk + " "
@@ -341,9 +505,14 @@ function scoreEmailText(textLower: string) {
     parentAccum[item.parent] = next
     score += delta
     hits.push({ phrase: item.chunk, w: delta })
+
+    // Track the strongest single hit
+    if (item.w > strongestHitWeight) {
+      strongestHitWeight = item.w
+    }
   }
 
-  return { score, hits }
+  return { score, hits, strongestHitWeight }
 }
 
 function defaultStageDetail(bucket: StageBucket) {
@@ -360,6 +529,8 @@ function defaultStageDetail(bucket: StageBucket) {
       return "Offer discussion"
     case "REJECTED":
       return "Rejected"
+    case "NOT_RECRUITING":
+      return "Not recruiting"
     default:
       return "Screening"
   }
@@ -379,6 +550,8 @@ function stageBucketToUiStage(bucket: StageBucket): Stage {
       return "OFFER_DISCUSSION"
     case "REJECTED":
       return "REJECTED"
+    case "NOT_RECRUITING":
+      return "REJECTED" // Won't be used since we skip these
     default:
       return "SCREENING"
   }
@@ -404,7 +577,22 @@ function capInterviewIfNoSchedulingEvidence(proposed: StageBucket, scheduleStron
 function safeJsonParse<T>(s: any): T | null {
   try {
     if (!s) return null
-    return JSON.parse(s) as T
+    // Handle case where LLM returns markdown-wrapped JSON
+    let cleaned = s
+    if (typeof s === "string") {
+      cleaned = s.trim()
+      // Remove markdown code blocks if present
+      if (cleaned.startsWith("```json")) {
+        cleaned = cleaned.slice(7)
+      } else if (cleaned.startsWith("```")) {
+        cleaned = cleaned.slice(3)
+      }
+      if (cleaned.endsWith("```")) {
+        cleaned = cleaned.slice(0, -3)
+      }
+      cleaned = cleaned.trim()
+    }
+    return JSON.parse(cleaned) as T
   } catch {
     return null
   }
@@ -460,13 +648,20 @@ async function estimateStageFromLLM(input: {
   offerStrong: boolean
   score: number
   hits: Array<{ phrase: string; w: number }>
+  negativeScore: number
+  negativeHits: string[]
   bodyExcerpt: string
 }) {
-  const sys = "You are an expert recruiter ops assistant. Output ONLY strict JSON. Do not add extra keys."
-  const prompt = `Infer the current interview stage bucket from this single email.
+  const sys = `You are an expert recruiter ops assistant that classifies emails. Output ONLY strict JSON with no extra text or markdown.
+
+CRITICAL: Your primary job is to FILTER OUT non-recruiting emails. Be VERY skeptical. Most emails are NOT recruiting-related.`
+
+  const prompt = `Classify this email. Is it a recruiting/job interview email, or something else (marketing, newsletter, order, notification, etc)?
+
 Return JSON with:
 {
-  "stage_bucket": "RECRUITER_SCREEN" | "HM_SCREEN" | "ASSESSMENT" | "LOOP" | "OFFER" | "REJECTED",
+  "is_recruiting": boolean,
+  "stage_bucket": "NOT_RECRUITING" | "RECRUITER_SCREEN" | "HM_SCREEN" | "ASSESSMENT" | "LOOP" | "OFFER" | "REJECTED",
   "stage_detail": string,
   "company": string,
   "role": string,
@@ -474,16 +669,19 @@ Return JSON with:
   "confidence": number
 }
 
-Rules:
-- Be conservative. If not sure, choose RECRUITER_SCREEN.
-- If offer/compensation negotiation language, choose OFFER.
-- If rejection language, choose REJECTED.
-- If it's a recruiter scheduling first call, choose RECRUITER_SCREEN.
-- If it's explicitly a hiring manager call, choose HM_SCREEN.
-- If it mentions take-home / exercise / case study, choose ASSESSMENT.
-- If it mentions onsite / loop / panel / final rounds with multiple people, choose LOOP.
-- Use scheduleStrong/offerStrong as evidence.
-- If you cannot reliably infer company/role, set them to "Unknown".
+RULES:
+1. If this is NOT a recruiting/interview email, set is_recruiting=false and stage_bucket="NOT_RECRUITING"
+2. NOT recruiting includes: orders, receipts, newsletters, marketing, promotions, account notifications, social media, entertainment, banking alerts, shipping updates, verification codes
+3. ONLY set is_recruiting=true if this is clearly about a job application, interview, recruiting outreach, or hiring process
+4. If unsure, default to NOT_RECRUITING (be conservative)
+
+If it IS recruiting:
+- RECRUITER_SCREEN: Initial outreach, application received, first call scheduling
+- HM_SCREEN: Explicitly mentions hiring manager call
+- ASSESSMENT: Take-home, exercise, case study mentioned
+- LOOP: Onsite, panel, final rounds, multiple interviewers
+- OFFER: Compensation, offer letter, negotiation
+- REJECTED: Rejection language, "not moving forward", "other candidates"
 
 Email:
 From: ${input.fromEmail}
@@ -491,14 +689,16 @@ To (user): ${input.userEmail}
 Subject: ${input.subject}
 Snippet: ${input.snippet}
 
-Body excerpt:
+Body excerpt (first 2500 chars):
 ${input.bodyExcerpt}
 
-Signals:
+Detection signals:
+recruitingScore=${input.score}
+recruitingHits=${input.hits.map((h) => `${h.phrase}(${h.w})`).join(", ")}
+negativeScore=${input.negativeScore}
+negativeHits=${input.negativeHits.join(", ")}
 scheduleStrong=${input.scheduleStrong}
 offerStrong=${input.offerStrong}
-score=${input.score}
-hits=${input.hits.map((h) => `${h.phrase}(${h.w})`).join(", ")}
 `
 
   const res = await openai.chat.completions.create({
@@ -512,6 +712,7 @@ hits=${input.hits.map((h) => `${h.phrase}(${h.w})`).join(", ")}
 
   const txt = res.choices?.[0]?.message?.content || ""
   const parsed = safeJsonParse<{
+    is_recruiting: boolean
     stage_bucket: StageBucket
     stage_detail: string
     company: string
@@ -520,7 +721,7 @@ hits=${input.hits.map((h) => `${h.phrase}(${h.w})`).join(", ")}
     confidence: number
   }>(txt)
 
-  if (!parsed?.stage_bucket) return null
+  if (!parsed) return null
   return parsed
 }
 
@@ -535,10 +736,17 @@ async function generateInsightsAndPrep(input: {
   receivedAt: string
   bodyExcerpt: string
 }) {
-  const sys = "You are Guildy, a job pipeline + interview prep assistant. Output ONLY strict JSON. Do not hallucinate company facts."
+  const sys = `You are Guildy, a job pipeline + interview prep assistant. Output ONLY strict JSON with no markdown or extra text.
+
+CRITICAL RULES:
+1. Generate prep that is SPECIFIC to this exact company, role, and stage
+2. Do NOT hallucinate company facts. If you don't know something, say "Unknown" or "Not available"
+3. No generic advice. Every bullet should reference the specific company/role/stage
+4. If context is insufficient, say so explicitly rather than making things up`
+
   const prompt = `Generate bespoke, stage-specific insights + interview prep for THIS job.
 
-Return JSON with this shape:
+Return JSON with this exact shape:
 {
   "insights": {
     "stage_reason": string,
@@ -547,7 +755,8 @@ Return JSON with this shape:
     "waiting_on": "you" | "them",
     "next_action": string,
     "urgency": "low" | "med" | "high",
-    "response_likelihood": "low" | "med" | "high"
+    "response_likelihood": "low" | "med" | "high",
+    "tone": string
   },
   "prep": {
     "prep_focus": string,
@@ -562,26 +771,29 @@ Return JSON with this shape:
       "hq_location": string,
       "glassdoor_rating": string,
       "summary": string,
-      "recent_news": string[]
+      "recent_news": string[],
+      "truthful_note": string
     }
   }
 }
 
-Hard constraints:
-- Make it STAGE-SPECIFIC to: ${input.stage_bucket} (${input.stage_detail})
-- Make it ROLE-SPECIFIC to: ${input.role}
-- Make it COMPANY-SPECIFIC to: ${input.company}
-- If you cannot verify company intel from the email context, set fields to "Unknown" and summary to "No verified company info available."
-- No generic fluff. No broad advice. Use tight bullets.
+REQUIREMENTS:
+- prep_focus: What to prepare for THIS stage at THIS company (not generic)
+- questions_they_might_ask_you: 3-5 questions specific to ${input.role} at ${input.company} for ${input.stage_bucket} stage
+- questions_you_should_ask_them: 3-5 questions to ask about ${input.company} and ${input.role}
+- what_to_emphasize: Skills/experiences to highlight for THIS role
+- stories_to_prepare: STAR stories relevant to THIS role
+- homework_next_24h: Concrete prep tasks for this specific interview
+- company_intel: ONLY include what you can verify. Set fields to "Unknown" if not sure. Set truthful_note to explain what's unknown.
 
-Context email:
-Company=${input.company}
-Role=${input.role}
-Stage=${input.stage_bucket} (${input.stage_detail})
-From=${input.fromEmail}
-Subject=${input.subject}
-Snippet=${input.snippet}
-ReceivedAt=${input.receivedAt}
+Context:
+Company: ${input.company}
+Role: ${input.role}
+Stage: ${input.stage_bucket} (${input.stage_detail})
+From: ${input.fromEmail}
+Subject: ${input.subject}
+Snippet: ${input.snippet}
+ReceivedAt: ${input.receivedAt}
 
 Body excerpt:
 ${input.bodyExcerpt}
@@ -589,7 +801,7 @@ ${input.bodyExcerpt}
 
   const res = await openai.chat.completions.create({
     model: "gpt-4o-mini",
-    temperature: 0.2,
+    temperature: 0.3,
     messages: [
       { role: "system", content: sys },
       { role: "user", content: prompt },
@@ -617,7 +829,7 @@ export async function POST() {
 
     const MAX_MESSAGES_PER_RUN = 400
     const PAGE_SIZE = 100
-    const SAFETY_LOOKBACK_DAYS = 21 // bigger buffer so you never miss long threads
+    const SAFETY_LOOKBACK_DAYS = 21
 
     const nowMs = Date.now()
     const nowUnix = Math.floor(nowMs / 1000)
@@ -630,8 +842,6 @@ export async function POST() {
       .limit(1)
 
     const lastReceivedAtMs = lastEmailRows?.[0]?.received_at ? new Date(lastEmailRows[0].received_at).getTime() : null
-
-    // If DB has a future timestamp (bad parse), ignore it and fall back to wide scan.
     const safeLastMs = lastReceivedAtMs && lastReceivedAtMs <= nowMs + 60_000 ? lastReceivedAtMs : null
 
     const afterUnix = safeLastMs
@@ -639,7 +849,8 @@ export async function POST() {
       : null
 
     const qBase = afterUnix && afterUnix <= nowUnix ? `after:${afterUnix}` : "newer_than:5y"
-    const q = `${qBase} -in:chats`
+    // FIXED: Added -in:trash to exclude trash
+    const q = `${qBase} -in:trash -in:chats`
 
     let pageToken: string | undefined = undefined
     const messages: Array<{ id?: string | null; threadId?: string | null }> = []
@@ -650,7 +861,7 @@ export async function POST() {
         q,
         maxResults: PAGE_SIZE,
         pageToken,
-        includeSpamTrash: true,
+        includeSpamTrash: true, // Include spam (recruiting emails land there) but query excludes trash
       })
 
       const pageMsgs = page.data.messages ?? []
@@ -669,6 +880,8 @@ export async function POST() {
     let emailsInserted = 0
     let prepGenerated = 0
     let acceptedCount = 0
+    let rejectedByGating = 0
+    let rejectedByLLM = 0
 
     const { data: existingPipelines } = await supabase
       .from("pipelines")
@@ -716,7 +929,8 @@ export async function POST() {
       const bodyExcerpt = bodyText.slice(0, 2500)
 
       const textLower = `${subject}\n${snippet}\n${fromHeader}\n${bodyText}`.toLowerCase()
-      const { score, hits } = scoreEmailText(textLower)
+      const { score, hits, strongestHitWeight } = scoreEmailText(textLower)
+      const { score: negativeScore, hits: negativeHits } = scoreNegativePhrases(textLower)
 
       const scheduleStrong =
         textLower.includes("schedule an interview") ||
@@ -741,10 +955,27 @@ export async function POST() {
         textLower.includes("employment offer") ||
         textLower.includes("offer")
 
-      const accepted = score >= MIN_SCORE || hits.length >= MIN_HITS
-      if (!accepted) continue
-      acceptedCount++
+      // ===== TIGHTENED GATING LOGIC =====
+      // Must have: score >= MIN_SCORE AND at least one strong hit (w >= 7)
+      // If negative score is high, require even stronger recruiting signals
+      const hasStrongHit = strongestHitWeight >= MIN_STRONG_HIT_WEIGHT
+      const netScore = score - (negativeScore * 0.5) // Negative signals reduce effective score
 
+      let accepted = false
+      if (negativeScore >= MAX_NEGATIVE_SCORE) {
+        // High negative signal: require very strong recruiting evidence
+        accepted = score >= 20 && hasStrongHit && netScore >= 10
+      } else {
+        // Normal case: require both score threshold AND strong hit
+        accepted = score >= MIN_SCORE && hasStrongHit && netScore >= 8
+      }
+
+      if (!accepted) {
+        rejectedByGating++
+        continue
+      }
+
+      // ===== LLM CLASSIFICATION (can reject) =====
       const stageGuess = await estimateStageFromLLM({
         subject,
         snippet,
@@ -754,11 +985,21 @@ export async function POST() {
         offerStrong,
         score,
         hits,
+        negativeScore,
+        negativeHits,
         bodyExcerpt,
       })
       llmCalls++
 
-      if (!stageGuess?.stage_bucket) continue
+      if (!stageGuess) continue
+
+      // LLM rejected as non-recruiting
+      if (!stageGuess.is_recruiting || stageGuess.stage_bucket === "NOT_RECRUITING") {
+        rejectedByLLM++
+        continue
+      }
+
+      acceptedCount++
 
       const proposed = stageGuess.stage_bucket
       const cappedStage = capInterviewIfNoSchedulingEvidence(proposed, scheduleStrong)
@@ -817,7 +1058,6 @@ export async function POST() {
       } else {
         pipelineId = match.id
 
-        // Your DB stores UI stage strings; keep monotonic progression at the bucket level as best-effort.
         const prevBucket: StageBucket = (() => {
           const s = String(match.stage || "").toUpperCase()
           if (s.includes("REJECT")) return "REJECTED"
@@ -873,6 +1113,8 @@ export async function POST() {
     return NextResponse.json({
       q,
       scanned,
+      rejectedByGating,
+      rejectedByLLM,
       acceptedCount,
       llmCalls,
       inserted,
