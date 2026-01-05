@@ -14,227 +14,104 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! })
 
 // ============================================================
 // INSTANT REJECT PATTERNS
-// If ANY of these appear in the email, it's OUT. No scoring. No LLM.
-// These are 100% non-recruiting patterns.
 // ============================================================
 const INSTANT_REJECT_PATTERNS: string[] = [
-  // Unsubscribe = marketing/newsletter, never real recruiting
-  "unsubscribe",
-  "email preferences",
-  "manage your preferences",
-  "opt out",
-  "opt-out",
+  // Support / Tickets / Billing
+  "support ticket", "ticket number", "ticket #", "ticket id", "case number",
+  "customer support", "customer service", "support team", "support request",
+  "billing", "billing update", "billing statement", "billing issue",
+  "upgrade your", "upgrade now", "upgrade to", "upgrade plan", "downgrade",
+  "ordering", "orders", "your order", "order status", "order update",
+  
+  // Offer (marketing context)
+  "special offer", "exclusive offer", "limited offer", "offer expires",
+  "offer ends", "claim your offer", "redeem offer", "offer code",
+  
+  // Unsubscribe
+  "unsubscribe", "email preferences", "manage your preferences",
+  "manage preferences", "update preferences", "opt out", "opt-out",
   
   // Orders & Shipping
-  "your order",
-  "order confirmation",
-  "order shipped",
-  "order has shipped",
-  "has been shipped",
-  "tracking number",
-  "track your order",
-  "track your package",
-  "track shipment",
-  "shipment notification",
-  "shipping confirmation",
-  "shipping update",
-  "delivery notification",
-  "delivery update",
-  "out for delivery",
-  "was delivered",
-  "has been delivered",
-  "estimated delivery",
-  "your package",
-  "your shipment",
+  "order confirmation", "order shipped", "has been shipped", "tracking number",
+  "track your order", "track your package", "shipment notification",
+  "shipping confirmation", "shipping update", "delivery notification",
+  "out for delivery", "was delivered", "has been delivered", "your package",
   
   // Receipts & Payments
-  "your receipt",
-  "order receipt",
-  "payment receipt",
-  "purchase confirmation",
-  "payment confirmation",
-  "payment received",
-  "transaction confirmation",
-  "invoice attached",
-  "your invoice",
+  "your receipt", "order receipt", "payment receipt", "purchase confirmation",
+  "payment confirmation", "payment received", "your invoice",
   
   // Promotions & Sales
-  "special offer",
-  "limited time offer",
-  "exclusive offer",
-  "deal of the day",
-  "daily deals",
-  "flash sale",
-  "% off",
-  "percent off",
-  "discount code",
-  "promo code",
-  "coupon code",
-  "use code",
-  "shop now",
-  "buy now",
-  "order now",
-  "sale ends",
-  "don't miss out",
-  "act now",
-  "limited time",
-  "while supplies last",
-  "free shipping",
-  "black friday",
-  "cyber monday",
-  "holiday sale",
-  "clearance",
+  "limited time offer", "deal of the day", "daily deals", "flash sale",
+  "% off", "percent off", "discount code", "promo code", "coupon code",
+  "shop now", "buy now", "order now", "sale ends", "don't miss out",
+  "free shipping", "black friday", "cyber monday", "clearance",
   
-  // Account & Security (transactional)
-  "verification code",
-  "verify your email",
-  "confirm your email",
-  "one-time password",
-  "one time password",
-  "your otp",
-  "otp is",
-  "security code",
-  "authentication code",
-  "security alert",
-  "unusual activity",
-  "suspicious activity",
-  "password reset",
-  "reset your password",
-  "new sign-in",
-  "new login",
-  "login attempt",
-  "two-factor",
-  "2fa",
+  // Account & Security
+  "verification code", "verify your email", "confirm your email",
+  "one-time password", "your otp", "security code", "security alert",
+  "password reset", "reset your password", "new sign-in", "login attempt",
   
   // Banking & Financial
-  "your statement",
-  "account statement",
-  "bank statement",
-  "credit card statement",
-  "your bill",
-  "bill is ready",
-  "payment due",
-  "amount due",
-  "minimum payment",
-  "auto-pay",
-  "autopay",
-  "direct deposit",
-  "account balance",
-  "available balance",
-  "current balance",
-  "annual fee",
-  "interest rate",
-  "apr",
-  "apy",
-  "cashback",
-  "cash back",
-  "reward points",
-  "rewards balance",
-  "redeem your",
+  "your statement", "account statement", "bank statement", "your bill",
+  "bill is ready", "payment due", "amount due", "minimum payment",
+  "auto-pay", "account balance", "apy", "cashback", "reward points",
   
-  // Entertainment & Streaming
-  "now streaming",
-  "new episode",
-  "new season",
-  "watch now",
-  "stream now",
-  "your playlist",
-  "continue watching",
-  "because you watched",
-  "recommended for you",
+  // Entertainment & Social
+  "now streaming", "new episode", "watch now", "your playlist",
+  "friend request", "tagged you", "mentioned you", "new follower",
   
-  // Social Media
-  "friend request",
-  "connection request",
-  "tagged you",
-  "mentioned you",
-  "liked your",
-  "commented on",
-  "new follower",
-  "new message from",
+  // Food & Travel
+  "your order is on the way", "your driver", "food delivery",
+  "flight confirmation", "hotel reservation", "boarding pass",
   
-  // Food & Delivery
-  "your order is on the way",
-  "your driver",
-  "food delivery",
-  "order ready",
-  "preparing your order",
-  "your reservation",
-  "table for",
+  // Returns & Subscriptions
+  "return request", "refund processed", "return label",
+  "subscription", "your subscription", "renew your", "trial ending",
   
-  // Travel (non-recruiting)
-  "flight confirmation",
-  "booking confirmation",
-  "hotel reservation",
-  "boarding pass",
-  "check-in reminder",
-  "your itinerary",
+  // Newsletters
+  "newsletter", "weekly digest", "daily digest", "weekly roundup",
   
-  // Returns
-  "return request",
-  "refund processed",
-  "refund issued",
-  "return label",
-  
-  // Subscriptions
-  "subscription",
-  "your subscription",
-  "renew your",
-  "renewal notice",
-  "trial ending",
-  "trial expired",
-  "trial ends",
-  "upgrade your plan",
-  "downgrade",
-  
-  // Newsletters explicitly
-  "newsletter",
-  "weekly digest",
-  "daily digest",
-  "weekly roundup",
-  "monthly roundup",
-  "weekly update",
-  "news roundup",
+  // Product companies (support context)
+  "supabase", "vercel", "github", "notion", "slack", "figma",
+  "linear", "stripe", "twilio",
 ]
 
 // ============================================================
-// POSITIVE PHRASES - Only genuinely recruiting-related
-// w >= 10: Almost certainly recruiting
-// w >= 8: Strong recruiting signal (REQUIRED for acceptance)
-// w >= 6: Supporting signal
-// w <= 4: Weak/ambiguous (cannot trigger acceptance alone)
+// BLOCKED SENDER PATTERNS
+// ============================================================
+const BLOCKED_SENDER_PATTERNS: string[] = [
+  "noreply@", "no-reply@", "notifications@", "notification@",
+  "updates@", "marketing@", "promo@", "deals@", "offers@",
+  "newsletter@", "info@", "support@", "help@", "billing@",
+  "orders@", "shipping@", "tracking@", "alerts@", "donotreply@",
+  "mailer@", "automated@", "transactional@", "engage@",
+  "messaging.", "mail.", "email.", "sendgrid.", "mailchimp.",
+]
+
+// ============================================================
+// POSITIVE PHRASES
 // ============================================================
 const PHRASE_WEIGHTS: Array<{ phrase: string; w: number }> = [
-  // TIER 1: VERY HIGH (w=10) - Unmistakably recruiting
+  // TIER 1: VERY HIGH (w=10)
   { phrase: "interview request", w: 10 },
   { phrase: "interview invitation", w: 10 },
   { phrase: "invite you to interview", w: 10 },
   { phrase: "schedule an interview", w: 10 },
   { phrase: "interview confirmation", w: 10 },
-  { phrase: "confirmed interview", w: 10 },
   { phrase: "your application", w: 10 },
   { phrase: "application status", w: 10 },
-  { phrase: "application update", w: 10 },
   { phrase: "reviewing your application", w: 10 },
   { phrase: "received your application", w: 10 },
   { phrase: "thanks for applying", w: 10 },
   { phrase: "thank you for applying", w: 10 },
-  { phrase: "following up on your application", w: 10 },
   { phrase: "your candidacy", w: 10 },
-  { phrase: "move forward with your candidacy", w: 10 },
   { phrase: "not moving forward", w: 10 },
   { phrase: "move forward with other candidates", w: 10 },
-  { phrase: "decided not to move forward", w: 10 },
-  { phrase: "pursue other candidates", w: 10 },
 
-  // TIER 2: HIGH (w=8-9) - Strong recruiting indicator
+  // TIER 2: HIGH (w=8-9)
   { phrase: "interview", w: 8 },
   { phrase: "interviewing", w: 8 },
-  { phrase: "interview scheduling", w: 9 },
-  { phrase: "book an interview", w: 9 },
-  { phrase: "interview slot", w: 9 },
-  { phrase: "interview time", w: 8 },
-  { phrase: "reschedule interview", w: 9 },
   { phrase: "phone screen", w: 8 },
   { phrase: "screening call", w: 8 },
   { phrase: "recruiter screen", w: 9 },
@@ -243,32 +120,21 @@ const PHRASE_WEIGHTS: Array<{ phrase: string; w: number }> = [
   { phrase: "technical interview", w: 9 },
   { phrase: "hiring manager", w: 8 },
   { phrase: "hiring manager interview", w: 9 },
-  { phrase: "hiring team", w: 8 },
   { phrase: "talent acquisition", w: 8 },
-  { phrase: "talent team", w: 8 },
   { phrase: "recruiting team", w: 9 },
-  { phrase: "recruitment team", w: 9 },
   { phrase: "recruiter", w: 8 },
   { phrase: "onsite interview", w: 9 },
-  { phrase: "on-site interview", w: 9 },
   { phrase: "virtual onsite", w: 9 },
   { phrase: "full loop", w: 9 },
-  { phrase: "interview loop", w: 9 },
   { phrase: "panel interview", w: 9 },
   { phrase: "final round", w: 9 },
   { phrase: "final interview", w: 9 },
   { phrase: "offer letter", w: 9 },
-  { phrase: "employment offer", w: 9 },
   { phrase: "job offer", w: 9 },
   { phrase: "extend an offer", w: 9 },
-  { phrase: "signing bonus", w: 8 },
-  { phrase: "start date", w: 8 },
   { phrase: "background check", w: 8 },
   { phrase: "take-home assignment", w: 9 },
-  { phrase: "take-home exercise", w: 9 },
-  { phrase: "take home assignment", w: 9 },
   { phrase: "coding challenge", w: 8 },
-  { phrase: "coding exercise", w: 8 },
   { phrase: "case study interview", w: 9 },
   { phrase: "design exercise", w: 8 },
   { phrase: "portfolio review", w: 8 },
@@ -278,86 +144,45 @@ const PHRASE_WEIGHTS: Array<{ phrase: string; w: number }> = [
   { phrase: "open position", w: 8 },
   { phrase: "interested in your profile", w: 9 },
   { phrase: "interested in your background", w: 9 },
-  { phrase: "love to chat about", w: 8 },
   { phrase: "discuss the role", w: 8 },
-  { phrase: "discuss this opportunity", w: 8 },
-  { phrase: "discuss this role", w: 8 },
   { phrase: "not selected", w: 9 },
   { phrase: "position has been filled", w: 9 },
-  { phrase: "role has been filled", w: 9 },
-  { phrase: "other candidates", w: 8 },
-  { phrase: "unable to move forward", w: 9 },
-  { phrase: "regret to inform", w: 8 },
 
-  // TIER 3: MEDIUM (w=6-7) - Supporting signals
+  // TIER 3: MEDIUM (w=6-7)
   { phrase: "people team", w: 6 },
-  { phrase: "people operations", w: 6 },
   { phrase: "hr team", w: 6 },
-  { phrase: "human resources", w: 6 },
   { phrase: "introductory call", w: 7 },
   { phrase: "intro call", w: 7 },
-  { phrase: "initial call", w: 6 },
   { phrase: "screening", w: 6 },
-  { phrase: "interview availability", w: 7 },
   { phrase: "round 2", w: 7 },
-  { phrase: "round two", w: 7 },
   { phrase: "second round", w: 7 },
   { phrase: "third round", w: 7 },
-  { phrase: "round 3", w: 7 },
   { phrase: "team interview", w: 7 },
   { phrase: "meet the team", w: 7 },
-  { phrase: "assessment", w: 6 },
-  { phrase: "whiteboard", w: 7 },
   { phrase: "next steps", w: 6 },
   { phrase: "move forward", w: 6 },
-  { phrase: "moving forward", w: 6 },
-  { phrase: "progress to the next round", w: 7 },
-  { phrase: "advance to the next round", w: 7 },
   { phrase: "compensation", w: 6 },
   { phrase: "salary range", w: 7 },
-  { phrase: "total compensation", w: 7 },
   { phrase: "greenhouse", w: 6 },
   { phrase: "lever", w: 6 },
   { phrase: "ashby", w: 6 },
-  { phrase: "smartrecruiters", w: 6 },
-  { phrase: "icims", w: 6 },
   { phrase: "hirevue", w: 7 },
-  { phrase: "goodtime", w: 6 },
   { phrase: "your resume", w: 6 },
-  { phrase: "your cv", w: 6 },
   { phrase: "join our team", w: 6 },
   { phrase: "hiring for", w: 7 },
-  { phrase: "we are hiring", w: 7 },
-  { phrase: "position closed", w: 7 },
-  { phrase: "role closed", w: 7 },
 
-  // TIER 4: LOW (w=2-4) - Ambiguous, cannot trigger alone
+  // TIER 4: LOW (w=1-4)
   { phrase: "opportunity", w: 3 },
   { phrase: "position", w: 2 },
   { phrase: "role", w: 2 },
   { phrase: "candidate", w: 3 },
   { phrase: "availability", w: 2 },
-  { phrase: "offer", w: 2 },  // "special offer" problem
-  { phrase: "screen", w: 1 },  // "screen resolution" problem
+  { phrase: "offer", w: 1 },
+  { phrase: "screen", w: 1 },
   { phrase: "decided", w: 1 },
-  { phrase: "decision", w: 1 },
   { phrase: "salary", w: 3 },
-  { phrase: "equity", w: 3 },
-  { phrase: "loop", w: 3 },
-  { phrase: "panel", w: 3 },
-  { phrase: "calendly", w: 3 },
-  { phrase: "google meet", w: 2 },
   { phrase: "zoom", w: 2 },
-  { phrase: "teams", w: 1 },
   { phrase: "schedule a call", w: 4 },
-  { phrase: "schedule time", w: 3 },
-  { phrase: "book time", w: 3 },
-  { phrase: "connect with you", w: 3 },
-  { phrase: "chat with you", w: 2 },
-  { phrase: "speak with you", w: 2 },
-  { phrase: "reach out", w: 2 },
-  { phrase: "great fit", w: 3 },
-  { phrase: "good fit", w: 2 },
 ]
 
 type StageBucket =
@@ -378,9 +203,8 @@ type Stage =
   | "OFFER_DISCUSSION"
   | "REJECTED"
 
-// ===== GATING THRESHOLDS =====
-const MIN_SCORE = 15              // Total positive score must be >= 15
-const MIN_STRONG_HIT_WEIGHT = 8   // Must have at least one phrase with w >= 8
+const MIN_SCORE = 15
+const MIN_STRONG_HIT_WEIGHT = 8
 
 function normalize(s: string) {
   return (s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
@@ -390,25 +214,62 @@ function normalizeForMatch(s: string) {
   return " " + normalize(s) + " "
 }
 
-// ============================================================
-// INSTANT REJECT CHECK
-// Returns true if email should be instantly rejected
-// ============================================================
-function shouldInstantReject(textLower: string): { reject: boolean; reason: string } {
-  const normalized = normalizeForMatch(textLower)
+function shouldInstantReject(textLower: string, fromEmail: string): { reject: boolean; reason: string } {
+  const fromLower = fromEmail.toLowerCase()
+  for (const pattern of BLOCKED_SENDER_PATTERNS) {
+    if (fromLower.includes(pattern)) {
+      return { reject: true, reason: `sender:${pattern}` }
+    }
+  }
   
   for (const pattern of INSTANT_REJECT_PATTERNS) {
-    const needle = " " + normalize(pattern) + " "
-    if (normalized.includes(needle)) {
-      return { reject: true, reason: pattern }
-    }
-    // Also check without space padding for patterns at start/end
     if (textLower.includes(pattern.toLowerCase())) {
       return { reject: true, reason: pattern }
     }
   }
   
   return { reject: false, reason: "" }
+}
+
+function hasBannerImages(html: string): { hasBanner: boolean; reason: string } {
+  if (!html) return { hasBanner: false, reason: "" }
+  
+  const htmlLower = html.toLowerCase()
+  const imgTags = htmlLower.match(/<img[^>]*>/g) || []
+  
+  if (imgTags.length > 3) {
+    return { hasBanner: true, reason: `${imgTags.length} images` }
+  }
+  
+  for (const img of imgTags) {
+    const widthMatch = img.match(/width\s*[=:]\s*["']?(\d+)/)
+    if (widthMatch && parseInt(widthMatch[1]) > 400) {
+      return { hasBanner: true, reason: `large width: ${widthMatch[1]}px` }
+    }
+    
+    const heightMatch = img.match(/height\s*[=:]\s*["']?(\d+)/)
+    if (heightMatch && parseInt(heightMatch[1]) > 200) {
+      return { hasBanner: true, reason: `large height: ${heightMatch[1]}px` }
+    }
+    
+    const srcMatch = img.match(/src\s*=\s*["']([^"']+)["']/)
+    if (srcMatch) {
+      const src = srcMatch[1].toLowerCase()
+      const marketingPatterns = ["banner", "header", "hero", "promo", "campaign", "newsletter", "marketing", "mailchimp", "sendgrid"]
+      for (const pattern of marketingPatterns) {
+        if (src.includes(pattern)) {
+          return { hasBanner: true, reason: `marketing image: ${pattern}` }
+        }
+      }
+    }
+  }
+  
+  const tableCount = (htmlLower.match(/<table/g) || []).length
+  if (tableCount > 5) {
+    return { hasBanner: true, reason: `${tableCount} tables` }
+  }
+  
+  return { hasBanner: false, reason: "" }
 }
 
 type ShortPhrase = { chunk: string; w: number; parent: string; cap: number }
@@ -429,11 +290,7 @@ function splitIntoChunks(words: string[]) {
 }
 
 function buildShortPhraseWeights(list: Array<{ phrase: string; w: number }>): ShortPhrase[] {
-  const stop = new Set([
-    "we", "have", "has", "had", "to", "the", "a", "an", "and", "or", "of",
-    "in", "on", "for", "with", "at", "this", "that", "are", "is", "be",
-    "not", "will", "wont", "cant", "cannot", "you", "your", "our", "us", "i",
-  ])
+  const stop = new Set(["we", "have", "has", "had", "to", "the", "a", "an", "and", "or", "of", "in", "on", "for", "with", "at", "this", "that", "are", "is", "be", "not", "will", "you", "your", "our", "us", "i"])
 
   const out: ShortPhrase[] = []
   const seen = new Set<string>()
@@ -462,15 +319,9 @@ function buildShortPhraseWeights(list: Array<{ phrase: string; w: number }>): Sh
     for (const c of chunks) {
       const cw = c.split(" ").filter(Boolean).length
       if (cw === 0) continue
-      if (cw === 1) {
-        const tok = c
-        if (tok.length <= 3) continue
-        if (stop.has(tok)) continue
-      }
-      let chunkW = 1
-      if (cw === 3) chunkW = Math.max(2, Math.round(w * 0.6))
-      else if (cw === 2) chunkW = Math.max(2, Math.round(w * 0.5))
-      else chunkW = 1
+      if (cw === 1 && (c.length <= 3 || stop.has(c))) continue
+      
+      let chunkW = cw === 3 ? Math.max(2, Math.round(w * 0.6)) : cw === 2 ? Math.max(2, Math.round(w * 0.5)) : 1
 
       const key = `${c}|${parent}`
       if (seen.has(key)) continue
@@ -486,7 +337,6 @@ const SHORT_PHRASE_WEIGHTS: ShortPhrase[] = buildShortPhraseWeights(PHRASE_WEIGH
 
 function scoreEmailText(textLower: string) {
   const hay = normalizeForMatch(textLower)
-
   let score = 0
   const hits: Array<{ phrase: string; w: number }> = []
   const parentAccum: Record<string, number> = {}
@@ -505,25 +355,10 @@ function scoreEmailText(textLower: string) {
     score += delta
     hits.push({ phrase: item.chunk, w: delta })
 
-    if (item.w > strongestHitWeight) {
-      strongestHitWeight = item.w
-    }
+    if (item.w > strongestHitWeight) strongestHitWeight = item.w
   }
 
   return { score, hits, strongestHitWeight }
-}
-
-function defaultStageDetail(bucket: StageBucket) {
-  switch (bucket) {
-    case "RECRUITER_SCREEN": return "Recruiter screening"
-    case "HM_SCREEN": return "Hiring manager screen"
-    case "ASSESSMENT": return "Take-home / assessment"
-    case "LOOP": return "Full interview loop"
-    case "OFFER": return "Offer stage"
-    case "REJECTED": return "Rejected"
-    case "NOT_RECRUITING": return "Not recruiting"
-    default: return "Screening"
-  }
 }
 
 function stageBucketToUiStage(bucket: StageBucket): Stage {
@@ -534,26 +369,8 @@ function stageBucketToUiStage(bucket: StageBucket): Stage {
     case "LOOP": return "FULL_LOOP"
     case "OFFER": return "OFFER_DISCUSSION"
     case "REJECTED": return "REJECTED"
-    case "NOT_RECRUITING": return "REJECTED"
     default: return "SCREENING"
   }
-}
-
-function advanceOnly(prev: StageBucket, next: StageBucket): StageBucket {
-  const order: StageBucket[] = ["RECRUITER_SCREEN", "HM_SCREEN", "ASSESSMENT", "LOOP", "OFFER", "REJECTED"]
-  const pi = order.indexOf(prev)
-  const ni = order.indexOf(next)
-  if (pi === -1) return next
-  if (ni === -1) return prev
-  if (next === "REJECTED") return "REJECTED"
-  return ni >= pi ? next : prev
-}
-
-function capInterviewIfNoSchedulingEvidence(proposed: StageBucket, scheduleStrong: boolean) {
-  if (!scheduleStrong && (proposed === "LOOP" || proposed === "OFFER")) {
-    return "RECRUITER_SCREEN"
-  }
-  return proposed
 }
 
 function safeJsonParse<T>(s: any): T | null {
@@ -604,9 +421,8 @@ function extractBodyFromPayload(payload: any): { text: string; html: string } {
       if (mime === "text/html") html += "\n" + decoded
     }
 
-    const parts = part.parts
-    if (Array.isArray(parts)) {
-      for (const p of parts) walk(p)
+    if (Array.isArray(part.parts)) {
+      for (const p of part.parts) walk(p)
     }
   }
 
@@ -615,56 +431,31 @@ function extractBodyFromPayload(payload: any): { text: string; html: string } {
 }
 
 // ============================================================
-// LLM: STRICT CLASSIFICATION
+// LLM: CLASSIFY EMAIL (initial check)
 // ============================================================
-async function classifyWithLLM(input: {
+async function classifyEmailAsRecruiting(input: {
   subject: string
   snippet: string
   fromEmail: string
-  userEmail: string
-  score: number
-  hits: Array<{ phrase: string; w: number }>
   bodyExcerpt: string
-}) {
-  const systemPrompt = `You are a strict email classifier for a job search app. Your ONLY job is to determine if an email is about job recruiting/interviews.
+}): Promise<{ is_recruiting: boolean; company: string; role: string } | null> {
+  const systemPrompt = `You are a strict email classifier. Determine if an email is about job recruiting/interviews.
+Be EXTREMELY skeptical. Default to NOT recruiting.
+Output ONLY valid JSON.`
 
-CRITICAL RULES:
-1. Be EXTREMELY skeptical. Default to NOT_RECRUITING unless clearly about jobs.
-2. Real recruiting emails come from actual people (recruiters, HR, hiring managers) about specific job opportunities.
-3. Marketing emails, newsletters, promotional content = NOT_RECRUITING, even if from a company that might hire.
-4. If the email has "unsubscribe" or is promotional in nature = NOT_RECRUITING.
-5. Output ONLY valid JSON. No markdown. No explanation outside JSON.`
+  const userPrompt = `Is this email about job recruiting/interviews?
 
-  const userPrompt = `Classify this email. Is it genuinely about a job/interview?
-
-Email:
 From: ${input.fromEmail}
 Subject: ${input.subject}
 Snippet: ${input.snippet}
+Body: ${input.bodyExcerpt.slice(0, 1000)}
 
-Body (excerpt):
-${input.bodyExcerpt.slice(0, 2000)}
-
-Return ONLY this JSON:
+Return JSON:
 {
   "is_recruiting": boolean,
-  "confidence": number (0-1),
-  "reason": "one sentence explanation",
-  "stage_bucket": "NOT_RECRUITING" | "RECRUITER_SCREEN" | "HM_SCREEN" | "ASSESSMENT" | "LOOP" | "OFFER" | "REJECTED",
-  "stage_detail": "brief stage description",
   "company": "company name or Unknown",
   "role": "job title or Unknown"
-}
-
-Stage definitions (only if is_recruiting=true):
-- RECRUITER_SCREEN: Initial outreach, application acknowledgment, recruiter call
-- HM_SCREEN: Hiring manager interview scheduled/confirmed
-- ASSESSMENT: Take-home, coding challenge, case study assigned
-- LOOP: Onsite/virtual onsite, panel interviews, final rounds
-- OFFER: Offer extended, compensation discussion
-- REJECTED: Rejection email
-
-If NOT about recruiting: is_recruiting=false, stage_bucket="NOT_RECRUITING"`
+}`
 
   const res = await openai.chat.completions.create({
     model: "gpt-4o-mini",
@@ -676,88 +467,127 @@ If NOT about recruiting: is_recruiting=false, stage_bucket="NOT_RECRUITING"`
   })
 
   const txt = res.choices?.[0]?.message?.content || ""
-  return safeJsonParse<{
-    is_recruiting: boolean
-    confidence: number
-    reason: string
-    stage_bucket: StageBucket
-    stage_detail: string
-    company: string
-    role: string
-  }>(txt)
+  return safeJsonParse<{ is_recruiting: boolean; company: string; role: string }>(txt)
 }
 
 // ============================================================
-// LLM: BESPOKE PREP GENERATION
+// LLM: DETERMINE STAGE FROM FULL THREAD
+// This is the KEY function - it gets ALL emails for the pipeline
+// and determines the correct stage based on the full history
+// ============================================================
+async function determineStageFromThread(input: {
+  company: string
+  role: string
+  emails: Array<{
+    subject: string
+    snippet: string
+    from: string
+    date: string
+  }>
+}): Promise<{ stage_bucket: StageBucket; stage_detail: string; confidence: number } | null> {
+  
+  // Build thread summary (oldest to newest)
+  const threadSummary = input.emails
+    .map((e, i) => `[Email ${i + 1}] Date: ${e.date}\nFrom: ${e.from}\nSubject: ${e.subject}\nSnippet: ${e.snippet}`)
+    .join("\n\n---\n\n")
+
+  const systemPrompt = `You are an expert at determining interview pipeline stages.
+Analyze the FULL email thread history and determine the CURRENT stage.
+
+STAGES (in order of progression):
+1. RECRUITER_SCREEN - Initial outreach, application received, recruiter call scheduled/completed
+2. HM_SCREEN - Hiring manager interview scheduled/completed
+3. ASSESSMENT - Take-home, coding challenge, case study assigned/submitted
+4. LOOP - Onsite, panel interviews, final rounds scheduled/completed
+5. OFFER - Offer extended, compensation discussion, negotiation
+6. REJECTED - Rejection received
+
+RULES:
+- Look at the MOST RECENT emails to determine current stage
+- If they scheduled a hiring manager interview, stage is HM_SCREEN
+- If they sent a take-home or coding challenge, stage is ASSESSMENT
+- If they scheduled onsite/panel/final rounds, stage is LOOP
+- If they extended an offer or discussing compensation, stage is OFFER
+- If they rejected, stage is REJECTED
+- Only use RECRUITER_SCREEN if no progression beyond initial contact
+
+Output ONLY valid JSON.`
+
+  const userPrompt = `Company: ${input.company}
+Role: ${input.role}
+
+Full email thread (${input.emails.length} emails, oldest to newest):
+
+${threadSummary}
+
+Based on this thread, what is the CURRENT interview stage?
+
+Return JSON:
+{
+  "stage_bucket": "RECRUITER_SCREEN" | "HM_SCREEN" | "ASSESSMENT" | "LOOP" | "OFFER" | "REJECTED",
+  "stage_detail": "Brief explanation of current stage",
+  "confidence": 0.0-1.0
+}`
+
+  const res = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    temperature: 0,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ],
+  })
+
+  const txt = res.choices?.[0]?.message?.content || ""
+  return safeJsonParse<{ stage_bucket: StageBucket; stage_detail: string; confidence: number }>(txt)
+}
+
+// ============================================================
+// LLM: GENERATE PREP
 // ============================================================
 async function generateBespokePrep(input: {
   company: string
   role: string
   stage_bucket: StageBucket
   stage_detail: string
-  subject: string
-  snippet: string
-  fromEmail: string
-  receivedAt: string
-  bodyExcerpt: string
+  latestEmail: { subject: string; snippet: string; from: string }
 }) {
-  const systemPrompt = `You are Guildy, an interview prep assistant. Generate SPECIFIC, ACTIONABLE prep.
+  const systemPrompt = `You are Guildy, an interview prep assistant. Generate SPECIFIC prep.
+NO generic advice. If unknown, say "Unknown". Output ONLY valid JSON.`
 
-ABSOLUTE RULES:
-1. NO generic advice. Every bullet must be specific to ${input.company} and ${input.role}.
-2. NO hallucinating. If you don't know something, say "Unknown" or "Insufficient data".
-3. NO filler phrases like "research the company" - give specific research tasks.
-4. Tailor everything to the ${input.stage_bucket} stage.
-5. Be concise. Value over volume.
-6. Output ONLY valid JSON.`
-
-  const userPrompt = `Generate interview prep for:
-
+  const userPrompt = `Generate prep for:
 Company: ${input.company}
-Role: ${input.role}  
+Role: ${input.role}
 Stage: ${input.stage_bucket} (${input.stage_detail})
-Email from: ${input.fromEmail}
-Subject: ${input.subject}
-Date: ${input.receivedAt}
+Latest email from: ${input.latestEmail.from}
+Subject: ${input.latestEmail.subject}
+Snippet: ${input.latestEmail.snippet}
 
-Email body:
-${input.bodyExcerpt.slice(0, 1500)}
-
-Return ONLY this JSON:
+Return JSON:
 {
   "insights": {
-    "stage_reason": "Why classified as ${input.stage_bucket}",
+    "stage_reason": "Why ${input.stage_bucket}",
     "waiting_on": "you" | "them",
-    "next_action": "Specific next action for the candidate",
+    "next_action": "Specific action",
     "urgency": "low" | "med" | "high",
     "response_likelihood": "low" | "med" | "high",
-    "tone": "friendly" | "formal" | "neutral" | "urgent"
+    "tone": "friendly" | "formal" | "neutral"
   },
   "prep": {
-    "prep_focus": "What to specifically prepare for ${input.stage_bucket} stage at ${input.company}",
-    "questions_they_might_ask_you": [
-      "3-5 specific questions likely for ${input.role} at ${input.company}"
-    ],
-    "questions_you_should_ask_them": [
-      "3-5 smart questions to ask about ${input.company} and ${input.role}"
-    ],
-    "what_to_emphasize": [
-      "Specific skills/experiences to highlight for ${input.role}"
-    ],
-    "stories_to_prepare": [
-      "Specific STAR story topics relevant to ${input.role}"
-    ],
-    "homework_next_24h": [
-      "Concrete prep tasks to complete"
-    ],
+    "prep_focus": "Focus for ${input.stage_bucket} at ${input.company}",
+    "questions_they_might_ask_you": ["3-5 questions"],
+    "questions_you_should_ask_them": ["3-5 questions"],
+    "what_to_emphasize": ["Skills to highlight"],
+    "stories_to_prepare": ["STAR stories"],
+    "homework_next_24h": ["Prep tasks"],
     "company_intel": {
-      "industry": "Industry or Unknown",
-      "size": "Company size or Unknown", 
-      "hq_location": "Location or Unknown",
-      "glassdoor_rating": "Rating or Unknown",
-      "summary": "Brief verified summary OR 'Insufficient data available'",
+      "industry": "or Unknown",
+      "size": "or Unknown",
+      "hq_location": "or Unknown",
+      "glassdoor_rating": "or Unknown",
+      "summary": "or 'Insufficient data'",
       "recent_news": [],
-      "truthful_note": "What we could not verify from this email context"
+      "truthful_note": "What we couldn't verify"
     }
   }
 }`
@@ -771,8 +601,7 @@ Return ONLY this JSON:
     ],
   })
 
-  const txt = res.choices?.[0]?.message?.content || ""
-  return safeJsonParse<any>(txt)
+  return safeJsonParse<any>(res.choices?.[0]?.message?.content || "")
 }
 
 // ============================================================
@@ -838,10 +667,10 @@ export async function POST() {
       pageToken = page.data.nextPageToken ?? undefined
     } while (pageToken && messages.length < MAX_MESSAGES_PER_RUN)
 
-    // Stats
     let scanned = messages.length
     let skippedExisting = 0
     let rejectedInstant = 0
+    let rejectedBanner = 0
     let rejectedGating = 0
     let rejectedLLM = 0
     let acceptedCount = 0
@@ -859,7 +688,6 @@ export async function POST() {
     for (const msg of messages) {
       if (!msg.id) continue
 
-      // Skip if already processed
       const { data: existingEmail } = await supabase
         .from("emails")
         .select("id")
@@ -872,7 +700,6 @@ export async function POST() {
         continue
       }
 
-      // Fetch full message
       const full = await gmail.users.messages.get({
         userId: "me",
         id: msg.id,
@@ -900,98 +727,78 @@ export async function POST() {
       const bodyText = bodyTextPlain || (bodyHtml ? stripHtml(bodyHtml) : "")
       const bodyExcerpt = bodyText.slice(0, 3000)
 
-      // Combine all text for analysis
       const fullText = `${subject}\n${snippet}\n${fromHeader}\n${bodyText}`
       const textLower = fullText.toLowerCase()
 
-      // ===== GATE 1: INSTANT REJECT =====
-      const instantCheck = shouldInstantReject(textLower)
+      // GATE 1: Instant reject
+      const instantCheck = shouldInstantReject(textLower, fromEmail)
       if (instantCheck.reject) {
         rejectedInstant++
         continue
       }
 
-      // ===== GATE 2: SCORE THRESHOLD =====
+      // GATE 2: Banner images
+      const bannerCheck = hasBannerImages(bodyHtml)
+      if (bannerCheck.hasBanner) {
+        rejectedBanner++
+        continue
+      }
+
+      // GATE 3: Score threshold
       const { score, hits, strongestHitWeight } = scoreEmailText(textLower)
-      const hasStrongHit = strongestHitWeight >= MIN_STRONG_HIT_WEIGHT
-      
-      if (score < MIN_SCORE || !hasStrongHit) {
+      if (score < MIN_SCORE || strongestHitWeight < MIN_STRONG_HIT_WEIGHT) {
         rejectedGating++
         continue
       }
 
-      // ===== GATE 3: LLM CLASSIFICATION =====
-      const classification = await classifyWithLLM({
+      // GATE 4: LLM initial classification
+      const classification = await classifyEmailAsRecruiting({
         subject,
         snippet,
         fromEmail,
-        userEmail,
-        score,
-        hits,
         bodyExcerpt,
       })
 
-      if (!classification || !classification.is_recruiting || classification.stage_bucket === "NOT_RECRUITING") {
+      if (!classification?.is_recruiting) {
         rejectedLLM++
         continue
       }
 
-      // ===== ACCEPTED: Process pipeline =====
       acceptedCount++
-
-      const scheduleStrong =
-        textLower.includes("schedule an interview") ||
-        textLower.includes("interview confirmation") ||
-        textLower.includes("calendar invite") ||
-        textLower.includes("phone screen") ||
-        textLower.includes("screening call")
-
-      const proposed = classification.stage_bucket
-      const cappedStage = capInterviewIfNoSchedulingEvidence(proposed, scheduleStrong)
 
       const company = (classification.company || "").trim() || "Unknown"
       const role = (classification.role || "").trim() || "Unknown"
-      const stageDetail = (classification.stage_detail || "").trim() || defaultStageDetail(cappedStage)
 
       const companyN = normalize(company)
       const roleN = normalize(role)
 
-      let match = pipelines.find((p: any) => normalize(p.company) === companyN && normalize(p.role) === roleN)
+      // Find existing pipeline
+      let match = pipelines.find((p: any) => 
+        normalize(p.company) === companyN && normalize(p.role) === roleN
+      )
       const isNewPipeline = !match
 
-      // Generate bespoke prep
-      const prepPack = await generateBespokePrep({
-        company,
-        role,
-        stage_bucket: cappedStage,
-        stage_detail: stageDetail,
-        subject,
-        snippet,
-        fromEmail,
-        receivedAt,
-        bodyExcerpt,
-      })
-
-      const insights_json = prepPack?.insights ?? null
-      const prep_json = prepPack?.prep ?? null
-
       let pipelineId: string | null = null
+      let stageBucket: StageBucket = "RECRUITER_SCREEN"
+      let stageDetail = "Initial screening"
 
       if (isNewPipeline) {
+        // NEW PIPELINE: Just use RECRUITER_SCREEN for first email
+        stageBucket = "RECRUITER_SCREEN"
+        stageDetail = "Initial contact"
+
         const { data: created, error: createErr } = await supabase
           .from("pipelines")
           .insert({
             user_email: userEmail,
             company,
             role,
-            stage: stageBucketToUiStage(cappedStage),
+            stage: stageBucketToUiStage(stageBucket),
             stage_detail: stageDetail,
             last_email_subject: subject,
             last_email_at: receivedAt,
             last_email_from: fromEmail || fromHeader,
             last_email_snippet: snippet,
-            insights_json,
-            prep_json,
           })
           .select()
           .single()
@@ -1000,51 +807,92 @@ export async function POST() {
         pipelineId = created.id
         pipelines.push(created)
         inserted++
+
       } else {
+        // EXISTING PIPELINE: Fetch ALL emails and determine stage from full thread
         pipelineId = match.id
 
-        const prevBucket: StageBucket = (() => {
-          const s = String(match.stage || "").toUpperCase()
-          if (s.includes("REJECT")) return "REJECTED"
-          if (s.includes("OFFER")) return "OFFER"
-          if (s.includes("FULL_LOOP") || s.includes("LOOP") || s.includes("ONSITE")) return "LOOP"
-          if (s.includes("ASSESS")) return "ASSESSMENT"
-          if (s.includes("HM") || s.includes("HIRING")) return "HM_SCREEN"
-          return "RECRUITER_SCREEN"
-        })()
+        // Get all existing emails for this pipeline
+        const { data: pipelineEmails } = await supabase
+          .from("emails")
+          .select("subject, snippet, from_email, received_at")
+          .eq("pipeline_id", pipelineId)
+          .order("received_at", { ascending: true })
 
-        const nextStage = advanceOnly(prevBucket, cappedStage)
+        // Build thread including the new email
+        const threadEmails = [
+          ...(pipelineEmails || []).map(e => ({
+            subject: e.subject || "",
+            snippet: e.snippet || "",
+            from: e.from_email || "",
+            date: e.received_at || "",
+          })),
+          {
+            subject,
+            snippet,
+            from: fromEmail,
+            date: receivedAt,
+          }
+        ]
 
+        // LLM determines stage from FULL thread
+        const stageResult = await determineStageFromThread({
+          company,
+          role,
+          emails: threadEmails,
+        })
+
+        if (stageResult) {
+          stageBucket = stageResult.stage_bucket
+          stageDetail = stageResult.stage_detail
+        }
+
+        // Update pipeline with new stage
         const { error: updErr } = await supabase
           .from("pipelines")
           .update({
-            stage: stageBucketToUiStage(nextStage),
+            stage: stageBucketToUiStage(stageBucket),
             stage_detail: stageDetail,
             last_email_subject: subject,
             last_email_at: receivedAt,
             last_email_from: fromEmail || fromHeader,
             last_email_snippet: snippet,
-            insights_json,
-            prep_json,
           })
           .eq("id", pipelineId)
 
         if (!updErr) {
           Object.assign(match, {
-            stage: stageBucketToUiStage(nextStage),
+            stage: stageBucketToUiStage(stageBucket),
             stage_detail: stageDetail,
             last_email_subject: subject,
             last_email_at: receivedAt,
             last_email_from: fromEmail || fromHeader,
             last_email_snippet: snippet,
-            insights_json,
-            prep_json,
           })
           updated++
         }
       }
 
-      // Record email
+      // Generate prep
+      const prepPack = await generateBespokePrep({
+        company,
+        role,
+        stage_bucket: stageBucket,
+        stage_detail: stageDetail,
+        latestEmail: { subject, snippet, from: fromEmail },
+      })
+
+      if (prepPack) {
+        await supabase
+          .from("pipelines")
+          .update({
+            insights_json: prepPack.insights,
+            prep_json: prepPack.prep,
+          })
+          .eq("id", pipelineId)
+      }
+
+      // Insert email record
       const { error: emailErr } = await supabase.from("emails").insert({
         user_email: userEmail,
         pipeline_id: pipelineId,
@@ -1064,6 +912,7 @@ export async function POST() {
         scanned,
         skippedExisting,
         rejectedInstant,
+        rejectedBanner,
         rejectedGating,
         rejectedLLM,
         acceptedCount,
