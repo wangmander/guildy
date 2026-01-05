@@ -131,10 +131,21 @@ function rowToJob(row: any): Job {
     safeJson(pick(row, ["llm_prep_json", "llm_prep"])) ??
     null
 
-  const insightsRaw =
+  let insightsRaw =
     safeJson(pick(row, ["insights_json", "insights"])) ??
     safeJson(pick(row, ["llm_insights_json", "llm_insights"])) ??
     null
+  
+  // Normalize insights field names for frontend
+  if (insightsRaw) {
+    insightsRaw = {
+      ...insightsRaw,
+      stageReason: insightsRaw.stage_reason || insightsRaw.stageReason,
+      waitingOn: insightsRaw.waiting_on || insightsRaw.waitingOn,
+      nextAction: insightsRaw.next_action || insightsRaw.nextAction,
+      responseLikelihood: insightsRaw.response_likelihood || insightsRaw.responseLikelihood,
+    }
+  }
 
   const stageDetail =
     safeStr(pick(row, ["stage_detail", "stageDetail"]) ?? "") ||
