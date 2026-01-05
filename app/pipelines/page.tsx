@@ -34,7 +34,8 @@ function safeJson(v: any): any | null {
 function pick(obj: any, keys: string[]): any {
   if (!obj || typeof obj !== "object") return undefined
   for (const k of keys) {
-    if (obj[k] !== undefined && obj[k] !== null) return obj[k]
+    const val = obj[k]
+    if (val !== undefined && val !== null && val !== "") return val
   }
   return undefined
 }
@@ -61,27 +62,31 @@ function stageBucketToUiStage(rawStage: any, stageDetail?: any): Stage {
 function normalizeInterviewPrep(prepAny: any): any | undefined {
   if (!prepAny || typeof prepAny !== "object") return undefined
 
-  const stageFocus = safeStr(pick(prepAny, ["stageFocus", "prepFocus", "focus", "stage_focus", "prep_focus"]) ?? "", "")
+  // Handle both camelCase and snake_case field names
+  const stageFocus = safeStr(
+    pick(prepAny, ["prepFocus", "stageFocus", "prep_focus", "stage_focus", "focus"]) ?? "", 
+    ""
+  )
 
-  const qTheyAsk = safeArr<string>(pick(prepAny, ["questionsTheyMightAsk", "theyMightAsk", "questions_they_might_ask_you"]))
-    .map((x) => safeStr(x).trim())
-    .filter(Boolean)
+  const qTheyAsk = safeArr<string>(
+    pick(prepAny, ["questionsTheyMightAsk", "questionsTheyMightAskYou", "questions_they_might_ask_you", "theyMightAsk"])
+  ).map((x) => safeStr(x).trim()).filter(Boolean)
 
-  const qYouAsk = safeArr<string>(pick(prepAny, ["questionsYouShouldAskThem", "youShouldAsk", "questions_you_should_ask_them"]))
-    .map((x) => safeStr(x).trim())
-    .filter(Boolean)
+  const qYouAsk = safeArr<string>(
+    pick(prepAny, ["questionsYouShouldAsk", "questionsYouShouldAskThem", "questions_you_should_ask_them", "youShouldAsk"])
+  ).map((x) => safeStr(x).trim()).filter(Boolean)
 
-  const emphasize = safeArr<string>(pick(prepAny, ["whatToEmphasize", "emphasize", "what_to_emphasize"]))
-    .map((x) => safeStr(x).trim())
-    .filter(Boolean)
+  const emphasize = safeArr<string>(
+    pick(prepAny, ["whatToEmphasize", "what_to_emphasize", "emphasize"])
+  ).map((x) => safeStr(x).trim()).filter(Boolean)
 
-  const stories = safeArr<string>(pick(prepAny, ["storiesToPrepare", "stories", "stories_to_prepare"]))
-    .map((x) => safeStr(x).trim())
-    .filter(Boolean)
+  const stories = safeArr<string>(
+    pick(prepAny, ["storiesToPrepare", "stories_to_prepare", "stories"])
+  ).map((x) => safeStr(x).trim()).filter(Boolean)
 
-  const homework = safeArr<string>(pick(prepAny, ["homeworkNext24h", "homework", "homework_next_24h"]))
-    .map((x) => safeStr(x).trim())
-    .filter(Boolean)
+  const homework = safeArr<string>(
+    pick(prepAny, ["homeworkNext24h", "homework_next_24h", "homework"])
+  ).map((x) => safeStr(x).trim()).filter(Boolean)
 
   if (stageFocus || qTheyAsk.length || qYouAsk.length || emphasize.length || stories.length || homework.length) {
     return {
@@ -136,14 +141,16 @@ function rowToJob(row: any): Job {
     safeJson(pick(row, ["llm_insights_json", "llm_insights"])) ??
     null
   
-  // Normalize insights field names for frontend
+  // Normalize insights field names (handle both snake_case and camelCase)
   if (insightsRaw) {
     insightsRaw = {
       ...insightsRaw,
-      stageReason: insightsRaw.stage_reason || insightsRaw.stageReason,
-      waitingOn: insightsRaw.waiting_on || insightsRaw.waitingOn,
-      nextAction: insightsRaw.next_action || insightsRaw.nextAction,
-      responseLikelihood: insightsRaw.response_likelihood || insightsRaw.responseLikelihood,
+      stageReason: insightsRaw.stageReason || insightsRaw.stage_reason || "",
+      waitingOn: insightsRaw.waitingOn || insightsRaw.waiting_on || "you",
+      nextAction: insightsRaw.nextAction || insightsRaw.next_action || "",
+      urgency: insightsRaw.urgency || "med",
+      responseLikelihood: insightsRaw.responseLikelihood || insightsRaw.response_likelihood || "med",
+      tone: insightsRaw.tone || "neutral",
     }
   }
 
@@ -170,7 +177,32 @@ function rowToJob(row: any): Job {
 
   const companyIntel = companyIntelRaw && typeof companyIntelRaw === "object" ? companyIntelRaw : null
   const recentNews = safeArr<any>(pick(companyIntel, ["recentNews", "recent_news", "news"]))
-  const interviewPrep = normalizeInterviewPrep(prepRaw)
+  
+  // Build interviewPrep with all fields the panel expects
+  // Panel reads: prep.tone, prep.urgency, prep.stageFocus, prep.insights.*, etc.
+  const normalizedPrep = normalizeInterviewPrep(prepRaw) || {}
+  
+  // Merge all data into interviewPrep so job-detail-panel can find it
+  const interviewPrep = {
+    ...normalizedPrep,
+    // Add insights fields directly on prep (panel reads prep.tone, prep.urgency, etc.)
+    tone: insightsRaw?.tone || "",
+    urgency: insightsRaw?.urgency || "",
+    responseLikelihood: insightsRaw?.responseLikelihood || "",
+    nextAction: insightsRaw?.nextAction || "",
+    // Also nest insights object (panel reads prep.insights.*)
+    insights: insightsRaw || {},
+    // Add company intel fields (panel reads prep.industry, prep.hqLocation, etc.)
+    industry: pick(companyIntel, ["industry"]) || "Unknown",
+    hqLocation: pick(companyIntel, ["hqLocation", "hq_location"]) || "Unknown",
+    glassdoorRating: pick(companyIntel, ["glassdoorRating", "glassdoor_rating"]) || "Unknown",
+    size: pick(companyIntel, ["size"]) || "Unknown",
+    companyIntelSummary: pick(companyIntel, ["summary"]) || "",
+    recentNews: recentNews,
+    // Ensure stageFocus is available (panel reads prep.stageFocus or prep.stage_focus)
+    stageFocus: normalizedPrep?.stageFocus || pick(prepRaw, ["prepFocus", "prep_focus"]) || "",
+    stage_focus: normalizedPrep?.stageFocus || pick(prepRaw, ["prepFocus", "prep_focus"]) || "",
+  }
 
   const job: any = {
     id: row.id,
