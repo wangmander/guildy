@@ -44,17 +44,20 @@ function stageBucketToUiStage(rawStage: any, stageDetail?: any): Stage {
   const s = safeStr(rawStage, "").toUpperCase()
   const detail = safeStr(stageDetail, "").toUpperCase()
 
+  // Direct match
   if ((UI_STAGES as readonly string[]).includes(s)) return s as Stage
 
+  // Stage detail hints
   if (detail.includes("OFFER") || detail.includes("NEGOTIAT")) return "OFFER_DISCUSSION" as Stage
   if (detail.includes("FULL LOOP") || detail.includes("LOOP") || detail.includes("ONSITE")) return "FULL_LOOP" as Stage
-  if (detail.includes("PRESENT")) return "PRESENTATION" as Stage
+  if (detail.includes("ASSESSMENT") || detail.includes("TAKE-HOME") || detail.includes("CODING")) return "PRESENTATION" as Stage
   if (detail.includes("HIRING MANAGER") || detail.includes("HM")) return "HIRING_MANAGER" as Stage
 
+  // Stage field mapping
   if (s.includes("OFFER")) return "OFFER_DISCUSSION" as Stage
   if (s.includes("FULL_LOOP") || s.includes("ONSITE") || s.includes("LOOP")) return "FULL_LOOP" as Stage
-  if (s.includes("PRESENT")) return "PRESENTATION" as Stage
-  if (s.includes("HIRING_MANAGER") || s === "HM" || s.includes("HIRING")) return "HIRING_MANAGER" as Stage
+  if (s.includes("ASSESSMENT")) return "PRESENTATION" as Stage
+  if (s.includes("HM") || s.includes("HIRING")) return "HIRING_MANAGER" as Stage
 
   return "SCREENING" as Stage
 }
@@ -62,20 +65,17 @@ function stageBucketToUiStage(rawStage: any, stageDetail?: any): Stage {
 function normalizeInterviewPrep(prepAny: any): any | undefined {
   if (!prepAny || typeof prepAny !== "object") return undefined
 
-  // Handle both camelCase and snake_case field names from LLM
   const stageFocus = safeStr(
     pick(prepAny, ["stageFocus", "prepFocus", "stage_focus", "prep_focus", "focus"]) ?? "", 
     ""
   )
 
-  // Questions they might ask - try all variants
   const qTheyAsk = safeArr<string>(
-    pick(prepAny, ["questionsTheyMightAsk", "questions_they_might_ask", "questionsTheyMightAskYou", "questions_they_might_ask_you", "theyMightAsk"])
+    pick(prepAny, ["questionsTheyMightAsk", "questions_they_might_ask", "theyMightAsk"])
   ).map((x) => safeStr(x).trim()).filter(Boolean)
 
-  // Questions you should ask - try all variants  
   const qYouAsk = safeArr<string>(
-    pick(prepAny, ["questionsYouShouldAsk", "questions_you_should_ask", "questionsYouShouldAskThem", "questions_you_should_ask_them", "youShouldAsk"])
+    pick(prepAny, ["questionsYouShouldAsk", "questions_you_should_ask", "questionsYouShouldAskThem", "youShouldAsk"])
   ).map((x) => safeStr(x).trim()).filter(Boolean)
 
   const emphasize = safeArr<string>(
@@ -89,38 +89,24 @@ function normalizeInterviewPrep(prepAny: any): any | undefined {
   const homework = safeArr<string>(
     pick(prepAny, ["homeworkNext24h", "homework_next_24h", "homework"])
   ).map((x) => safeStr(x).trim()).filter(Boolean)
-  
-  // Company intel
+
   const companyIntel = pick(prepAny, ["companyIntel", "company_intel"]) || {}
 
-  // Return with BOTH camelCase and snake_case to ensure panel can find them
   return {
-    // Stage focus - both formats
     stageFocus,
     stage_focus: stageFocus,
     prepFocus: stageFocus,
-    
-    // Questions they ask - both formats
     questionsTheyMightAsk: qTheyAsk,
     questions_they_might_ask: qTheyAsk,
-    
-    // Questions you ask - both formats (THIS IS THE KEY FIX)
     questionsYouShouldAsk: qYouAsk,
+    questionsYouShouldAskThem: qYouAsk,
     questions_you_should_ask: qYouAsk,
-    
-    // Emphasize - both formats
     whatToEmphasize: emphasize,
     what_to_emphasize: emphasize,
-    
-    // Stories - both formats
     storiesToPrepare: stories,
     stories_to_prepare: stories,
-    
-    // Homework - both formats
     homeworkNext24h: homework,
     homework_next_24h: homework,
-    
-    // Company intel - both formats
     industry: pick(companyIntel, ["industry"]) || "Unknown",
     size: pick(companyIntel, ["size"]) || "Unknown",
     hqLocation: pick(companyIntel, ["hqLocation", "hq_location"]) || "Unknown",
@@ -128,6 +114,7 @@ function normalizeInterviewPrep(prepAny: any): any | undefined {
     glassdoorRating: pick(companyIntel, ["glassdoorRating", "glassdoor_rating"]) || "Unknown",
     glassdoor_rating: pick(companyIntel, ["glassdoorRating", "glassdoor_rating"]) || "Unknown",
     summary: pick(companyIntel, ["summary"]) || "",
+    companyIntelSummary: pick(companyIntel, ["summary"]) || "",
     recentNews: safeArr(pick(companyIntel, ["recentNews", "recent_news"])),
     recent_news: safeArr(pick(companyIntel, ["recentNews", "recent_news"])),
   }
@@ -137,17 +124,10 @@ function rowToJob(row: any): Job {
   const companyName = safeStr(pick(row, ["company", "company_name"]) ?? "Unknown company", "Unknown company")
   const roleTitle = safeStr(pick(row, ["role", "title"]) ?? "Interview", "Interview")
 
-  const prepRaw =
-    safeJson(pick(row, ["prep_json", "interview_prep_json", "prep", "interview_prep"])) ??
-    safeJson(pick(row, ["llm_prep_json", "llm_prep"])) ??
-    null
-
-  let insightsRaw =
-    safeJson(pick(row, ["insights_json", "insights"])) ??
-    safeJson(pick(row, ["llm_insights_json", "llm_insights"])) ??
-    null
+  const prepRaw = safeJson(pick(row, ["prep_json", "interview_prep_json", "prep", "interview_prep"])) ?? null
+  let insightsRaw = safeJson(pick(row, ["insights_json", "insights"])) ?? null
   
-  // Normalize insights field names (handle both snake_case and camelCase)
+  // Normalize insights field names
   if (insightsRaw) {
     insightsRaw = {
       ...insightsRaw,
@@ -162,7 +142,7 @@ function rowToJob(row: any): Job {
 
   const stageDetail =
     safeStr(pick(row, ["stage_detail", "stageDetail"]) ?? "") ||
-    safeStr(pick(prepRaw, ["stage_detail", "stageDetail", "stageDetailText"]) ?? "") ||
+    safeStr(pick(prepRaw, ["stage_detail", "stageDetail"]) ?? "") ||
     safeStr(pick(insightsRaw, ["stage_detail", "stageDetail"]) ?? "")
 
   const uiStage = stageBucketToUiStage(pick(row, ["stage"]) ?? "", stageDetail)
@@ -173,10 +153,7 @@ function rowToJob(row: any): Job {
   const lastEmailFromName = safeStr(pick(row, ["last_email_from_name", "lastEmailFromName"]) ?? companyName)
   const lastEmailFromEmail = safeStr(pick(row, ["last_email_from_email", "lastEmailFromEmail", "last_email_from"]) ?? "")
 
-  const postingUrl = safeStr(pick(row, ["job_posting_url", "posting_url", "postingUrl"]) ?? "")
-
   const companyIntelRaw =
-    pick(insightsRaw, ["companyIntel", "company_intel"]) ??
     pick(prepRaw, ["companyIntel", "company_intel"]) ??
     safeJson(pick(row, ["company_intel_json", "companyIntelJson"])) ??
     null
@@ -184,30 +161,18 @@ function rowToJob(row: any): Job {
   const companyIntel = companyIntelRaw && typeof companyIntelRaw === "object" ? companyIntelRaw : null
   const recentNews = safeArr<any>(pick(companyIntel, ["recentNews", "recent_news", "news"]))
   
-  // Build interviewPrep with all fields the panel expects
-  // Panel reads: prep.tone, prep.urgency, prep.stageFocus, prep.insights.*, etc.
   const normalizedPrep = normalizeInterviewPrep(prepRaw) || {}
   
-  // Merge all data into interviewPrep so job-detail-panel can find it
+  // Merge insights into interviewPrep for job-detail-panel
   const interviewPrep = {
     ...normalizedPrep,
-    // Add insights fields directly on prep (panel reads prep.tone, prep.urgency, etc.)
     tone: insightsRaw?.tone || "",
     urgency: insightsRaw?.urgency || "",
     responseLikelihood: insightsRaw?.responseLikelihood || "",
+    response_likelihood: insightsRaw?.responseLikelihood || "",
     nextAction: insightsRaw?.nextAction || "",
-    // Also nest insights object (panel reads prep.insights.*)
+    next_action: insightsRaw?.nextAction || "",
     insights: insightsRaw || {},
-    // Add company intel fields (panel reads prep.industry, prep.hqLocation, etc.)
-    industry: pick(companyIntel, ["industry"]) || "Unknown",
-    hqLocation: pick(companyIntel, ["hqLocation", "hq_location"]) || "Unknown",
-    glassdoorRating: pick(companyIntel, ["glassdoorRating", "glassdoor_rating"]) || "Unknown",
-    size: pick(companyIntel, ["size"]) || "Unknown",
-    companyIntelSummary: pick(companyIntel, ["summary"]) || "",
-    recentNews: recentNews,
-    // Ensure stageFocus is available (panel reads prep.stageFocus or prep.stage_focus)
-    stageFocus: normalizedPrep?.stageFocus || pick(prepRaw, ["prepFocus", "prep_focus"]) || "",
-    stage_focus: normalizedPrep?.stageFocus || pick(prepRaw, ["prepFocus", "prep_focus"]) || "",
   }
 
   const job: any = {
@@ -222,9 +187,6 @@ function rowToJob(row: any): Job {
     appliedAt: pick(row, ["applied_at", "created_at", "last_email_at"]) ?? undefined,
     location: safeStr(pick(companyIntel, ["hqLocation", "hq_location"]) ?? pick(row, ["location"]) ?? "Unknown", "Unknown"),
     industry: safeStr(pick(companyIntel, ["industry"]) ?? pick(row, ["industry"]) ?? "Unknown", "Unknown"),
-    postingUrl: postingUrl || undefined,
-    jobType: safeStr(pick(row, ["job_type", "jobType"]) ?? "Unknown", "Unknown"),
-    nextEtaText: safeStr(pick(row, ["next_eta_text", "nextEtaText"]) ?? "TBD", "TBD"),
     stageDetail: stageDetail || undefined,
     lastEmail: lastEmailSubject
       ? {
@@ -271,7 +233,7 @@ class PanelErrorBoundary extends Component<{ children: ReactNode }, { hasError: 
 
 function LoggedOutConnect() {
   return (
-    <div className="min-h-[calc(100vh-64px)] bg-white flex items-center justify-center px-6">
+    <div className="min-h-[calc(100vh-64px)] bg-gray-100 flex items-center justify-center px-6">
       <div className="w-full max-w-xl">
         <div className="flex items-center gap-3 mb-4">
           <div className="h-10 w-10 rounded-full bg-black text-white flex items-center justify-center font-semibold">G</div>
@@ -309,6 +271,27 @@ function LoggedOutConnect() {
   )
 }
 
+// Sync Progress Bar component
+function SyncProgressBar({ progress, message }: { progress: number; message: string }) {
+  return (
+    <div className="px-4 py-3 bg-blue-50 border-b border-blue-100">
+      <div className="flex items-center gap-3 mb-2">
+        <svg className="animate-spin h-4 w-4 text-blue-600" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+        </svg>
+        <span className="text-sm text-blue-700 font-medium">{message}</span>
+      </div>
+      <div className="w-full bg-blue-200 rounded-full h-2">
+        <div 
+          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+    </div>
+  )
+}
+
 export default function PipelinesPage() {
   const { data: session, status } = useSession()
   const userEmail = useMemo(() => session?.user?.email ?? "", [session?.user?.email])
@@ -317,9 +300,12 @@ export default function PipelinesPage() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false)
   
-  // Sync status: 'idle' | 'syncing' | 'done'
+  // Sync status
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'done'>('idle')
+  const [syncProgress, setSyncProgress] = useState(0)
+  const [syncMessage, setSyncMessage] = useState("Connecting to Gmail...")
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null)
+  const [isFirstSync, setIsFirstSync] = useState(true)
 
   const syncInFlightRef = useRef(false)
   const mountedRef = useRef(true)
@@ -344,17 +330,42 @@ export default function PipelinesPage() {
       const stillThere = mapped.find((j) => j.id === prev.id)
       return stillThere ?? mapped[0]
     })
+    
+    // After first load, mark as not first sync
+    if (mapped.length > 0) {
+      setIsFirstSync(false)
+    }
   }, [userEmail])
 
   const syncGmail = useCallback(async (): Promise<boolean> => {
     try {
+      // Simulate progress for better UX
+      setSyncProgress(10)
+      setSyncMessage("Connecting to Gmail...")
+      
+      await new Promise(r => setTimeout(r, 300))
+      setSyncProgress(25)
+      setSyncMessage("Fetching emails...")
+      
       const res = await fetch("/api/gmail/sync", { method: "POST" })
+      
+      setSyncProgress(60)
+      setSyncMessage("Analyzing emails...")
+      
       if (!res.ok) {
         console.error("Gmail sync failed:", await res.text())
         return false
       }
+      
+      setSyncProgress(85)
+      setSyncMessage("Updating pipelines...")
+      
       const data = await res.json()
       console.log("Sync result:", data)
+      
+      setSyncProgress(100)
+      setSyncMessage("Complete!")
+      
       return true
     } catch (err) {
       console.error("Sync error:", err)
@@ -369,6 +380,7 @@ export default function PipelinesPage() {
 
     syncInFlightRef.current = true
     setSyncStatus('syncing')
+    setSyncProgress(0)
 
     try {
       const success = await syncGmail()
@@ -380,12 +392,12 @@ export default function PipelinesPage() {
       syncInFlightRef.current = false
       if (mountedRef.current) {
         setSyncStatus('done')
-        // Reset to idle after 3 seconds so next sync shows properly
         setTimeout(() => {
           if (mountedRef.current) {
             setSyncStatus('idle')
+            setSyncProgress(0)
           }
-        }, 3000)
+        }, 2000)
       }
     }
   }, [status, syncGmail, loadPipelines])
@@ -396,7 +408,7 @@ export default function PipelinesPage() {
 
     if (status !== "authenticated") return
 
-    // Initial sync on mount
+    // Initial sync
     syncAndReload()
 
     // 10-minute interval
@@ -406,13 +418,11 @@ export default function PipelinesPage() {
 
     // Focus handler
     const handleFocus = () => {
-      // Only sync on focus if last sync was more than 2 minutes ago
       if (!lastSyncTime || Date.now() - lastSyncTime.getTime() > 2 * 60 * 1000) {
         syncAndReload()
       }
     }
 
-    // Visibility change handler
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         if (!lastSyncTime || Date.now() - lastSyncTime.getTime() > 2 * 60 * 1000) {
@@ -450,7 +460,6 @@ export default function PipelinesPage() {
     )
   }
 
-  // Format time ago
   const getTimeAgo = () => {
     if (!lastSyncTime) return ""
     const mins = Math.floor((Date.now() - lastSyncTime.getTime()) / 60000)
@@ -461,68 +470,70 @@ export default function PipelinesPage() {
 
   return (
     <div className="mx-auto max-w-7xl h-[calc(100vh-64px)] flex flex-col overflow-hidden">
-      {/* Header with sync status */}
-      <div className="p-4 border-b bg-white">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            {syncStatus === 'syncing' ? (
-              <>
-                <svg className="animate-spin h-4 w-4 text-blue-600" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                <span className="text-sm text-blue-600">Syncing...</span>
-              </>
-            ) : syncStatus === 'done' || lastSyncTime ? (
-              <>
-                <svg className="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <span className="text-sm text-green-600">Up to date</span>
-                {lastSyncTime && (
-                  <span className="text-xs text-gray-400">• {getTimeAgo()}</span>
-                )}
-              </>
-            ) : (
-              <span className="text-sm text-gray-500">Auto-sync</span>
-            )}
-          </div>
-          <span className="text-xs text-gray-400">Checks every 10 min</span>
-        </div>
-      </div>
-
-      {/* Main content */}
-      <div className="flex-1 overflow-y-auto bg-[#F5F5F0]">
-        <div className="flex flex-col lg:flex-row gap-6 p-4">
-          <div className="w-full lg:w-1/2 min-w-0">
-            <div className="px-2">
-              {jobs.length === 0 ? (
-                <div className="rounded-xl border bg-white p-6 text-center">
-                  <div className="text-gray-600 mb-2">No pipelines yet</div>
-                  <div className="text-sm text-gray-500">
-                    {syncStatus === 'syncing'
-                      ? "Scanning your Gmail for recruiting emails…"
-                      : "We'll automatically detect interview emails and create pipelines."}
-                  </div>
-                </div>
+      {/* Progress bar for first sync or syncing state */}
+      {syncStatus === 'syncing' && (isFirstSync || jobs.length === 0) ? (
+        <SyncProgressBar progress={syncProgress} message={syncMessage} />
+      ) : (
+        <div className="px-4 py-3 border-b bg-white">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              {syncStatus === 'syncing' ? (
+                <>
+                  <svg className="animate-spin h-4 w-4 text-blue-600" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <span className="text-sm text-blue-600">Syncing...</span>
+                </>
               ) : (
-                <PipelineCardList
-                  jobs={jobs}
-                  selectedJobId={selectedJob?.id}
-                  onSelect={(job) => {
-                    setSelectedJob(job)
-                    setIsMobileSheetOpen(true)
-                  }}
-                  onActionClick={(job) => {
-                    setSelectedJob(job)
-                    setIsMobileSheetOpen(true)
-                  }}
-                />
+                <>
+                  <svg className="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-sm text-green-600">Up to date</span>
+                  {lastSyncTime && (
+                    <span className="text-xs text-gray-400">• {getTimeAgo()}</span>
+                  )}
+                </>
               )}
             </div>
+            <span className="text-xs text-gray-400">Checks every 10 min</span>
+          </div>
+        </div>
+      )}
+
+      {/* Main content - gray background for whole area */}
+      <div className="flex-1 overflow-hidden bg-gray-100">
+        <div className="flex h-full">
+          {/* Left column - Pipelines (gray background) */}
+          <div className="w-full lg:w-1/2 min-w-0 overflow-y-auto p-4">
+            {jobs.length === 0 ? (
+              <div className="rounded-xl border bg-[#FAFAF8] p-6 text-center">
+                <div className="text-gray-600 mb-2 font-medium">No pipelines yet</div>
+                <div className="text-sm text-gray-500">
+                  {syncStatus === 'syncing'
+                    ? "Scanning your Gmail for recruiting emails…"
+                    : "We'll automatically detect interview emails and create pipelines."}
+                </div>
+              </div>
+            ) : (
+              <PipelineCardList
+                jobs={jobs}
+                selectedJobId={selectedJob?.id}
+                onSelect={(job) => {
+                  setSelectedJob(job)
+                  setIsMobileSheetOpen(true)
+                }}
+                onActionClick={(job) => {
+                  setSelectedJob(job)
+                  setIsMobileSheetOpen(true)
+                }}
+              />
+            )}
           </div>
 
-          <div className="hidden lg:block w-full lg:w-1/2 min-w-0">
+          {/* Right column - Details (white background) */}
+          <div className="hidden lg:block w-1/2 min-w-0 bg-white border-l overflow-y-auto">
             <PanelErrorBoundary>
               <JobDetailPanel job={selectedJob} onSaveNotes={() => {}} />
             </PanelErrorBoundary>
