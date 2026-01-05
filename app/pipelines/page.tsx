@@ -10,9 +10,6 @@ import { signIn, useSession } from "next-auth/react"
 
 const UI_STAGES = ["SCREENING", "HIRING_MANAGER", "PRESENTATION", "FULL_LOOP", "OFFER_DISCUSSION"] as const
 
-// ============================================================
-// UTILITY FUNCTIONS
-// ============================================================
 function safeStr(v: any, fallback = ""): string {
   if (typeof v === "string") return v
   if (v == null) return fallback
@@ -199,9 +196,6 @@ function rowToJob(row: any): Job {
   return job as Job
 }
 
-// ============================================================
-// ERROR BOUNDARY
-// ============================================================
 class PanelErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; errorText: string }> {
   constructor(props: { children: ReactNode }) {
     super(props)
@@ -226,9 +220,6 @@ class PanelErrorBoundary extends Component<{ children: ReactNode }, { hasError: 
   }
 }
 
-// ============================================================
-// LOGGED OUT STATE
-// ============================================================
 function LoggedOutConnect() {
   return (
     <div className="min-h-[calc(100vh-64px)] bg-white flex items-center justify-center px-6">
@@ -269,9 +260,6 @@ function LoggedOutConnect() {
   )
 }
 
-// ============================================================
-// MAIN PIPELINES PAGE
-// ============================================================
 export default function PipelinesPage() {
   const { data: session, status } = useSession()
   const userEmail = useMemo(() => session?.user?.email ?? "", [session?.user?.email])
@@ -279,16 +267,14 @@ export default function PipelinesPage() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false)
-  const [syncing, setSyncing] = useState(false)
-  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null)
+  
+  // Sync status: 'idle' | 'syncing' | 'done'
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'done'>('idle')
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null)
 
-  // Refs for sync control
   const syncInFlightRef = useRef(false)
   const mountedRef = useRef(true)
 
-  // ============================================================
-  // LOAD PIPELINES FROM SUPABASE
-  // ============================================================
   const loadPipelines = useCallback(async () => {
     if (!userEmail) return
 
@@ -311,9 +297,6 @@ export default function PipelinesPage() {
     })
   }, [userEmail])
 
-  // ============================================================
-  // SYNC GMAIL - Calls backend API
-  // ============================================================
   const syncGmail = useCallback(async (): Promise<boolean> => {
     try {
       const res = await fetch("/api/gmail/sync", { method: "POST" })
@@ -330,38 +313,35 @@ export default function PipelinesPage() {
     }
   }, [])
 
-  // ============================================================
-  // SYNC AND RELOAD - Main sync function with guard
-  // ============================================================
   const syncAndReload = useCallback(async () => {
     if (status !== "authenticated") return
     if (syncInFlightRef.current) return
     if (!mountedRef.current) return
 
     syncInFlightRef.current = true
-    setSyncing(true)
+    setSyncStatus('syncing')
 
     try {
       const success = await syncGmail()
       if (success && mountedRef.current) {
         await loadPipelines()
-        setLastSyncAt(new Date().toLocaleTimeString())
+        setLastSyncTime(new Date())
       }
     } finally {
       syncInFlightRef.current = false
       if (mountedRef.current) {
-        setSyncing(false)
+        setSyncStatus('done')
+        // Reset to idle after 3 seconds so next sync shows properly
+        setTimeout(() => {
+          if (mountedRef.current) {
+            setSyncStatus('idle')
+          }
+        }, 3000)
       }
     }
   }, [status, syncGmail, loadPipelines])
 
-  // ============================================================
-  // AUTO-SYNC SETUP
-  // - On mount (initial load)
-  // - Every 10 minutes
-  // - On window focus
-  // - On visibility change (tab becomes visible)
-  // ============================================================
+  // Auto-sync setup
   useEffect(() => {
     mountedRef.current = true
 
@@ -373,17 +353,22 @@ export default function PipelinesPage() {
     // 10-minute interval
     const intervalId = setInterval(() => {
       syncAndReload()
-    }, 10 * 60 * 1000) // 10 minutes
+    }, 10 * 60 * 1000)
 
     // Focus handler
     const handleFocus = () => {
-      syncAndReload()
+      // Only sync on focus if last sync was more than 2 minutes ago
+      if (!lastSyncTime || Date.now() - lastSyncTime.getTime() > 2 * 60 * 1000) {
+        syncAndReload()
+      }
     }
 
-    // Visibility change handler (for when tab becomes active)
+    // Visibility change handler
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        syncAndReload()
+        if (!lastSyncTime || Date.now() - lastSyncTime.getTime() > 2 * 60 * 1000) {
+          syncAndReload()
+        }
       }
     }
 
@@ -396,18 +381,14 @@ export default function PipelinesPage() {
       window.removeEventListener("focus", handleFocus)
       document.removeEventListener("visibilitychange", handleVisibilityChange)
     }
-  }, [status, syncAndReload])
+  }, [status, syncAndReload, lastSyncTime])
 
-  // Also load pipelines when auth changes (without full sync)
   useEffect(() => {
     if (status === "authenticated") {
       loadPipelines()
     }
   }, [status, loadPipelines])
 
-  // ============================================================
-  // RENDER
-  // ============================================================
   if (status === "unauthenticated") {
     return <LoggedOutConnect />
   }
@@ -420,40 +401,57 @@ export default function PipelinesPage() {
     )
   }
 
+  // Format time ago
+  const getTimeAgo = () => {
+    if (!lastSyncTime) return ""
+    const mins = Math.floor((Date.now() - lastSyncTime.getTime()) / 60000)
+    if (mins < 1) return "just now"
+    if (mins === 1) return "1 min ago"
+    return `${mins} min ago`
+  }
+
   return (
     <div className="mx-auto max-w-7xl h-[calc(100vh-64px)] flex flex-col overflow-hidden">
       {/* Header with sync status */}
       <div className="p-4 border-b bg-white">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-700">Auto-sync</span>
-            {syncing ? (
-              <span className="text-sm text-blue-600 flex items-center gap-1">
-                <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
+            {syncStatus === 'syncing' ? (
+              <>
+                <svg className="animate-spin h-4 w-4 text-blue-600" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
-                Syncing…
-              </span>
-            ) : lastSyncAt ? (
-              <span className="text-xs text-gray-500">Last sync: {lastSyncAt}</span>
-            ) : null}
+                <span className="text-sm text-blue-600">Syncing...</span>
+              </>
+            ) : syncStatus === 'done' || lastSyncTime ? (
+              <>
+                <svg className="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span className="text-sm text-green-600">Up to date</span>
+                {lastSyncTime && (
+                  <span className="text-xs text-gray-400">• {getTimeAgo()}</span>
+                )}
+              </>
+            ) : (
+              <span className="text-sm text-gray-500">Auto-sync</span>
+            )}
           </div>
-          <span className="text-xs text-gray-500">Checks Gmail every 10 min + on focus</span>
+          <span className="text-xs text-gray-400">Checks every 10 min</span>
         </div>
       </div>
 
-      {/* Main content - single scroll container */}
+      {/* Main content */}
       <div className="flex-1 overflow-y-auto bg-[#F5F5F0]">
         <div className="flex flex-col lg:flex-row gap-6 p-4">
-          {/* Left column - Pipeline list */}
           <div className="w-full lg:w-1/2 min-w-0">
             <div className="px-2">
               {jobs.length === 0 ? (
                 <div className="rounded-xl border bg-white p-6 text-center">
                   <div className="text-gray-600 mb-2">No pipelines yet</div>
                   <div className="text-sm text-gray-500">
-                    {syncing
+                    {syncStatus === 'syncing'
                       ? "Scanning your Gmail for recruiting emails…"
                       : "We'll automatically detect interview emails and create pipelines."}
                   </div>
@@ -475,7 +473,6 @@ export default function PipelinesPage() {
             </div>
           </div>
 
-          {/* Right column - Job details */}
           <div className="hidden lg:block w-full lg:w-1/2 min-w-0">
             <PanelErrorBoundary>
               <JobDetailPanel job={selectedJob} onSaveNotes={() => {}} />
@@ -483,7 +480,6 @@ export default function PipelinesPage() {
           </div>
         </div>
 
-        {/* Mobile bottom sheet */}
         <MobileBottomSheet
           isOpen={isMobileSheetOpen}
           onClose={() => setIsMobileSheetOpen(false)}
