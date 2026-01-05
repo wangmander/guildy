@@ -62,18 +62,20 @@ function stageBucketToUiStage(rawStage: any, stageDetail?: any): Stage {
 function normalizeInterviewPrep(prepAny: any): any | undefined {
   if (!prepAny || typeof prepAny !== "object") return undefined
 
-  // Handle both camelCase and snake_case field names
+  // Handle both camelCase and snake_case field names from LLM
   const stageFocus = safeStr(
-    pick(prepAny, ["prepFocus", "stageFocus", "prep_focus", "stage_focus", "focus"]) ?? "", 
+    pick(prepAny, ["stageFocus", "prepFocus", "stage_focus", "prep_focus", "focus"]) ?? "", 
     ""
   )
 
+  // Questions they might ask - try all variants
   const qTheyAsk = safeArr<string>(
-    pick(prepAny, ["questionsTheyMightAsk", "questionsTheyMightAskYou", "questions_they_might_ask_you", "theyMightAsk"])
+    pick(prepAny, ["questionsTheyMightAsk", "questions_they_might_ask", "questionsTheyMightAskYou", "questions_they_might_ask_you", "theyMightAsk"])
   ).map((x) => safeStr(x).trim()).filter(Boolean)
 
+  // Questions you should ask - try all variants  
   const qYouAsk = safeArr<string>(
-    pick(prepAny, ["questionsYouShouldAsk", "questionsYouShouldAskThem", "questions_you_should_ask_them", "youShouldAsk"])
+    pick(prepAny, ["questionsYouShouldAsk", "questions_you_should_ask", "questionsYouShouldAskThem", "questions_you_should_ask_them", "youShouldAsk"])
   ).map((x) => safeStr(x).trim()).filter(Boolean)
 
   const emphasize = safeArr<string>(
@@ -87,44 +89,48 @@ function normalizeInterviewPrep(prepAny: any): any | undefined {
   const homework = safeArr<string>(
     pick(prepAny, ["homeworkNext24h", "homework_next_24h", "homework"])
   ).map((x) => safeStr(x).trim()).filter(Boolean)
+  
+  // Company intel
+  const companyIntel = pick(prepAny, ["companyIntel", "company_intel"]) || {}
 
-  if (stageFocus || qTheyAsk.length || qYouAsk.length || emphasize.length || stories.length || homework.length) {
-    return {
-      stageFocus,
-      questionsTheyMightAsk: qTheyAsk,
-      questionsYouShouldAskThem: qYouAsk,
-      whatToEmphasize: emphasize,
-      storiesToPrepare: stories,
-      homeworkNext24h: homework,
-      interviewer: {
-        name: safeStr(pick(prepAny, ["interviewerName", "interviewer_name"]) ?? "Interviewer", "Interviewer"),
-        role: safeStr(pick(prepAny, ["interviewerRole", "interviewer_role"]) ?? "Hiring Team", "Hiring Team"),
-        bio: safeStr(pick(prepAny, ["interviewerBio", "interviewer_bio"]) ?? "", ""),
-        goals: safeArr<string>(pick(prepAny, ["interviewerGoals", "interviewer_goals"])).map((x) => safeStr(x)).filter(Boolean),
-      },
-      sampleQuestions: qTheyAsk,
-      tips: emphasize,
-    }
+  // Return with BOTH camelCase and snake_case to ensure panel can find them
+  return {
+    // Stage focus - both formats
+    stageFocus,
+    stage_focus: stageFocus,
+    prepFocus: stageFocus,
+    
+    // Questions they ask - both formats
+    questionsTheyMightAsk: qTheyAsk,
+    questions_they_might_ask: qTheyAsk,
+    
+    // Questions you ask - both formats (THIS IS THE KEY FIX)
+    questionsYouShouldAsk: qYouAsk,
+    questions_you_should_ask: qYouAsk,
+    
+    // Emphasize - both formats
+    whatToEmphasize: emphasize,
+    what_to_emphasize: emphasize,
+    
+    // Stories - both formats
+    storiesToPrepare: stories,
+    stories_to_prepare: stories,
+    
+    // Homework - both formats
+    homeworkNext24h: homework,
+    homework_next_24h: homework,
+    
+    // Company intel - both formats
+    industry: pick(companyIntel, ["industry"]) || "Unknown",
+    size: pick(companyIntel, ["size"]) || "Unknown",
+    hqLocation: pick(companyIntel, ["hqLocation", "hq_location"]) || "Unknown",
+    hq_location: pick(companyIntel, ["hqLocation", "hq_location"]) || "Unknown",
+    glassdoorRating: pick(companyIntel, ["glassdoorRating", "glassdoor_rating"]) || "Unknown",
+    glassdoor_rating: pick(companyIntel, ["glassdoorRating", "glassdoor_rating"]) || "Unknown",
+    summary: pick(companyIntel, ["summary"]) || "",
+    recentNews: safeArr(pick(companyIntel, ["recentNews", "recent_news"])),
+    recent_news: safeArr(pick(companyIntel, ["recentNews", "recent_news"])),
   }
-
-  const interviewer = pick(prepAny, ["interviewer"])
-  const sampleQuestions = safeArr<string>(pick(prepAny, ["sampleQuestions", "sample_questions"]))
-  const tips = safeArr<string>(pick(prepAny, ["tips"]))
-
-  if (interviewer && typeof interviewer === "object") {
-    return {
-      interviewer: {
-        name: safeStr(pick(interviewer, ["name"]) ?? "Interviewer", "Interviewer"),
-        role: safeStr(pick(interviewer, ["role"]) ?? "Hiring Team", "Hiring Team"),
-        bio: safeStr(pick(interviewer, ["bio"]) ?? "", ""),
-        goals: safeArr<string>(pick(interviewer, ["goals"])).map((x) => safeStr(x)).filter(Boolean),
-      },
-      sampleQuestions: sampleQuestions.map((x) => safeStr(x)).filter(Boolean),
-      tips: tips.map((x) => safeStr(x)).filter(Boolean),
-    }
-  }
-
-  return undefined
 }
 
 function rowToJob(row: any): Job {
