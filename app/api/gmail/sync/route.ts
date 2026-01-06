@@ -2,17 +2,13 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { google } from "googleapis"
-import { createClient } from "@supabase/supabase-js"
+import { supabaseAdmin } from "@/lib/supabaseAdmin"
 import OpenAI from "openai"
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 const openaiKey = process.env.OPENAI_API_KEY
 
-// Create clients only if env vars are available (prevents build-time errors)
-const supabase = supabaseUrl && supabaseAnonKey
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null
+// Service role client from supabaseAdmin (bypasses RLS)
+const supabase = supabaseAdmin
 
 const openai = openaiKey ? new OpenAI({ apiKey: openaiKey }) : null
 
