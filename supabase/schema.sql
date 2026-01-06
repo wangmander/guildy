@@ -60,7 +60,7 @@ CREATE INDEX IF NOT EXISTS idx_sr_started_at ON sync_runs(started_at DESC);
 
 -- ============================================================
 -- Ensure pipelines table has all needed columns
--- (These are ALTER statements - they'll fail gracefully if 
+-- (These are ALTER statements - they will be ignored if 
 --  columns already exist)
 -- ============================================================
 
@@ -86,43 +86,11 @@ EXCEPTION WHEN others THEN NULL;
 END $$;
 
 -- ============================================================
--- RLS Policies (if RLS is enabled)
--- These allow users to only see their own data
--- ============================================================
-
--- Enable RLS on new tables
-ALTER TABLE email_processing_log ENABLE ROW LEVEL SECURITY;
-ALTER TABLE sync_runs ENABLE ROW LEVEL SECURITY;
-
--- Policies for email_processing_log
-DROP POLICY IF EXISTS "Users can view own processing logs" ON email_processing_log;
-CREATE POLICY "Users can view own processing logs" ON email_processing_log
-  FOR SELECT USING (auth.jwt() ->> 'email' = user_email);
-
-DROP POLICY IF EXISTS "Users can insert own processing logs" ON email_processing_log;
-CREATE POLICY "Users can insert own processing logs" ON email_processing_log
-  FOR INSERT WITH CHECK (auth.jwt() ->> 'email' = user_email);
-
--- Policies for sync_runs
-DROP POLICY IF EXISTS "Users can view own sync runs" ON sync_runs;
-CREATE POLICY "Users can view own sync runs" ON sync_runs
-  FOR SELECT USING (auth.jwt() ->> 'email' = user_email);
-
-DROP POLICY IF EXISTS "Users can insert own sync runs" ON sync_runs;
-CREATE POLICY "Users can insert own sync runs" ON sync_runs
-  FOR INSERT WITH CHECK (auth.jwt() ->> 'email' = user_email);
-
-DROP POLICY IF EXISTS "Users can update own sync runs" ON sync_runs;
-CREATE POLICY "Users can update own sync runs" ON sync_runs
-  FOR UPDATE USING (auth.jwt() ->> 'email' = user_email);
-
--- ============================================================
--- IMPORTANT: If using anon key from server routes, you may need
--- to temporarily disable RLS or use service role key.
--- To disable RLS (less secure, but simpler):
---
--- ALTER TABLE email_processing_log DISABLE ROW LEVEL SECURITY;
--- ALTER TABLE sync_runs DISABLE ROW LEVEL SECURITY;
--- ALTER TABLE pipelines DISABLE ROW LEVEL SECURITY;
--- ALTER TABLE emails DISABLE ROW LEVEL SECURITY;
+-- NOTE: We use the Supabase SERVICE ROLE KEY in API routes,
+-- which bypasses RLS. This is secure because:
+-- 1. The service role key is only stored server-side
+-- 2. API routes validate the user session before querying
+-- 3. Queries filter by user_email from the authenticated session
+-- 
+-- No RLS policies are needed for server-side operations.
 -- ============================================================

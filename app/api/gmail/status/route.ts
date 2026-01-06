@@ -1,15 +1,10 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { createClient } from "@supabase/supabase-js"
+import { supabaseAdmin } from "@/lib/supabaseAdmin"
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-// Create client only if env vars are available (prevents build-time errors)
-const supabase = supabaseUrl && supabaseAnonKey
-    ? createClient(supabaseUrl, supabaseAnonKey)
-    : null
+// Service role client (bypasses RLS)
+const supabase = supabaseAdmin
 
 export async function GET() {
     try {
@@ -39,7 +34,6 @@ export async function GET() {
 
         if (syncError) {
             console.error("[SYNC_STATUS] Error fetching sync_runs:", syncError)
-            // Return empty if table doesn't exist yet
             return NextResponse.json({
                 lastSync: null,
                 recentRuns: [],
@@ -60,9 +54,9 @@ export async function GET() {
 
         if (!logError && recentLogs) {
             totals = {
-                detected: recentLogs.filter(l => l.detected).length,
-                rejected: recentLogs.filter(l => !l.detected && l.action_taken === "rejected").length,
-                errors: recentLogs.filter(l => l.action_taken === "error").length,
+                detected: recentLogs.filter((l: any) => l.detected).length,
+                rejected: recentLogs.filter((l: any) => !l.detected && l.action_taken === "rejected").length,
+                errors: recentLogs.filter((l: any) => l.action_taken === "error").length,
             }
         }
 
@@ -83,7 +77,7 @@ export async function GET() {
                 errors: lastRun.errors,
                 errorMessage: lastRun.error_message,
             } : null,
-            recentRuns: (syncRuns || []).map(r => ({
+            recentRuns: (syncRuns || []).map((r: any) => ({
                 id: r.id,
                 startedAt: r.started_at,
                 status: r.status,
