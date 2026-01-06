@@ -5,12 +5,16 @@ import { google } from "googleapis"
 import { createClient } from "@supabase/supabase-js"
 import OpenAI from "openai"
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+const openaiKey = process.env.OPENAI_API_KEY
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! })
+// Create clients only if env vars are available (prevents build-time errors)
+const supabase = supabaseUrl && supabaseAnonKey
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null
+
+const openai = openaiKey ? new OpenAI({ apiKey: openaiKey }) : null
 
 // ============================================================
 // INSTANT REJECT - Minimal, only obvious non-recruiting
@@ -19,19 +23,19 @@ const INSTANT_REJECT_PATTERNS: string[] = [
   // Shipping/Orders
   "your order has shipped", "tracking number", "out for delivery",
   "order confirmation", "shipping confirmation",
-  
+
   // Payments
   "payment received", "payment failed", "your receipt",
-  
+
   // Marketing
   "% off", "limited time offer", "flash sale",
   "promo code", "coupon code", "exclusive deal",
   "unsubscribe here", "manage email preferences",
-  
+
   // Security
   "verify your email address", "verification code",
   "reset your password", "suspicious sign-in",
-  
+
   // Social
   "friend request", "tagged you", "liked your post",
   "new follower", "commented on",
@@ -57,7 +61,7 @@ const PHRASE_WEIGHTS: Array<{ phrase: string; w: number }> = [
   { phrase: "your candidacy", w: 10 },
   { phrase: "not moving forward", w: 10 },
   { phrase: "regret to inform", w: 10 },
-  
+
   // === STRONG SIGNALS (8-9) ===
   { phrase: "phone screen", w: 9 },
   { phrase: "screening call", w: 9 },
@@ -89,7 +93,7 @@ const PHRASE_WEIGHTS: Array<{ phrase: string; w: number }> = [
   { phrase: "interested in your background", w: 9 },
   { phrase: "impressed by your", w: 8 },
   { phrase: "love to move you forward", w: 9 },
-  
+
   // === MEDIUM SIGNALS (6-7) ===
   { phrase: "schedule a call", w: 7 },
   { phrase: "schedule time", w: 7 },
@@ -122,7 +126,7 @@ const PHRASE_WEIGHTS: Array<{ phrase: string; w: number }> = [
   { phrase: "lever", w: 6 },
   { phrase: "ashby", w: 6 },
   { phrase: "workday", w: 6 },
-  
+
   // === SUPPORTIVE SIGNALS (4-5) ===
   { phrase: "availability", w: 5 },
   { phrase: "share your availability", w: 6 },
@@ -171,15 +175,15 @@ function normalizeForMatch(s: string) {
   return " " + normalize(s) + " "
 }
 
-function shouldInstantReject(textLower: string, fromEmail: string): boolean {
+function shouldInstantReject(textLower: string, fromEmail: string): { reject: boolean; reason?: string } {
   const fromLower = fromEmail.toLowerCase()
   for (const p of BLOCKED_SENDER_PATTERNS) {
-    if (fromLower.includes(p)) return true
+    if (fromLower.includes(p)) return { reject: true, reason: `blocked_sender:${p}` }
   }
   for (const p of INSTANT_REJECT_PATTERNS) {
-    if (textLower.includes(p.toLowerCase())) return true
+    if (textLower.includes(p.toLowerCase())) return { reject: true, reason: `instant_reject:${p}` }
   }
-  return false
+  return { reject: false }
 }
 
 function hasBannerImages(html: string): boolean {
@@ -375,8 +379,13 @@ Analyze and return JSON:
 }`
 
   try {
+    if (!openai) {
+      console.error("[LLM] OpenAI not configured")
+      return null
+    }
+
     console.log(`[LLM] Calling OpenAI for: "${input.subject.slice(0, 40)}"`)
-    
+
     const res = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0.1,
@@ -389,7 +398,7 @@ Analyze and return JSON:
 
     const content = res.choices?.[0]?.message?.content || ""
     console.log(`[LLM] Response: ${content.slice(0, 200)}...`)
-    
+
     const parsed = safeJsonParse<any>(content)
     if (!parsed) {
       console.error("[LLM] JSON parse failed")
@@ -430,12 +439,103 @@ Analyze and return JSON:
 }
 
 // ============================================================
+// INSTRUMENTATION HELPERS
+// ============================================================
+async function createSyncRun(userEmail: string): Promise<string | null> {
+  if (!supabase) return null
+  try {
+    const { data, error } = await supabase
+      .from("sync_runs")
+      .insert({ user_email: userEmail, status: "running" })
+      .select("id")
+      .single()
+
+    if (error) {
+      console.error("[SYNC] Failed to create sync_run:", error)
+      return null
+    }
+    return data.id
+  } catch (err) {
+    console.error("[SYNC] Exception creating sync_run:", err)
+    return null
+  }
+}
+
+async function updateSyncRun(
+  syncRunId: string | null,
+  stats: { scanned: number; detected: number; inserted: number; updated: number; skipped: number; rejected: number; errors: number },
+  status: "completed" | "failed",
+  errorMessage?: string
+) {
+  if (!syncRunId || !supabase) return
+
+  try {
+    await supabase
+      .from("sync_runs")
+      .update({
+        completed_at: new Date().toISOString(),
+        status,
+        scanned: stats.scanned,
+        detected: stats.detected,
+        inserted: stats.inserted,
+        updated: stats.updated,
+        skipped: stats.skipped,
+        rejected: stats.rejected,
+        errors: stats.errors,
+        error_message: errorMessage,
+      })
+      .eq("id", syncRunId)
+  } catch (err) {
+    console.error("[SYNC] Failed to update sync_run:", err)
+  }
+}
+
+async function logEmailProcessing(log: {
+  user_email: string
+  gmail_thread_id?: string
+  gmail_message_id: string
+  from_email?: string
+  from_domain?: string
+  company_guess?: string
+  subject?: string
+  detected: boolean
+  score?: number
+  strongest_hit?: number
+  matched_keywords?: string[]
+  rejection_reason?: string
+  llm_called?: boolean
+  llm_is_recruiting?: boolean
+  llm_company?: string
+  llm_role?: string
+  llm_stage?: string
+  created_pipeline_id?: string
+  action_taken: string
+}) {
+  if (!supabase) return
+  try {
+    await supabase.from("email_processing_log").insert(log)
+  } catch (err) {
+    console.error("[SYNC] Failed to log email processing:", err)
+  }
+}
+
+// ============================================================
 // MAIN SYNC
 // ============================================================
 export async function POST() {
   console.log("[SYNC] ========== Starting sync ==========")
-  
+
+  const stats = { scanned: 0, detected: 0, inserted: 0, updated: 0, skipped: 0, rejected: 0, errors: 0 }
+  let syncRunId: string | null = null
+  let userEmail = ""
+
   try {
+    // Guard against missing env vars
+    if (!supabase || !openai) {
+      console.log("[SYNC] Missing env vars - supabase or openai not configured")
+      return NextResponse.json({ error: "NOT_CONFIGURED" }, { status: 500 })
+    }
+
     const session = await getServerSession(authOptions)
     if (!session) {
       console.log("[SYNC] No session")
@@ -443,13 +543,17 @@ export async function POST() {
     }
 
     const accessToken = (session as any).accessToken
-    const userEmail = session.user?.email
+    userEmail = session.user?.email || ""
     if (!accessToken || !userEmail) {
       console.log("[SYNC] Missing token or email")
       return NextResponse.json({ error: "MISSING TOKEN OR EMAIL" }, { status: 401 })
     }
 
     console.log(`[SYNC] User: ${userEmail}`)
+
+    // Create sync run record for tracking
+    syncRunId = await createSyncRun(userEmail)
+    console.log(`[SYNC] Created sync_run: ${syncRunId}`)
 
     const auth = new google.auth.OAuth2()
     auth.setCredentials({ access_token: accessToken })
@@ -470,18 +574,29 @@ export async function POST() {
     console.log(`[SYNC] Gmail query: ${q}`)
 
     // Fetch messages
-    let messages: Array<{ id?: string | null }> = []
+    let messages: Array<{ id?: string | null; threadId?: string | null }> = []
     let pageToken: string | undefined
 
-    do {
-      const page = await gmail.users.messages.list({ userId: "me", q, maxResults: 50, pageToken })
-      messages = messages.concat(page.data.messages ?? [])
-      pageToken = page.data.nextPageToken ?? undefined
-    } while (pageToken && messages.length < 200)
+    try {
+      do {
+        const page = await gmail.users.messages.list({ userId: "me", q, maxResults: 50, pageToken })
+        messages = messages.concat(page.data.messages ?? [])
+        pageToken = page.data.nextPageToken ?? undefined
+      } while (pageToken && messages.length < 200)
+    } catch (gmailErr: any) {
+      console.error("[SYNC] Gmail API error (likely token expired):", gmailErr?.message)
+      stats.errors++
+      await updateSyncRun(syncRunId, stats, "failed", `Gmail API error: ${gmailErr?.message}`)
+      return NextResponse.json({
+        error: "GMAIL_API_ERROR",
+        message: gmailErr?.message,
+        hint: "Your Gmail access may have expired. Please reconnect Gmail.",
+        stats
+      }, { status: 401 })
+    }
 
+    stats.scanned = messages.length
     console.log(`[SYNC] Found ${messages.length} messages to process`)
-
-    const stats = { scanned: messages.length, skipped: 0, rejected: 0, accepted: 0, inserted: 0, updated: 0 }
 
     const { data: existingPipelines } = await supabase
       .from("pipelines")
@@ -494,6 +609,8 @@ export async function POST() {
     for (const msg of messages) {
       if (!msg.id) continue
 
+      const threadId = msg.threadId || undefined
+
       // Check if already processed
       const { data: existing } = await supabase
         .from("emails")
@@ -504,6 +621,7 @@ export async function POST() {
 
       if (existing) {
         stats.skipped++
+        // Don't log skipped emails to avoid noise - they're already in the system
         continue
       }
 
@@ -511,8 +629,17 @@ export async function POST() {
       let full
       try {
         full = await gmail.users.messages.get({ userId: "me", id: msg.id, format: "full" })
-      } catch (err) {
-        console.error(`[SYNC] Failed to fetch message ${msg.id}:`, err)
+      } catch (err: any) {
+        console.error(`[SYNC] Failed to fetch message ${msg.id}:`, err?.message)
+        stats.errors++
+        await logEmailProcessing({
+          user_email: userEmail,
+          gmail_thread_id: threadId,
+          gmail_message_id: msg.id,
+          detected: false,
+          rejection_reason: `fetch_error: ${err?.message}`,
+          action_taken: "error",
+        })
         continue
       }
 
@@ -525,6 +652,7 @@ export async function POST() {
       const fromMatch = fromHeader.match(/^(.+?)\s*<(.+?)>$/)
       const fromName = fromMatch ? fromMatch[1].replace(/"/g, "").trim() : fromHeader
       const fromEmail = fromMatch ? fromMatch[2].trim() : fromHeader
+      const fromDomain = fromEmail.split("@")[1]?.split(".")[0] || ""
 
       const internalMs = full.data.internalDate ? Number(full.data.internalDate) : NaN
       const receivedAt = Number.isFinite(internalMs) ? new Date(internalMs).toISOString() : new Date(dateHeader || Date.now()).toISOString()
@@ -535,9 +663,21 @@ export async function POST() {
       const textLower = fullText.toLowerCase()
 
       // Gate 1: Instant reject
-      if (shouldInstantReject(textLower, fromEmail)) {
-        console.log(`[REJECT] Instant reject: "${subject.slice(0, 30)}"`)
+      const instantRejectResult = shouldInstantReject(textLower, fromEmail)
+      if (instantRejectResult.reject) {
+        console.log(`[REJECT] Instant reject: "${subject.slice(0, 30)}" - ${instantRejectResult.reason}`)
         stats.rejected++
+        await logEmailProcessing({
+          user_email: userEmail,
+          gmail_thread_id: threadId,
+          gmail_message_id: msg.id,
+          from_email: fromEmail,
+          from_domain: fromDomain,
+          subject: subject.slice(0, 200),
+          detected: false,
+          rejection_reason: instantRejectResult.reason,
+          action_taken: "rejected",
+        })
         continue
       }
 
@@ -545,6 +685,17 @@ export async function POST() {
       if (hasBannerImages(bodyHtml)) {
         console.log(`[REJECT] Banner images: "${subject.slice(0, 30)}"`)
         stats.rejected++
+        await logEmailProcessing({
+          user_email: userEmail,
+          gmail_thread_id: threadId,
+          gmail_message_id: msg.id,
+          from_email: fromEmail,
+          from_domain: fromDomain,
+          subject: subject.slice(0, 200),
+          detected: false,
+          rejection_reason: "banner_images",
+          action_taken: "rejected",
+        })
         continue
       }
 
@@ -555,11 +706,24 @@ export async function POST() {
       if (score < MIN_SCORE || strongest < MIN_STRONG_HIT) {
         console.log(`[REJECT] Low score`)
         stats.rejected++
+        await logEmailProcessing({
+          user_email: userEmail,
+          gmail_thread_id: threadId,
+          gmail_message_id: msg.id,
+          from_email: fromEmail,
+          from_domain: fromDomain,
+          subject: subject.slice(0, 200),
+          detected: false,
+          score,
+          strongest_hit: strongest,
+          matched_keywords: hits,
+          rejection_reason: `low_score:${score}<${MIN_SCORE}_or_strongest:${strongest}<${MIN_STRONG_HIT}`,
+          action_taken: "rejected",
+        })
         continue
       }
 
       // Find existing pipeline
-      const fromDomain = fromEmail.split("@")[1]?.split(".")[0] || ""
       const existingPipeline = pipelines.find((p: any) => {
         const pc = normalize(p.company)
         const ed = normalize(fromDomain)
@@ -596,16 +760,52 @@ export async function POST() {
       if (!analysis) {
         console.log(`[REJECT] LLM returned null`)
         stats.rejected++
+        stats.errors++
+        await logEmailProcessing({
+          user_email: userEmail,
+          gmail_thread_id: threadId,
+          gmail_message_id: msg.id,
+          from_email: fromEmail,
+          from_domain: fromDomain,
+          company_guess: fromDomain,
+          subject: subject.slice(0, 200),
+          detected: false,
+          score,
+          strongest_hit: strongest,
+          matched_keywords: hits,
+          llm_called: true,
+          rejection_reason: "llm_returned_null",
+          action_taken: "error",
+        })
         continue
       }
 
       if (!analysis.is_recruiting) {
         console.log(`[REJECT] LLM: not recruiting`)
         stats.rejected++
+        await logEmailProcessing({
+          user_email: userEmail,
+          gmail_thread_id: threadId,
+          gmail_message_id: msg.id,
+          from_email: fromEmail,
+          from_domain: fromDomain,
+          company_guess: analysis.company,
+          subject: subject.slice(0, 200),
+          detected: false,
+          score,
+          strongest_hit: strongest,
+          matched_keywords: hits,
+          llm_called: true,
+          llm_is_recruiting: false,
+          llm_company: analysis.company,
+          llm_role: analysis.role,
+          rejection_reason: "llm_not_recruiting",
+          action_taken: "rejected",
+        })
         continue
       }
 
-      stats.accepted++
+      stats.detected++
 
       const company = analysis.company || "Unknown"
       const role = analysis.role || "Unknown"
@@ -621,10 +821,11 @@ export async function POST() {
       })
 
       let pipelineId: string
+      let actionTaken: string
 
       if (!matchedPipeline) {
         console.log(`[NEW] Creating pipeline: ${company}`)
-        
+
         const { data: created, error } = await supabase
           .from("pipelines")
           .insert({
@@ -646,12 +847,34 @@ export async function POST() {
 
         if (error) {
           console.error(`[ERROR] Insert pipeline:`, error)
+          stats.errors++
+          await logEmailProcessing({
+            user_email: userEmail,
+            gmail_thread_id: threadId,
+            gmail_message_id: msg.id,
+            from_email: fromEmail,
+            from_domain: fromDomain,
+            company_guess: company,
+            subject: subject.slice(0, 200),
+            detected: true,
+            score,
+            strongest_hit: strongest,
+            matched_keywords: hits,
+            llm_called: true,
+            llm_is_recruiting: true,
+            llm_company: company,
+            llm_role: role,
+            llm_stage: analysis.stage_bucket,
+            rejection_reason: `pipeline_insert_error: ${error.message}`,
+            action_taken: "error",
+          })
           continue
         }
 
         pipelineId = created.id
         pipelines.push(created)
         stats.inserted++
+        actionTaken = "created_pipeline"
 
       } else {
         pipelineId = matchedPipeline.id
@@ -659,7 +882,7 @@ export async function POST() {
 
         console.log(`[UPDATE] ${company}: ${oldStage} → ${uiStage}`)
 
-        await supabase
+        const { error: updateError } = await supabase
           .from("pipelines")
           .update({
             stage: uiStage,
@@ -674,12 +897,18 @@ export async function POST() {
           })
           .eq("id", pipelineId)
 
+        if (updateError) {
+          console.error(`[ERROR] Update pipeline:`, updateError)
+          stats.errors++
+        }
+
         matchedPipeline.stage = uiStage
         stats.updated++
+        actionTaken = "updated_pipeline"
       }
 
       // Insert email
-      await supabase.from("emails").insert({
+      const { error: emailInsertError } = await supabase.from("emails").insert({
         user_email: userEmail,
         pipeline_id: pipelineId,
         gmail_message_id: msg.id,
@@ -688,15 +917,46 @@ export async function POST() {
         snippet,
         received_at: receivedAt,
       })
+
+      if (emailInsertError) {
+        console.error(`[ERROR] Insert email:`, emailInsertError)
+        stats.errors++
+      }
+
+      // Log successful processing
+      await logEmailProcessing({
+        user_email: userEmail,
+        gmail_thread_id: threadId,
+        gmail_message_id: msg.id,
+        from_email: fromEmail,
+        from_domain: fromDomain,
+        company_guess: company,
+        subject: subject.slice(0, 200),
+        detected: true,
+        score,
+        strongest_hit: strongest,
+        matched_keywords: hits,
+        llm_called: true,
+        llm_is_recruiting: true,
+        llm_company: company,
+        llm_role: role,
+        llm_stage: analysis.stage_bucket,
+        created_pipeline_id: pipelineId,
+        action_taken: actionTaken,
+      })
     }
 
     console.log(`[SYNC] ========== Complete ==========`)
     console.log(`[SYNC] Stats:`, stats)
-    
-    return NextResponse.json({ success: true, stats })
+
+    await updateSyncRun(syncRunId, stats, "completed")
+
+    return NextResponse.json({ success: true, stats, syncRunId })
 
   } catch (err: any) {
     console.error("[SYNC] Fatal error:", err)
-    return NextResponse.json({ error: "EXCEPTION", message: err?.message }, { status: 500 })
+    stats.errors++
+    await updateSyncRun(syncRunId, stats, "failed", err?.message)
+    return NextResponse.json({ error: "EXCEPTION", message: err?.message, stats }, { status: 500 })
   }
 }

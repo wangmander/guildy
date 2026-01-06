@@ -66,7 +66,7 @@ function normalizeInterviewPrep(prepAny: any): any | undefined {
   if (!prepAny || typeof prepAny !== "object") return undefined
 
   const stageFocus = safeStr(
-    pick(prepAny, ["stageFocus", "prepFocus", "stage_focus", "prep_focus", "focus"]) ?? "", 
+    pick(prepAny, ["stageFocus", "prepFocus", "stage_focus", "prep_focus", "focus"]) ?? "",
     ""
   )
 
@@ -126,7 +126,7 @@ function rowToJob(row: any): Job {
 
   const prepRaw = safeJson(pick(row, ["prep_json", "interview_prep_json", "prep", "interview_prep"])) ?? null
   let insightsRaw = safeJson(pick(row, ["insights_json", "insights"])) ?? null
-  
+
   // Normalize insights field names
   if (insightsRaw) {
     insightsRaw = {
@@ -160,9 +160,9 @@ function rowToJob(row: any): Job {
 
   const companyIntel = companyIntelRaw && typeof companyIntelRaw === "object" ? companyIntelRaw : null
   const recentNews = safeArr<any>(pick(companyIntel, ["recentNews", "recent_news", "news"]))
-  
+
   const normalizedPrep = normalizeInterviewPrep(prepRaw) || {}
-  
+
   // Merge insights into interviewPrep for job-detail-panel
   const interviewPrep = {
     ...normalizedPrep,
@@ -190,12 +190,12 @@ function rowToJob(row: any): Job {
     stageDetail: stageDetail || undefined,
     lastEmail: lastEmailSubject
       ? {
-          fromName: lastEmailFromName,
-          fromEmail: lastEmailFromEmail,
-          subject: lastEmailSubject,
-          receivedAt: lastEmailAt ? String(lastEmailAt) : "",
-          snippet: lastEmailSnippet,
-        }
+        fromName: lastEmailFromName,
+        fromEmail: lastEmailFromEmail,
+        subject: lastEmailSubject,
+        receivedAt: lastEmailAt ? String(lastEmailAt) : "",
+        snippet: lastEmailSnippet,
+      }
       : undefined,
     notes: safeStr(pick(row, ["notes"]) ?? "", ""),
     interviewPrep,
@@ -215,7 +215,7 @@ class PanelErrorBoundary extends Component<{ children: ReactNode }, { hasError: 
   static getDerivedStateFromError(err: any) {
     return { hasError: true, errorText: safeStr(err?.message ?? err, "Panel crashed") }
   }
-  componentDidCatch() {}
+  componentDidCatch() { }
   render() {
     if (this.state.hasError) {
       return (
@@ -283,7 +283,7 @@ function SyncProgressBar({ progress, message }: { progress: number; message: str
         <span className="text-sm text-blue-700 font-medium">{message}</span>
       </div>
       <div className="w-full bg-blue-200 rounded-full h-2">
-        <div 
+        <div
           className="bg-blue-600 h-2 rounded-full transition-all duration-300"
           style={{ width: `${progress}%` }}
         />
@@ -299,19 +299,30 @@ export default function PipelinesPage() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false)
-  
+
   // Sync status
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'done'>('idle')
   const [syncProgress, setSyncProgress] = useState(0)
   const [syncMessage, setSyncMessage] = useState("Connecting to Gmail...")
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null)
   const [isFirstSync, setIsFirstSync] = useState(true)
+  const [syncStats, setSyncStats] = useState<{
+    scanned: number
+    detected: number
+    inserted: number
+    updated: number
+    skipped: number
+    rejected: number
+    errors: number
+  } | null>(null)
+  const [showSyncDetails, setShowSyncDetails] = useState(false)
+  const [syncError, setSyncError] = useState<string | null>(null)
 
   const syncInFlightRef = useRef(false)
   const mountedRef = useRef(true)
 
   const loadPipelines = useCallback(async () => {
-    if (!userEmail) return
+    if (!userEmail || !supabase) return
 
     const { data, error } = await supabase
       .from("pipelines")
@@ -330,7 +341,7 @@ export default function PipelinesPage() {
       const stillThere = mapped.find((j) => j.id === prev.id)
       return stillThere ?? mapped[0]
     })
-    
+
     // After first load, mark as not first sync
     if (mapped.length > 0) {
       setIsFirstSync(false)
@@ -339,36 +350,47 @@ export default function PipelinesPage() {
 
   const syncGmail = useCallback(async (): Promise<boolean> => {
     try {
+      setSyncError(null)
       // Simulate progress for better UX
       setSyncProgress(10)
       setSyncMessage("Connecting to Gmail...")
-      
+
       await new Promise(r => setTimeout(r, 300))
       setSyncProgress(25)
       setSyncMessage("Fetching emails...")
-      
+
       const res = await fetch("/api/gmail/sync", { method: "POST" })
-      
+
       setSyncProgress(60)
       setSyncMessage("Analyzing emails...")
-      
-      if (!res.ok) {
-        console.error("Gmail sync failed:", await res.text())
-        return false
-      }
-      
-      setSyncProgress(85)
-      setSyncMessage("Updating pipelines...")
-      
+
       const data = await res.json()
       console.log("Sync result:", data)
-      
+
+      if (!res.ok) {
+        console.error("Gmail sync failed:", data)
+        setSyncError(data.hint || data.message || "Sync failed")
+        if (data.stats) {
+          setSyncStats(data.stats)
+        }
+        return false
+      }
+
+      setSyncProgress(85)
+      setSyncMessage("Updating pipelines...")
+
+      // Store the stats from the sync
+      if (data.stats) {
+        setSyncStats(data.stats)
+      }
+
       setSyncProgress(100)
       setSyncMessage("Complete!")
-      
+
       return true
-    } catch (err) {
+    } catch (err: any) {
       console.error("Sync error:", err)
+      setSyncError(err?.message || "Network error")
       return false
     }
   }, [])
@@ -485,6 +507,13 @@ export default function PipelinesPage() {
                   </svg>
                   <span className="text-sm text-blue-600">Syncing...</span>
                 </>
+              ) : syncError ? (
+                <>
+                  <svg className="h-4 w-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <span className="text-sm text-amber-600">{syncError}</span>
+                </>
               ) : (
                 <>
                   <svg className="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -497,8 +526,60 @@ export default function PipelinesPage() {
                 </>
               )}
             </div>
-            <span className="text-xs text-gray-400">Checks every 10 min</span>
+            <button
+              onClick={() => setShowSyncDetails(!showSyncDetails)}
+              className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+            >
+              {showSyncDetails ? "Hide" : "Show"} details
+              <svg className={`h-3 w-3 transition-transform ${showSyncDetails ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
           </div>
+
+          {/* Expandable sync stats panel */}
+          {showSyncDetails && syncStats && (
+            <div className="mt-3 p-3 bg-gray-50 rounded-lg border">
+              <div className="text-xs font-semibold text-gray-700 mb-2">Last Sync Results</div>
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-center">
+                <div className="bg-white rounded p-2 border">
+                  <div className="text-lg font-bold text-gray-900">{syncStats.scanned}</div>
+                  <div className="text-[10px] text-gray-500">Scanned</div>
+                </div>
+                <div className="bg-white rounded p-2 border">
+                  <div className="text-lg font-bold text-green-600">{syncStats.detected}</div>
+                  <div className="text-[10px] text-gray-500">Detected</div>
+                </div>
+                <div className="bg-white rounded p-2 border">
+                  <div className="text-lg font-bold text-blue-600">{syncStats.inserted}</div>
+                  <div className="text-[10px] text-gray-500">New Jobs</div>
+                </div>
+                <div className="bg-white rounded p-2 border">
+                  <div className="text-lg font-bold text-purple-600">{syncStats.updated}</div>
+                  <div className="text-[10px] text-gray-500">Updated</div>
+                </div>
+                <div className="bg-white rounded p-2 border">
+                  <div className="text-lg font-bold text-gray-400">{syncStats.rejected}</div>
+                  <div className="text-[10px] text-gray-500">Rejected</div>
+                </div>
+                <div className="bg-white rounded p-2 border">
+                  <div className={`text-lg font-bold ${syncStats.errors > 0 ? 'text-red-600' : 'text-gray-400'}`}>{syncStats.errors}</div>
+                  <div className="text-[10px] text-gray-500">Errors</div>
+                </div>
+              </div>
+              {lastSyncTime && (
+                <div className="mt-2 text-[10px] text-gray-400 text-right">
+                  Last sync: {lastSyncTime.toLocaleTimeString()} • Checks every 10 min
+                </div>
+              )}
+            </div>
+          )}
+
+          {showSyncDetails && !syncStats && (
+            <div className="mt-3 p-3 bg-gray-50 rounded-lg border text-sm text-gray-500">
+              No sync data yet. Sync will run automatically.
+            </div>
+          )}
         </div>
       )}
 
@@ -535,7 +616,7 @@ export default function PipelinesPage() {
           {/* Right column - Details (white background) */}
           <div className="hidden lg:block w-1/2 min-w-0 bg-white border-l overflow-y-auto">
             <PanelErrorBoundary>
-              <JobDetailPanel job={selectedJob} onSaveNotes={() => {}} />
+              <JobDetailPanel job={selectedJob} onSaveNotes={() => { }} />
             </PanelErrorBoundary>
           </div>
         </div>
@@ -544,7 +625,7 @@ export default function PipelinesPage() {
           isOpen={isMobileSheetOpen}
           onClose={() => setIsMobileSheetOpen(false)}
           job={selectedJob}
-          onSaveNotes={() => {}}
+          onSaveNotes={() => { }}
         />
       </div>
     </div>
