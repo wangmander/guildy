@@ -5,7 +5,6 @@ import type { Job, Stage, Status } from "@/types"
 import { PipelineCardList } from "@/components/pipeline-card-list"
 import { JobDetailPanel } from "@/components/job-detail-panel"
 import { MobileBottomSheet } from "@/components/mobile-bottom-sheet"
-import { supabase } from "@/lib/supabaseClient"
 import { signIn, useSession } from "next-auth/react"
 
 const UI_STAGES = ["SCREENING", "HIRING_MANAGER", "PRESENTATION", "FULL_LOOP", "OFFER_DISCUSSION"] as const
@@ -324,27 +323,33 @@ export default function PipelinesPage() {
   const loadPipelines = useCallback(async () => {
     if (!userEmail) return
 
-    const { data, error } = await supabase
-      .from("pipelines")
-      .select("*")
-      .eq("user_email", userEmail)
-      .order("last_email_at", { ascending: false })
+    try {
+      const res = await fetch("/api/pipelines")
+      if (!res.ok) {
+        console.error("[PIPELINES] Failed to fetch pipelines:", res.status)
+        return
+      }
+      const json = await res.json()
+      const data = json.pipelines || []
 
-    if (error || !mountedRef.current) return
+      if (!mountedRef.current) return
 
-    const mapped = (data ?? []).map(rowToJob)
+      const mapped = (data ?? []).map(rowToJob)
 
-    setJobs(mapped)
-    setSelectedJob((prev) => {
-      if (!mapped.length) return null
-      if (!prev) return mapped[0]
-      const stillThere = mapped.find((j) => j.id === prev.id)
-      return stillThere ?? mapped[0]
-    })
+      setJobs(mapped)
+      setSelectedJob((prev) => {
+        if (!mapped.length) return null
+        if (!prev) return mapped[0]
+        const stillThere = mapped.find((j: Job) => j.id === prev.id)
+        return stillThere ?? mapped[0]
+      })
 
-    // After first load, mark as not first sync
-    if (mapped.length > 0) {
-      setIsFirstSync(false)
+      // After first load, mark as not first sync
+      if (mapped.length > 0) {
+        setIsFirstSync(false)
+      }
+    } catch (err) {
+      console.error("[PIPELINES] Error fetching pipelines:", err)
     }
   }, [userEmail])
 
