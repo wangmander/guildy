@@ -322,7 +322,7 @@ export default function PipelinesPage() {
   const mountedRef = useRef(true)
 
   const loadPipelines = useCallback(async () => {
-    if (!userEmail || !supabase) return
+    if (!userEmail) return
 
     const { data, error } = await supabase
       .from("pipelines")
