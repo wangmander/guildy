@@ -57,11 +57,67 @@ CREATE INDEX IF NOT EXISTS idx_sr_user_email ON sync_runs(user_email);
 CREATE INDEX IF NOT EXISTS idx_sr_started_at ON sync_runs(started_at DESC);
 
 -- ============================================================
+-- TABLE: pipelines
+-- ============================================================
+CREATE TABLE IF NOT EXISTS pipelines (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_email TEXT NOT NULL,
+  company TEXT,
+  role TEXT,
+  stage TEXT DEFAULT 'SCREENING',
+  stage_detail TEXT,
+  status TEXT DEFAULT 'WAITING',
+  last_email_subject TEXT,
+  last_email_at TIMESTAMPTZ,
+  last_email_from TEXT,
+  last_email_from_name TEXT,
+  last_email_snippet TEXT,
+  insights_json JSONB,
+  prep_json JSONB,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_pipelines_user_email ON pipelines(user_email);
+CREATE INDEX IF NOT EXISTS idx_pipelines_last_email_at ON pipelines(last_email_at DESC);
+
+-- ============================================================
+-- TABLE: emails
+-- ============================================================
+CREATE TABLE IF NOT EXISTS emails (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_email TEXT NOT NULL,
+  pipeline_id UUID REFERENCES pipelines(id) ON DELETE CASCADE,
+  gmail_message_id TEXT NOT NULL,
+  from_email TEXT,
+  subject TEXT,
+  snippet TEXT,
+  received_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_emails_user_email ON emails(user_email);
+CREATE INDEX IF NOT EXISTS idx_emails_pipeline_id ON emails(pipeline_id);
+CREATE INDEX IF NOT EXISTS idx_emails_gmail_message_id ON emails(gmail_message_id);
+
+-- ============================================================
 -- Ensure pipelines table has all needed columns
 -- ============================================================
+DO $$ BEGIN ALTER TABLE pipelines ADD COLUMN IF NOT EXISTS user_email TEXT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE pipelines ADD COLUMN IF NOT EXISTS company TEXT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE pipelines ADD COLUMN IF NOT EXISTS role TEXT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE pipelines ADD COLUMN IF NOT EXISTS stage TEXT; EXCEPTION WHEN others THEN NULL; END $$;
 DO $$ BEGIN ALTER TABLE pipelines ADD COLUMN IF NOT EXISTS stage_detail TEXT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE pipelines ADD COLUMN IF NOT EXISTS last_email_subject TEXT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE pipelines ADD COLUMN IF NOT EXISTS last_email_at TIMESTAMPTZ; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE pipelines ADD COLUMN IF NOT EXISTS last_email_from TEXT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE pipelines ADD COLUMN IF NOT EXISTS last_email_from_name TEXT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE pipelines ADD COLUMN IF NOT EXISTS last_email_snippet TEXT; EXCEPTION WHEN others THEN NULL; END $$;
 DO $$ BEGIN ALTER TABLE pipelines ADD COLUMN IF NOT EXISTS insights_json JSONB; EXCEPTION WHEN others THEN NULL; END $$;
 DO $$ BEGIN ALTER TABLE pipelines ADD COLUMN IF NOT EXISTS prep_json JSONB; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE pipelines ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'WAITING'; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE pipelines ADD COLUMN IF NOT EXISTS notes TEXT; EXCEPTION WHEN others THEN NULL; END $$;
+DO $$ BEGIN ALTER TABLE pipelines ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW(); EXCEPTION WHEN others THEN NULL; END $$;
 
 -- ============================================================
 -- ENABLE RLS ON ALL TABLES
