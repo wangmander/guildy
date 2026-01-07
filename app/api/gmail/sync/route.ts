@@ -303,16 +303,18 @@ STAGE DETECTION RULES:
    - Recruiter reaching out about a role
    - Scheduling initial call/phone screen/intro call
    - Keywords: "reaching out", "your application", "schedule a call", "phone screen", "intro call", "select slots", "share your availability", "love to chat", "discuss the role", "30 minute Zoom"
+   - NOTE: If the email is asking for availability for a "chat" or "call" and it's the first interaction, it is a RECRUITER_SCREEN.
 
 2. HM_SCREEN - Meeting with hiring manager
    - Email explicitly mentions "hiring manager", "your future manager", "team lead", "engineering manager", "design manager", "director", "VP"
    - Meeting with the person you'd report to
    - NOT just any interview - specifically with a manager
+   - Key phrase: "hiring manager screen" or "chat with [Name] (Engineering Manager)"
 
 3. ASSESSMENT - Technical test or take-home
    - Coding challenge, technical assessment, take-home project
    - Case study, design exercise, portfolio review
-   - Keywords: "take-home", "coding challenge", "assessment", "HackerRank", "complete by", "assignment"
+   - Keywords: "take-home", "coding challenge", "assessment", "HackerRank", "Karat", "CodeSignal", "complete by", "assignment"
 
 4. LOOP - Final rounds, onsite, multiple interviews
    - Onsite or virtual onsite
@@ -321,18 +323,19 @@ STAGE DETECTION RULES:
    - Final round before offer
    - Keywords: "onsite", "virtual onsite", "full loop", "panel", "final round", "meet the team", "interview day"
 
-5. OFFER - Offer extended
+5. OFFER - Offer extended or in negotiation
    - Offer letter, compensation discussion
-   - Keywords: "offer letter", "pleased to offer", "compensation", "salary", "equity", "start date", "background check"
+   - Keywords: "offer letter", "pleased to offer", "compensation", "salary", "equity", "start date", "background check", "verbal offer"
 
 6. REJECTED - Application rejected
-   - Keywords: "not moving forward", "other candidates", "position filled", "unfortunately", "regret"
+   - Keywords: "not moving forward", "other candidates", "position filled", "unfortunately", "regret", "went with another candidate"
 
 IMPORTANT RULES:
 - If scheduling first call/conversation → RECRUITER_SCREEN (even if it's a "Zoom interview")
 - Only use HM_SCREEN if hiring manager/team lead is explicitly mentioned
 - For thread with multiple emails, use the CURRENT state based on latest email
 - Default to RECRUITER_SCREEN if unclear
+- If the email is just "Application Received" with no action required, it is RECRUITER_SCREEN.
 
 Return ONLY valid JSON.`
 
