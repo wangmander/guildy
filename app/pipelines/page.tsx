@@ -139,6 +139,8 @@ function rowToJob(row: any): Job {
     }
   }
 
+  const predictedStages = safeArr<string>(pick(row, ["predicted_stages", "predictedStages"]))
+
   const stageDetail =
     safeStr(pick(row, ["stage_detail", "stageDetail"]) ?? "") ||
     safeStr(pick(prepRaw, ["stage_detail", "stageDetail"]) ?? "") ||
@@ -201,6 +203,7 @@ function rowToJob(row: any): Job {
     recentNews,
     companyIntel: companyIntel || undefined,
     insights: insightsRaw || undefined,
+    predicted_stages: predictedStages.length > 0 ? predictedStages : undefined,
   }
 
   return job as Job

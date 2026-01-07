@@ -56,4 +56,8 @@ export interface Job {
   scheduledMeeting?: ScheduledMeeting
   interviewPrep?: InterviewPrep
   recentNews?: NewsItem[]
+  stageDetail?: string
+  insights?: any
+  companyIntel?: any
+  predicted_stages?: string[]
 }

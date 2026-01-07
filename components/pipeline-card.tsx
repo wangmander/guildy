@@ -14,22 +14,42 @@ interface PipelineCardProps {
   isSelected: boolean
 }
 
-const visualStages = ["Screening", "Hiring manager", "Presentation", "Full loop", "Offer discussion"]
+const defaultVisualStages = ["Screening", "Hiring manager", "Presentation", "Full loop", "Offer discussion"]
 
 export function PipelineCard({ job, onClick, onActionClick, isSelected }: PipelineCardProps) {
+  const visualStages = job.predicted_stages && job.predicted_stages.length > 0
+    ? job.predicted_stages
+    : defaultVisualStages
+
   const getVisualStageIndex = (stage: string) => {
-    switch (stage) {
-      case "APPLIED":
-        return 0 // Screening
-      case "RECRUITER_SCREEN":
-        return 1 // Hiring manager
-      case "INTERVIEW":
-        return 3 // Full loop (skipping Presentation for general interview)
-      case "OFFER":
-        return 4 // Offer discussion
-      default:
-        return 0
+    // 1. Try to find exact or fuzzy match in our visual stages
+    const stageNorm = stage.toLowerCase().replace("_", " ")
+    const idx = visualStages.findIndex(s => {
+      const sNorm = s.toLowerCase()
+      return sNorm.includes(stageNorm) || stageNorm.includes(sNorm)
+    })
+    if (idx !== -1) return idx
+
+    // 2. Fallback to mapping default enum to index
+    // If using bespoke stages, we map the enum to a relative position
+    const enumMap: Record<string, number> = {
+      "APPLIED": 0,
+      "RECRUITER_SCREEN": 0,
+      "SCREENING": 0,
+      "HIRING_MANAGER": 1,
+      "HM": 1,
+      "PRESENTATION": 2,
+      "FULL_LOOP": 3,
+      "OFFER_DISCUSSION": 4,
+      "OFFER": 4
     }
+
+    // Scale the index to the length of visualStages
+    const defaultIdx = enumMap[stage] ?? 0
+    if (visualStages === defaultVisualStages) return defaultIdx
+
+    // Map 0-4 range to 0-(length-1) range
+    return Math.floor((defaultIdx / 4) * (visualStages.length - 1))
   }
 
   const currentStageIndex = getVisualStageIndex(job.stage)
@@ -57,9 +77,8 @@ export function PipelineCard({ job, onClick, onActionClick, isSelected }: Pipeli
 
   return (
     <Card
-      className={`p-3 cursor-pointer transition-all hover:shadow-md border-2 rounded-[3rem] ${
-        isSelected ? "border-blue-500 shadow-md" : "border-transparent hover:border-gray-200"
-      }`}
+      className={`p-3 cursor-pointer transition-all hover:shadow-md border-2 rounded-[3rem] ${isSelected ? "border-blue-500 shadow-md" : "border-transparent hover:border-gray-200"
+        }`}
       style={isSelected ? { backgroundColor: "#F8FAFF" } : { backgroundColor: "white" }}
       onClick={onClick}
     >
@@ -90,9 +109,8 @@ export function PipelineCard({ job, onClick, onActionClick, isSelected }: Pipeli
           return (
             <div
               key={stage}
-              className={`flex-1 py-2.5 px-1 text-center text-[10px] font-medium rounded-md transition-all relative z-10 flex items-center justify-center ${
-                isActive ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
-              }`}
+              className={`flex-1 py-2.5 px-1 text-center text-[10px] font-medium rounded-md transition-all relative z-10 flex items-center justify-center ${isActive ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"
+                }`}
             >
               {stage}
             </div>

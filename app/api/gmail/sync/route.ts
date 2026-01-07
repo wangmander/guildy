@@ -337,6 +337,17 @@ IMPORTANT RULES:
 - Default to RECRUITER_SCREEN if unclear
 - If the email is just "Application Received" with no action required, it is RECRUITER_SCREEN.
 
+OUTPUT FORMAT:
+{
+  "is_recruiting": boolean,
+  "company": string,
+  "role": string,
+  "stage_bucket": "RECRUITER_SCREEN" | "HM_SCREEN" | "ASSESSMENT" | "LOOP" | "OFFER" | "REJECTED",
+  "stage_detail": string, // One liner context
+  "predicted_stages": string[], // Bespoke predictive pipeline stages based on company/role (e.g. ["Recruiter Chat", "HM Screen", "Design Exercise", "Final Loop", "Offer"])
+  "action_needed": string | null
+}
+
 Return ONLY valid JSON.`
 
   const userPrompt = `${threadContext}From: ${input.fromName} <${input.fromEmail}>
@@ -430,6 +441,7 @@ Analyze and return JSON:
         homeworkNext24h: parsed.prep?.homeworkNext24h?.length ? parsed.prep.homeworkNext24h : ["Research company", "Review job description", "Prepare intro pitch"],
         companyIntel: parsed.prep?.companyIntel || { industry: "Unknown", size: "Unknown", hqLocation: "Unknown", glassdoorRating: "Unknown", summary: "", recentNews: [] },
       },
+      predicted_stages: parsed.predicted_stages || [],
     }
   } catch (err) {
     console.error("[LLM] Error:", err)
@@ -840,6 +852,7 @@ export async function POST() {
             last_email_snippet: snippet,
             insights_json: analysis.insights,
             prep_json: analysis.prep,
+            predicted_stages: analysis.predicted_stages,
           })
           .select()
           .single()
@@ -893,6 +906,7 @@ export async function POST() {
             last_email_snippet: snippet,
             insights_json: analysis.insights,
             prep_json: analysis.prep,
+            predicted_stages: analysis.predicted_stages,
           })
           .eq("id", pipelineId)
 
