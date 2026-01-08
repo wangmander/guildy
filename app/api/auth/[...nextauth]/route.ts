@@ -18,6 +18,9 @@ const handler = NextAuth({
   session: {
     strategy: "jwt",
   },
+  pages: {
+    signIn: "/login",
+  },
   callbacks: {
     async jwt({ token, account }) {
       // 🔑 THIS IS THE CRITICAL LINE
@@ -29,7 +32,7 @@ const handler = NextAuth({
     async session({ session, token }) {
       // 🔑 EXPOSE ACCESS TOKEN TO API ROUTES
       if (token.accessToken) {
-        ;(session as any).accessToken = token.accessToken
+        ; (session as any).accessToken = token.accessToken
       }
       return session
     },
