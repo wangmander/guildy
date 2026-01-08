@@ -337,6 +337,24 @@ IMPORTANT RULES:
 - Default to RECRUITER_SCREEN if unclear
 - If the email is just "Application Received" with no action required, it is RECRUITER_SCREEN.
 
+PREP GENERATION RULES (CRITICAL):
+1. STAGE CONTEXT:
+   - RECRUITER_SCREEN: Focus ONLY on high-level interest, logistics, culture, and "Tell me about yourself". DO NOT ask deep technical/process questions.
+     * Good Qs for Recruiter: "Company culture?", "Team structure?", "Runway/Stability?" (if startup), "Next steps?".
+     * Bad Qs for Recruiter: "What is your design process?", "Code stack details?".
+   - HM_SCREEN: Focus on past work, collaboration, leadership, and role expectations.
+   - LOOP/FINAL: Deep dive into craft, specific challenges, behavioral questions.
+
+2. COMPANY CONTEXT (Infer from domain/name):
+   - STARTUP (Seed-Series B): Focus on speed, ambiguity, shipping, impact, runway.
+   - ENTERPRISE/PUBLIC: Focus on stakeholders, process, scale, complexity, career ladder.
+   - AGENCY: Focus on client management, speed, variety.
+
+3. BESPOKE QUALITY:
+   - DO NOT generate generic questions like "What are your strengths?".
+   - Generate specific questions based on the Company + Role + Stage.
+   - Example for Airbnb + Designer + Recruiter: "How is the design team structured around the new Categories feature?" (Show research).
+
 OUTPUT FORMAT:
 {
   "is_recruiting": boolean,
@@ -345,7 +363,31 @@ OUTPUT FORMAT:
   "stage_bucket": "RECRUITER_SCREEN" | "HM_SCREEN" | "ASSESSMENT" | "LOOP" | "OFFER" | "REJECTED",
   "stage_detail": string, // One liner context
   "predicted_stages": string[], // Bespoke predictive pipeline stages based on company/role (e.g. ["Recruiter Chat", "HM Screen", "Design Exercise", "Final Loop", "Offer"])
-  "action_needed": string | null
+  "action_needed": string | null,
+  "insights": {
+    "stageReason": string,
+    "waitingOn": "you" | "them",
+    "nextAction": string,
+    "urgency": "low" | "med" | "high",
+    "responseLikelihood": "low" | "med" | "high",
+    "tone": "friendly" | "formal" | "neutral" | "urgent"
+  },
+  "prep": {
+    "stageFocus": string,
+    "questionsTheyMightAsk": string[],
+    "questionsYouShouldAsk": string[],
+    "whatToEmphasize": string[],
+    "storiesToPrepare": string[],
+    "homeworkNext24h": string[],
+    "companyIntel": {
+      "industry": string,
+      "size": string,
+      "hqLocation": string,
+      "glassdoorRating": string,
+      "summary": string,
+      "recentNews": string[]
+    }
+  }
 }
 
 Return ONLY valid JSON.`
