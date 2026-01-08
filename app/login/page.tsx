@@ -21,80 +21,49 @@ export default function LoginPage() {
         status: "ACTIVE"
     } as any
 
-    const mockJob2: Job = {
-        id: "mock2",
-        company: { name: "TechCorp", id: "2" },
-        role: "Product Designer",
-        title: "Product Designer",
-        stage: "APPLIED",
-        stage_detail: "Screening",
-        tags: ["Design", "Product"],
-        predicted_stages: ["Screening", "Portfolio", "Design Challenge", "Team Match", "Offer"],
-        status: "ACTIVE"
-    } as any
-
     return (
-        <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2 bg-[#F8F9FA]">
-            {/* Left Column: Content */}
-            <div className="flex flex-col justify-center items-start px-8 md:px-16 lg:px-24 py-12">
-                {/* Logo */}
-                <div className="flex items-center gap-2 mb-12">
-                    <div className="w-8 h-8 bg-[#482C4C] rounded-lg flex items-center justify-center text-white font-serif font-bold text-xl">
-                        G
+        <div className="min-h-screen bg-[#F0F2F5] flex items-center justify-center p-4">
+            <div className="max-w-[980px] w-full grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-start pt-20">
+                {/* Left Column: Brand & Value Prop (Facebook style: Left aligned text) */}
+                <div className="flex flex-col items-center lg:items-start text-center lg:text-left space-y-4 py-8">
+                    <div className="flex items-center gap-2 mb-2">
+                        <div className="w-10 h-10 bg-[#482C4C] rounded-lg flex items-center justify-center text-white font-serif font-bold text-2xl">
+                            G
+                        </div>
+                        <span className="text-[#482C4C] font-semibold text-3xl tracking-tight">guildy</span>
                     </div>
-                    <span className="text-[#482C4C] font-semibold text-xl tracking-tight">guildy</span>
+
+                    <h1 className="text-4xl lg:text-5xl font-bold text-[#1C1E21] leading-tight">
+                        Where interviews <br />
+                        <span className="text-[#482C4C]">get slayed</span>
+                    </h1>
+
+                    <p className="text-lg lg:text-2xl text-[#1C1E21] max-w-md leading-normal">
+                        Track every pipeline. Prep every round. Close the damn offer.
+                    </p>
                 </div>
 
-                {/* Hero Text */}
-                <h1 className="text-5xl md:text-6xl font-bold text-[#2D2D2D] leading-[1.1] mb-6 tracking-tight">
-                    Where interviews <br />
-                    <span className="text-[#482C4C]">get slayed</span>
-                </h1>
-
-                <p className="text-lg text-gray-600 mb-10 max-w-md leading-relaxed">
-                    Track every pipeline. Prep every round. <span className="font-semibold text-gray-900">Close the damn offer.</span>
-                </p>
-
-                {/* Auth Buttons */}
-                <button
-                    onClick={() => signIn("google", { callbackUrl: "/pipelines" })}
-                    className="bg-[#2D2D2D] text-white px-8 py-4 rounded-full font-medium text-lg hover:bg-black transition-all shadow-lg hover:shadow-xl flex items-center gap-3 w-full md:w-auto justify-center group"
-                >
-                    <svg className="w-5 h-5 text-white" viewBox="0 0 24 24">
-                        <path
-                            fill="currentColor"
-                            d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"
-                        />
-                    </svg>
-                    Request early access
-                    <span className="group-hover:translate-x-1 transition-transform">→</span>
-                </button>
-
-                <p className="mt-4 text-sm text-gray-500">Free to try for beta users</p>
-            </div>
-
-            {/* Right Column: Visuals */}
-            <div className="hidden lg:flex relative bg-[#F4F4F5] items-center justify-center overflow-hidden">
-                {/* Decorative background blob */}
-                <div className="absolute w-[600px] h-[600px] bg-purple-100 rounded-full blur-3xl opacity-50 -top-20 -right-20"></div>
-
-                <div className="relative w-full max-w-md space-y-4 transform scale-110">
-                    {/* Card 1 */}
-                    <div className="transform translate-x-8 translate-y-4 shadow-2xl rounded-[3rem]">
-                        <PipelineCard
-                            job={mockJob1}
-                            onClick={() => { }}
-                            isSelected={false}
-                        />
+                {/* Right Column: Auth Card (Floating like FB) */}
+                <div className="bg-white p-6 rounded-xl shadow-xl flex flex-col items-center space-y-6 w-full max-w-[400px] mx-auto">
+                    {/* Visual Preview (Mini) */}
+                    <div className="w-full relative h-[180px] overflow-hidden rounded-lg bg-gray-50 border border-gray-100 mb-2">
+                        <div className="transform scale-[0.65] origin-top-left absolute top-3 left-3 w-[150%]">
+                            <PipelineCard job={mockJob1} onClick={() => { }} isSelected={false} />
+                        </div>
                     </div>
 
-                    {/* Card 2 */}
-                    <div className="transform -translate-x-8 -translate-y-4 shadow-xl opacity-90 rounded-[3rem]">
-                        <PipelineCard
-                            job={mockJob2}
-                            onClick={() => { }}
-                            isSelected={false}
-                        />
+                    <button
+                        onClick={() => signIn("google", { callbackUrl: "/pipelines" })}
+                        className="bg-[#1877F2] text-white w-full py-3 rounded-md font-bold text-xl hover:bg-[#166FE5] transition-colors shadow-sm flex items-center justify-center gap-2"
+                    >
+                        <svg className="w-6 h-6 bg-white rounded-full p-0.5 text-[#1877F2]" viewBox="0 0 24 24">
+                            <path fill="currentColor" d="M21.35,11.1H12.18V13.83H18.69C18.36,17.64 15.19,19.27 12.19,19.27C8.36,19.27 5,16.25 5,12C5,7.9 8.2,4.73 12.2,4.73C15.29,4.73 17.1,6.7 17.1,6.7L19,4.72C19,4.72 16.56,2 12.1,2C6.42,2 2.03,6.8 2.03,12C2.03,17.05 6.16,22 12.25,22C17.6,22 21.5,18.33 21.5,12.91C21.5,11.76 21.35,11.1 21.35,11.1V11.1Z" />
+                        </svg>
+                        Connect Gmail
+                    </button>
+
+                    <div className="border-t border-gray-200 w-full pt-4 text-center">
+                        <span className="text-sm text-gray-500 font-medium">Free to try for beta users</span>
                     </div>
                 </div>
             </div>
