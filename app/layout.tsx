@@ -2,7 +2,7 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
-import { TopNav } from "@/components/top-nav"
+
 import AuthSessionProvider from "@/components/SessionProvider"
 
 const inter = Inter({
@@ -29,10 +29,7 @@ export default function RootLayout({
     >
       <body className="bg-gray-50 h-screen overflow-hidden">
         <AuthSessionProvider>
-          <TopNav />
-          <main className="h-[calc(100vh-64px)] overflow-hidden">
-            {children}
-          </main>
+          {children}
         </AuthSessionProvider>
       </body>
     </html>
