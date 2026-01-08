@@ -580,7 +580,8 @@ export async function POST() {
 
     const lastMs = lastEmailRows?.[0]?.received_at ? new Date(lastEmailRows[0].received_at).getTime() : null
     const afterUnix = lastMs ? Math.floor((lastMs - 21 * 24 * 60 * 60 * 1000) / 1000) : null
-    const q = afterUnix ? `after:${afterUnix} -in:trash -in:chats` : "newer_than:1y -in:trash -in:chats"
+    // Limit to 3 months max for new accounts to prevent long sync times
+    const q = afterUnix ? `after:${afterUnix} -in:trash -in:chats` : "newer_than:3m -in:trash -in:chats"
 
     console.log(`[SYNC] Gmail query: ${q}`)
 
@@ -593,7 +594,8 @@ export async function POST() {
         const page = await gmail.users.messages.list({ userId: "me", q, maxResults: 50, pageToken })
         messages = messages.concat(page.data.messages ?? [])
         pageToken = page.data.nextPageToken ?? undefined
-      } while (pageToken && messages.length < 200)
+        // Hard limit to prevent timeout loops
+      } while (pageToken && messages.length < 50)
     } catch (gmailErr: any) {
       console.error("[SYNC] Gmail API error (likely token expired):", gmailErr?.message)
       stats.errors++
