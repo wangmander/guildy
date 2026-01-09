@@ -327,6 +327,7 @@ GUIDELINES:
 3. **INFER DEEPLY**: Guess the stack/challenges. If it's a crypto wallet, talk about "signing phrases" and "custody". If it's a devtool, talk about "CI/CD pipelines" and "determinism".
 4. **NARRATIVE**: Write the 30-second intro pitch in the FIRST PERSON ("I...").
 5. **PRIMITIVES**: Noun-oriented concepts specific to this domain.
+6. **QUANTITY**: Generate exactly 8 questions for "questions_they_ask" and 8 for "questions_you_ask".
 
 OUTPUT FORMAT (JSON ONLY):
 {
@@ -351,8 +352,8 @@ OUTPUT FORMAT (JSON ONLY):
     "proof_stories": [{ "title": string, "detail": string }],
     "primitives": [{ "name": string, "description": string }],
     "spicy_opinion": string,
-    "questions_they_ask": [{ "category": string, "question": string }],
-    "questions_you_ask": [{ "category": string, "question": string }],
+    "questions_they_ask": [{ "category": string, "question": string }], // 8 items
+    "questions_you_ask": [{ "category": string, "question": string }], // 8 items
     "companyIntel": {
       "summary": string,
       "recentNews": string[]
@@ -854,12 +855,11 @@ export async function POST() {
         }
         pipelineId = newP.id
         stats.inserted++
-      } else {
         // Update existing pipeline.
         // We only update if the new email is more recent than what's on the pipeline
         // OR if we want to overwrite prep information. For now, generally overwrite.
-        console.log(`[PIPELINE] Updating ${analysis.company}`)
-        await supabase
+        console.log(`[PIPELINE] Updating ${analysis.company} (ID: ${pipelineId}) with NEW PREP DATA...`)
+        const { error: updErr } = await supabase
           .from("pipelines")
           .update({
             stage: finalStage,
@@ -876,6 +876,12 @@ export async function POST() {
             updated_at: new Date().toISOString(),
           })
           .eq("id", pipelineId)
+
+        if (updErr) {
+          console.error(`[PIPELINE] Update FAILED for ${analysis.company}:`, updErr)
+        } else {
+          console.log(`[PIPELINE] Update SUCCESS for ${analysis.company}`)
+        }
         stats.updated++
       }
 
