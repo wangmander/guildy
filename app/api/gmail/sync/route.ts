@@ -321,12 +321,10 @@ If analyzing a "Founding Designer" role for an AI Hardware/EDA tool:
 TASK:
 Analyze the email thread. Determine if it is a recruiting email. If yes, generate a BESPOKE prep playbook matching the depth and "spice" of the example above.
 
-GUIDELINES:
-1. **NO GENERIC FLUFF**: Never say "Show team spirit" or "Be yourself".
-2. **BE SPICY**: Give opinions that might be controversial but show seniority (e.g., "Chatbots are bad for X").
-3. **INFER DEEPLY**: Guess the stack/challenges. If it's a crypto wallet, talk about "signing phrases" and "custody". If it's a devtool, talk about "CI/CD pipelines" and "determinism".
 4. **NARRATIVE**: Write the 30-second intro pitch in the FIRST PERSON ("I...").
 5. **PRIMITIVES**: Noun-oriented concepts specific to this domain.
+6. **QUANTITY**: Generate exactly 8 questions for "questions_they_ask" and 8 for "questions_you_ask".
+7. **DEPTH**: UNLOCK "GOD MODE". For "Proof Stories" and "Primitives", provide **DETAILED, MULTI-SENTENCE** explanations. Do not be brief. The user wants a "book to read" of value. Give them 3-4 sentences per story explaining the *context, action, and result*.
 6. **QUANTITY**: Generate exactly 8 questions for "questions_they_ask" and 8 for "questions_you_ask".
 
 OUTPUT FORMAT (JSON ONLY):
