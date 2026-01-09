@@ -2,7 +2,7 @@
 
 import React from "react"
 import type { Job } from "@/types"
-import { Mail, Sparkles, Building2, Newspaper, LineChart } from "lucide-react"
+import { Mail, Sparkles, Building2, Newspaper, LineChart, Quote, Target, Brain, Award, AlertCircle, ArrowUpRight } from "lucide-react"
 
 type Props = {
   job: Job | null
@@ -77,32 +77,37 @@ function SectionCard({
   icon,
   children,
   className = "",
+  headerAction,
 }: {
   title: string
   icon?: React.ReactNode
   children: React.ReactNode
   className?: string
+  headerAction?: React.ReactNode
 }) {
   return (
     <div className={`rounded-xl border bg-white shadow-sm ${className}`}>
-      <div className="flex items-center gap-2 border-b px-4 py-3">
-        {icon}
-        <div className="text-sm font-semibold text-gray-900">{title}</div>
+      <div className="flex items-center justify-between gap-2 border-b px-5 py-4">
+        <div className="flex items-center gap-2">
+          {icon}
+          <div className="text-base font-semibold text-gray-900">{title}</div>
+        </div>
+        {headerAction}
       </div>
-      <div className="px-4 py-4">{children}</div>
+      <div className="px-5 py-5">{children}</div>
     </div>
   )
 }
 
 function Bullets({ items, empty }: { items: any[]; empty: string }) {
   const list = safeArr(items).filter((x) => safeStr(x, "").trim())
-  if (!list.length) return <div className="text-sm text-gray-500">{empty}</div>
+  if (!list.length) return <div className="text-sm text-gray-500 italic">{empty}</div>
   return (
-    <ul className="space-y-2 text-sm text-gray-700">
+    <ul className="space-y-3 text-sm text-gray-700">
       {list.map((x, i) => (
-        <li key={i} className="flex gap-2">
-          <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-gray-400" />
-          <span>{safeStr(x)}</span>
+        <li key={i} className="flex gap-2.5 items-start">
+          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500/60" />
+          <span className="leading-relaxed">{safeStr(x)}</span>
         </li>
       ))}
     </ul>
@@ -110,12 +115,15 @@ function Bullets({ items, empty }: { items: any[]; empty: string }) {
 }
 
 export function JobDetailPanel({ job, onSaveNotes }: Props) {
-  // IMPORTANT: no hooks in this component. It must be 100% render-deterministic to avoid React #310.
   if (!job) {
     return (
-      <div className="h-full min-h-0 overflow-y-auto p-6">
-        <div className="rounded-xl border bg-white p-6 text-sm text-gray-600">
-          Select a pipeline to see details.
+      <div className="h-full min-h-0 overflow-y-auto p-8 flex items-center justify-center bg-gray-50/50">
+        <div className="text-center max-w-sm">
+          <div className="h-12 w-12 bg-white rounded-xl shadow-sm border mx-auto flex items-center justify-center mb-4">
+            <Sparkles className="h-6 w-6 text-gray-300" />
+          </div>
+          <h3 className="text-gray-900 font-semibold mb-1">Select a pipeline</h3>
+          <p className="text-sm text-gray-500">Choose a job from the list to view your bespoke prep and strategy.</p>
         </div>
       </div>
     )
@@ -129,37 +137,17 @@ export function JobDetailPanel({ job, onSaveNotes }: Props) {
 
   const prep: any = j?.interviewPrep || {}
   const insights: any = prep?.insights || {}
-  const companyType = safeStr(
-    j?.company?.type || prep?.company_type || prep?.companyType,
-    "Unknown",
-  )
-  const companySize = safeStr(
-    j?.company?.size || prep?.company_size_bucket || prep?.companySizeBucket,
-    "Unknown",
-  )
-  const companySummary =
-    safeStr(j?.company?.intelSummary, "") ||
-    safeStr(prep?.company_intel_summary, "") ||
-    safeStr(prep?.companyIntelSummary, "") ||
-    ""
 
-  const truthfulNote = safeStr(
-    j?.company?.truthfulNote || prep?.truthful_note || prep?.truthfulNote,
-    "",
-  )
+  // New Rich Data Fields
+  const narrative = safeStr(prep?.narrative, "")
+  const spicyOpinion = safeStr(prep?.spicyOpinion || prep?.spicy_opinion, "")
+  const proofStories = safeArr(prep?.proofStories || prep?.proof_stories)
+  const primitives = safeArr(prep?.primitives)
 
-  const nextAction =
-    safeStr(insights?.nextAction, "") ||
-    safeStr(prep?.next_action, "") ||
-    safeStr(prep?.nextAction, "") ||
-    ""
+  const companySummary = safeStr(j?.company?.intelSummary || prep?.companyIntelSummary || prep?.company_intel_summary || "")
 
-  const why = safeStr(insights?.why || insights?.rationale || insights?.reasoning, "")
-  const tone = safeStr(prep?.tone || insights?.tone, "")
-  const urgency = safeStr(prep?.urgency || insights?.urgency, "")
-  const responseLikelihood =
-    safeStr(prep?.response_likelihood || prep?.responseLikelihood, "") ||
-    safeStr(insights?.response_likelihood || insights?.responseLikelihood, "")
+  const nextAction = safeStr(insights?.nextAction || prep?.next_action || prep?.nextAction || "")
+  const why = safeStr(insights?.why || insights?.rationale || insights?.reasoning || "")
 
   const lastEmail: any = j?.lastEmail || {}
   const lastSubject = safeStr(lastEmail?.subject, "")
@@ -167,334 +155,196 @@ export function JobDetailPanel({ job, onSaveNotes }: Props) {
   const lastSnippet = safeStr(lastEmail?.snippet, "")
   const lastAt = safeStr(lastEmail?.receivedAt, "")
 
-  const prepFocus = safeStr(prep?.stage_focus || prep?.stageFocus, "")
-  const qThey = safeArr(
-    prep?.questions_they_might_ask?.length
-      ? prep?.questions_they_might_ask
-      : prep?.questionsTheyMightAsk,
-  )
-  const qYou = safeArr(
-    prep?.questions_you_should_ask?.length
-      ? prep?.questions_you_should_ask
-      : prep?.questionsYouShouldAsk,
-  )
-  const stories = safeArr(
-    prep?.stories_to_prepare?.length ? prep?.stories_to_prepare : prep?.storiesToPrepare,
-  )
-  const homework = safeArr(
-    prep?.homework_next_24h?.length ? prep?.homework_next_24h : prep?.homeworkNext24h,
-  )
-  const emphasize = safeArr(prep?.what_to_emphasize || prep?.whatToEmphasize)
-  const topics = safeArr(
-    prep?.common_topics || prep?.commonInterviewTopics || prep?.topics || prep?.tags,
-  ).slice(0, 8)
-  const recentNews = safeArr(j?.recentNews || prep?.recent_news || prep?.recentNews).slice(
-    0,
-    3,
-  )
+  const prepFocus = safeStr(prep?.stageFocus || prep?.stage_focus, "")
 
-  const appliedAt = safeStr(j?.appliedAt, "")
+  // Questions
+  const qThey = safeArr(prep?.questionsTheyMightAsk || prep?.questions_they_might_ask)
+  const qYou = safeArr(prep?.questionsYouShouldAsk || prep?.questions_you_should_ask)
+
+  const emphasize = safeArr(prep?.whatToEmphasize || prep?.what_to_emphasize)
 
   return (
-    <div className="h-full min-h-0 overflow-y-auto p-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="text-2xl font-semibold tracking-tight text-gray-900">
-            {companyName}
+    <div className="h-full min-h-0 overflow-y-auto bg-gray-50/30">
+
+      {/* Hero Header */}
+      <div className="bg-white border-b px-8 py-6 sticky top-0 z-10 bg-white/95 backdrop-blur-sm">
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-2xl font-bold text-gray-900 leading-tight">{companyName}</h1>
+            <div className="flex items-center gap-2 mt-1 text-gray-600 font-medium">
+              {roleTitle}
+            </div>
           </div>
-          <div className="mt-1 text-gray-600">{roleTitle}</div>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="flex flex-col items-end gap-2">
             <Pill tone="purple">{stage}</Pill>
-            <Pill>{status}</Pill>
-            {companyType !== "Unknown" ? <Pill tone="orange">{companyType}</Pill> : null}
-            {companySize !== "Unknown" ? <Pill tone="orange">{companySize}</Pill> : null}
           </div>
         </div>
       </div>
 
-      {/* Next Action */}
-      <div className="mt-4 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
-        <div className="text-xs font-semibold text-orange-800">Next Action</div>
-        <div className="mt-1 text-sm text-orange-900">
-          {nextAction ||
-            "No next action generated yet. Re-sync after a new email arrives or add the job link/context."}
-        </div>
-        {why ? <div className="mt-1 text-xs text-orange-800/80">{why}</div> : null}
-      </div>
+      <div className="p-8 space-y-8 max-w-5xl mx-auto">
 
-      {/* Last Email */}
-      <div className="mt-4">
-        <SectionCard title="Last Email" icon={<Mail className="h-4 w-4 text-emerald-600" />}>
-          <div className="text-sm font-semibold text-gray-900">
-            {lastSubject || "No email subject available"}
-          </div>
-          <div className="mt-2 text-xs text-gray-500">
-            {lastFrom ? `From: ${lastFrom}` : "From: Unknown"}
-          </div>
-          {lastSnippet ? (
-            <div className="mt-3 whitespace-pre-wrap text-sm text-gray-700">{lastSnippet}</div>
-          ) : null}
-          {lastAt ? <div className="mt-3 text-xs text-gray-500">{lastAt}</div> : null}
-
-          <div className="mt-4 grid grid-cols-3 gap-3">
-            <div className="rounded-lg bg-gray-50 px-3 py-2">
-              <div className="text-[11px] font-semibold text-gray-500">Tone</div>
-              <div className="mt-0.5 text-xs text-gray-800">{tone || "—"}</div>
-            </div>
-            <div className="rounded-lg bg-gray-50 px-3 py-2">
-              <div className="text-[11px] font-semibold text-gray-500">
-                Response Likelihood
+        {/* 1. The Bespoke Narrative Card */}
+        {narrative ? (
+          <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-white to-indigo-50/30 p-6 shadow-sm ring-4 ring-indigo-50/20">
+            <div className="flex items-start gap-4">
+              <div className="h-10 w-10 shrink-0 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-lg shadow-indigo-200">
+                <Quote className="h-5 w-5" />
               </div>
-              <div className="mt-0.5 text-xs text-gray-800">{responseLikelihood || "—"}</div>
-            </div>
-            <div className="rounded-lg bg-gray-50 px-3 py-2">
-              <div className="text-[11px] font-semibold text-gray-500">Urgency</div>
-              <div className="mt-0.5 text-xs text-gray-800">{urgency || "—"}</div>
-            </div>
-          </div>
-        </SectionCard>
-      </div>
-
-      {/* Interview Prep */}
-      <div className="mt-4">
-        <SectionCard
-          title="Interview Preparation"
-          icon={<Sparkles className="h-4 w-4 text-purple-600" />}
-          className="border-purple-200"
-        >
-          <div className="rounded-lg bg-purple-50 px-3 py-2">
-            <div className="text-[11px] font-semibold text-purple-700">Prep Focus</div>
-            <div className="mt-0.5 text-sm text-purple-900">
-              {prepFocus ||
-                "No stage-specific focus generated yet. Re-sync after a message with clear signals (schedule, round, role scope)."}
-            </div>
-          </div>
-
-          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div className="rounded-xl border border-purple-100 bg-white p-4">
-              <div className="text-sm font-semibold text-gray-900">
-                Questions They Might Ask You
-              </div>
-              <div className="mt-3">
-                <Bullets items={qThey} empty="No role-specific questions generated yet." />
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-orange-100 bg-orange-50 p-4">
-              <div className="text-sm font-semibold text-gray-900">
-                Questions You Should Ask Them
-              </div>
-              <div className="mt-3">
-                <Bullets items={qYou} empty="No targeted questions generated yet." />
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 mb-1">Your 30-Second Narrative</h3>
+                <p className="text-indigo-900 font-medium leading-relaxed text-[15px]">"{narrative}"</p>
+                <div className="mt-2 text-xs text-indigo-400 font-medium uppercase tracking-wider">Memorize this</div>
               </div>
             </div>
           </div>
+        ) : null}
 
-          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div className="rounded-xl border bg-white p-4">
-              <div className="text-sm font-semibold text-gray-900">What to Emphasize</div>
-              <div className="mt-3">
-                <Bullets items={emphasize} empty="No emphasis tips available yet." />
+        {/* 2. Primitives & Spicy Opinion (The "Genius" Section) */}
+        {(primitives.length > 0 || spicyOpinion) && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Spicy Opinion */}
+            <div className="lg:col-span-1 rounded-xl border border-rose-100 bg-rose-50/50 p-5">
+              <div className="flex items-center gap-2 mb-3 text-rose-700 font-bold text-sm uppercase tracking-wide">
+                <AlertCircle className="h-4 w-4" />
+                Spicy Opinion
               </div>
-            </div>
-
-            <div className="rounded-xl border bg-white p-4">
-              <div className="text-sm font-semibold text-gray-900">Stories + Homework</div>
-              <div className="mt-3">
-                <div className="text-xs font-semibold text-gray-500">Stories to prepare</div>
-                <div className="mt-2">
-                  <Bullets items={stories} empty="No stories suggested yet." />
-                </div>
-
-                <div className="mt-4 text-xs font-semibold text-gray-500">
-                  Next 24h homework
-                </div>
-                <div className="mt-2">
-                  <Bullets items={homework} empty="No homework generated yet." />
-                </div>
+              <div className="text-gray-900 font-serif italic text-lg leading-snug">
+                {spicyOpinion || "Loading opinion..."}
               </div>
+              <div className="mt-3 text-xs text-rose-600/80">Use this to show taste & seniority.</div>
             </div>
-          </div>
 
-          <div className="mt-4 text-xs text-gray-500">
-            AI Tip: If the prep feels generic, your thread may lack role/team context. Add the
-            job posting link + team name in the thread and re-sync.
-          </div>
-        </SectionCard>
-      </div>
-
-      {/* Company intel */}
-      <div className="mt-4">
-        <SectionCard title="Company Intel" icon={<Building2 className="h-4 w-4 text-amber-600" />}>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <div className="text-xs font-semibold text-gray-500">Industry</div>
-              <div className="mt-1 text-sm text-gray-800">
-                {safeStr(prep?.industry, "Unknown") || "Unknown"}
+            {/* Primitives */}
+            <div className="lg:col-span-2 rounded-xl border border-gray-200 bg-white p-5">
+              <div className="flex items-center gap-2 mb-4 text-gray-500 font-bold text-sm uppercase tracking-wide">
+                <Brain className="h-4 w-4" />
+                Core Primitives & Mental Models
               </div>
-            </div>
-            <div>
-              <div className="text-xs font-semibold text-gray-500">Size</div>
-              <div className="mt-1 text-sm text-gray-800">{companySize || "Unknown"}</div>
-            </div>
-            <div>
-              <div className="text-xs font-semibold text-gray-500">HQ Location</div>
-              <div className="mt-1 text-sm text-gray-800">
-                {safeStr(prep?.hq_location || prep?.hqLocation, "Unknown") || "Unknown"}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs font-semibold text-gray-500">Glassdoor Rating</div>
-              <div className="mt-1 text-sm text-gray-800">
-                {safeStr(prep?.glassdoor_rating || prep?.glassdoorRating, "N/A") || "N/A"}
-              </div>
-            </div>
-          </div>
-
-          {companySummary ? (
-            <div className="mt-4 rounded-lg bg-amber-50 px-3 py-2">
-              <div className="text-[11px] font-semibold text-amber-800">Summary</div>
-              <div className="mt-0.5 text-sm text-amber-950">{companySummary}</div>
-            </div>
-          ) : (
-            <div className="mt-4 rounded-lg bg-amber-50 px-3 py-2">
-              <div className="text-[11px] font-semibold text-amber-800">Summary</div>
-              <div className="mt-0.5 text-sm text-amber-950">
-                No verified company info available.
-              </div>
-            </div>
-          )}
-
-          {truthfulNote ? <div className="mt-2 text-xs text-gray-500">{truthfulNote}</div> : null}
-
-          <div className="mt-4 rounded-lg bg-gray-50 px-3 py-2">
-            <div className="flex items-center gap-2">
-              <Newspaper className="h-4 w-4 text-gray-500" />
-              <div className="text-[11px] font-semibold text-gray-500">Recent News</div>
-            </div>
-            <div className="mt-2">
-              {recentNews.length ? (
-                <ul className="space-y-1 text-sm text-gray-700">
-                  {recentNews.map((n: any, i: number) => (
-                    <li key={i}>{safeStr(n?.title || n)}</li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="text-sm text-gray-500">No recent news available.</div>
-              )}
-            </div>
-          </div>
-
-          {topics.length ? (
-            <div className="mt-4">
-              <div className="text-xs font-semibold text-gray-500">Common Interview Topics</div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {topics.map((t: any, i: number) => (
-                  <span
-                    key={i}
-                    className="rounded-full border bg-white px-2.5 py-1 text-xs text-gray-700"
-                  >
-                    {safeStr(t)}
-                  </span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {primitives.map((p: any, i: number) => (
+                  <div key={i} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                    <div className="font-semibold text-gray-900 text-sm mb-1">{p.name}</div>
+                    <div className="text-xs text-gray-500 leading-tight">{p.description}</div>
+                  </div>
                 ))}
               </div>
             </div>
-          ) : null}
-        </SectionCard>
-      </div>
-
-      {/* Timeline overview */}
-      <div className="mt-4">
-        <SectionCard title="Timeline Overview" icon={<LineChart className="h-4 w-4 text-slate-600" />}>
-          <div className="grid grid-cols-4 gap-3 text-xs text-gray-600">
-            <div>
-              <div className="font-semibold text-gray-900">Applied</div>
-              <div className="mt-1">{appliedAt ? "Day 0" : "—"}</div>
-            </div>
-            <div>
-              <div className="font-semibold text-gray-900">Recruiter</div>
-              <div className="mt-1">—</div>
-            </div>
-            <div>
-              <div className="font-semibold text-gray-900">Interview</div>
-              <div className="mt-1">—</div>
-            </div>
-            <div>
-              <div className="font-semibold text-gray-900">Offer</div>
-              <div className="mt-1">—</div>
-            </div>
           </div>
+        )}
 
-          <div className="mt-4 space-y-3">
-            <div>
-              <div className="mb-1 flex items-center justify-between text-xs text-gray-600">
-                <span>Applied</span>
-                <span className="text-gray-400">Day 0</span>
-              </div>
-              <div className="h-2 w-full rounded-full bg-gray-100">
-                <div className="h-2 w-full rounded-full bg-blue-600" />
-              </div>
+        {/* 3. Proof Stories */}
+        {proofStories.length > 0 && (
+          <SectionCard title="Proof Stories" icon={<Award className="h-5 w-5 text-amber-500" />}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {proofStories.map((story: any, i: number) => (
+                <div key={i} className="rounded-lg border border-amber-100 bg-amber-50/30 p-4">
+                  <div className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">
+                    {i === 0 ? "Story A (Systems)" : "Story B (Behaviors)"}
+                  </div>
+                  <div className="font-semibold text-gray-900 mb-1">{story.title}</div>
+                  <div className="text-sm text-gray-600 leading-relaxed">{story.detail}</div>
+                </div>
+              ))}
             </div>
+          </SectionCard>
+        )}
 
-            <div>
-              <div className="mb-1 flex items-center justify-between text-xs text-gray-600">
-                <span>Recruiter</span>
-                <span className="text-gray-400">—</span>
-              </div>
-              <div className="h-2 w-full rounded-full bg-gray-100">
-                <div className="h-2 w-3/4 rounded-full bg-blue-600" />
-              </div>
+        {/* 4. Strategic Questions */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <SectionCard title="Questions They Ask" icon={<Target className="h-5 w-5 text-gray-400" />}>
+            <div className="space-y-4">
+              {qThey.map((q: any, i) => (
+                <div key={i}>
+                  <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">
+                    {q.category || "General"}
+                  </div>
+                  <div className="text-sm text-gray-800 font-medium">{q.question}</div>
+                </div>
+              ))}
+              {qThey.length === 0 && <div className="text-gray-400 italic text-sm">Waiting for more context...</div>}
             </div>
+          </SectionCard>
 
-            <div>
-              <div className="mb-1 flex items-center justify-between text-xs text-gray-600">
-                <span>Interview</span>
-                <span className="text-gray-400">—</span>
-              </div>
-              <div className="h-2 w-full rounded-full bg-gray-100">
-                <div className="h-2 w-1/2 rounded-full bg-blue-600" />
-              </div>
+          <SectionCard title="Questions You Ask" icon={<ArrowUpRight className="h-5 w-5 text-green-500" />}>
+            <div className="space-y-4">
+              {qYou.map((q: any, i) => (
+                <div key={i}>
+                  <div className="text-[10px] text-green-600/70 font-bold uppercase tracking-wider mb-0.5">
+                    {q.category || "Strategic"}
+                  </div>
+                  <div className="text-sm text-gray-800 font-medium">{q.question}</div>
+                </div>
+              ))}
+              {qYou.length === 0 && <div className="text-gray-400 italic text-sm">Waiting for more context...</div>}
             </div>
+          </SectionCard>
+        </div>
 
-            <div>
-              <div className="mb-1 flex items-center justify-between text-xs text-gray-600">
-                <span>Offer</span>
-                <span className="text-gray-400">—</span>
-              </div>
-              <div className="h-2 w-full rounded-full bg-gray-100">
-                <div className="h-2 w-1/4 rounded-full bg-blue-600" />
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-3 text-xs text-gray-500">
-            This timeline is a placeholder until we track round dates per pipeline.
+        {/* 5. What to Emphasize */}
+        <SectionCard title="What to Emphasize" icon={<Sparkles className="h-5 w-5 text-purple-500" />}>
+          <div className="flex flex-wrap gap-2">
+            {emphasize.length > 0 ? emphasize.map((item, i) => (
+              <span key={i} className="inline-flex items-center px-3 py-1.5 rounded-full bg-purple-50 text-purple-700 text-sm font-medium border border-purple-100">
+                {item}
+              </span>
+            )) : <span className="text-gray-400 italic text-sm">No emphasis points generated yet.</span>}
           </div>
         </SectionCard>
-      </div>
 
-      {/* Job details + notes */}
-      <div className="mt-4">
-        <SectionCard title="Job Details" icon={<Building2 className="h-4 w-4 text-gray-600" />}>
-          <details>
-            <summary className="cursor-pointer select-none text-sm font-semibold text-gray-900">
-              Notes
+        {/* 6. Intel & Logistics */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <SectionCard title="Company Intel" icon={<Building2 className="h-5 w-5 text-gray-400" />}>
+            <p className="text-sm text-gray-600 leading-relaxed mb-4">
+              {companySummary || "No detailed summary available yet."}
+            </p>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-gray-400 text-xs block">Industry</span>
+                <span className="font-medium text-gray-900">{safeStr(prep?.industry, "Unknown")}</span>
+              </div>
+              <div>
+                <span className="text-gray-400 text-xs block">HQ</span>
+                <span className="font-medium text-gray-900">{safeStr(prep?.hq_location, "Unknown")}</span>
+              </div>
+            </div>
+          </SectionCard>
+
+          <SectionCard title="Context" icon={<Mail className="h-5 w-5 text-gray-400" />}>
+            <div className="space-y-4">
+              <div className="rounded-lg bg-orange-50 p-3 border border-orange-100">
+                <div className="text-xs font-bold text-orange-700 uppercase mb-1">Next Action</div>
+                <div className="text-sm text-orange-900 font-medium">
+                  {nextAction || "Wait for reply"}
+                </div>
+              </div>
+
+              <div className="text-sm">
+                <div className="font-medium text-gray-900 mb-1">Last Email</div>
+                <div className="text-gray-600 line-clamp-2 italic">"{lastSnippet}"</div>
+                <div className="text-xs text-gray-400 mt-1">{lastAt}</div>
+              </div>
+            </div>
+          </SectionCard>
+        </div>
+
+        <div className="pb-10">
+          <details className="group">
+            <summary className="flex items-center gap-2 cursor-pointer text-sm font-medium text-gray-500 select-none">
+              <span>Notes</span>
+              <span className="h-px flex-1 bg-gray-200"></span>
             </summary>
-            <div className="mt-3">
+            <div className="mt-4">
               <textarea
-                className="w-full rounded-lg border p-3 text-sm outline-none focus:ring-2 focus:ring-purple-200"
-                rows={4}
-                placeholder="Add notes…"
+                className="w-full rounded-xl border-gray-200 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 p-4 text-sm"
+                rows={6}
+                placeholder="Jot down your thoughts..."
                 defaultValue={safeStr(j?.notes, "")}
                 onBlur={(e) => onSaveNotes?.(e.currentTarget.value)}
               />
-              <div className="mt-2 text-xs text-gray-500">
-                Notes save on blur (you can wire this to Supabase later).
-              </div>
             </div>
           </details>
-        </SectionCard>
+        </div>
+
       </div>
     </div>
   )

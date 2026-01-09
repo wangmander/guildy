@@ -292,68 +292,33 @@ async function analyzeEmail(input: {
     threadContext += "\nNEW EMAIL TO ANALYZE:\n"
   }
 
-  const systemPrompt = `You are Guildy, an expert at analyzing recruiting/interview emails.
+  const systemPrompt = `IDENTITY:
+You are a WORLD-CLASS TECHNICAL INTERVIEW COACH and STRATEGIST. You don't just give generic advice; you reverse-engineer the company's culture, stack, and challenges to give the candidate an UNFAIR ADVANTAGE.
 
-TASK: Determine if this is a recruiting email, extract details, and identify the interview stage.
+YOUR GOAL:
+Analyze the email thread to understand:
+  1. The Company (Stage, culture, risk profile).
+  2. The Role (Scope, level, key challenges).
+  3. The Interview Step (Screen, Technical, Behavioral, Offer).
+  4. The "Hidden Game" (What they are *really* looking for vs what they say).
 
-STAGE DETECTION RULES:
+GENERATE A BESPOKE PREP PLAYBOOK (JSON):
+You must output a "prep" object containing deep strategic assets.
 
-1. RECRUITER_SCREEN - First contact or scheduling first conversation
-   - Application received/acknowledged
-   - Recruiter reaching out about a role
-   - Scheduling initial call/phone screen/intro call
-   - Keywords: "reaching out", "your application", "schedule a call", "phone screen", "intro call", "select slots", "share your availability", "love to chat", "discuss the role", "30 minute Zoom"
-   - NOTE: If the email is asking for availability for a "chat" or "call" and it's the first interaction, it is a RECRUITER_SCREEN.
+1. "narrative" (30s Pitch): A tight, memorizable intro that hits the company's specific pain points.
+2. "proof_stories" (2 items):
+   - "Story A": A technical/system story matching their stack/challenges.
+   - "Story B": A behavioral/trust story (ambiguity, risk, conflict).
+3. "primitives" (3 items): The core concepts/objects this role deals with (e.g. for a hardware tool: "Constraint", "Simulation", "Verifiable Proof").
+4. "spicy_opinion": A strong, distinct technical or product opinion that shows taste and seniority (e.g. "AI must be verifiable, not just chatty").
+5. "questions_they_ask" (4 items): Specific questions they will likely ask, categorized by theme (e.g. "Domain", "Execution", "Culture").
+6. "questions_you_ask" (4 items): High-level questions for the candidate to ask that show strategic thinking.
 
-2. HM_SCREEN - Meeting with hiring manager
-   - Email explicitly mentions "hiring manager", "your future manager", "team lead", "engineering manager", "design manager", "director", "VP"
-   - Meeting with the person you'd report to
-   - NOT just any interview - specifically with a manager
-   - Key phrase: "hiring manager screen" or "chat with [Name] (Engineering Manager)"
-
-3. ASSESSMENT - Technical test or take-home
-   - Coding challenge, technical assessment, take-home project
-   - Case study, design exercise, portfolio review
-   - Keywords: "take-home", "coding challenge", "assessment", "HackerRank", "Karat", "CodeSignal", "complete by", "assignment"
-
-4. LOOP - Final rounds, onsite, multiple interviews
-   - Onsite or virtual onsite
-   - Full loop, panel interviews
-   - Multiple back-to-back interviews in one day
-   - Final round before offer
-   - Keywords: "onsite", "virtual onsite", "full loop", "panel", "final round", "meet the team", "interview day"
-
-5. OFFER - Offer extended or in negotiation
-   - Offer letter, compensation discussion
-   - Keywords: "offer letter", "pleased to offer", "compensation", "salary", "equity", "start date", "background check", "verbal offer"
-
-6. REJECTED - Application rejected
-   - Keywords: "not moving forward", "other candidates", "position filled", "unfortunately", "regret", "went with another candidate"
-
-IMPORTANT RULES:
-- If scheduling first call/conversation → RECRUITER_SCREEN (even if it's a "Zoom interview")
-- Only use HM_SCREEN if hiring manager/team lead is explicitly mentioned
-- For thread with multiple emails, use the CURRENT state based on latest email
-- Default to RECRUITER_SCREEN if unclear
-- If the email is just "Application Received" with no action required, it is RECRUITER_SCREEN.
-
-PREP GENERATION RULES (CRITICAL):
-1. STAGE CONTEXT:
-   - RECRUITER_SCREEN: Focus ONLY on high-level interest, logistics, culture, and "Tell me about yourself". DO NOT ask deep technical/process questions.
-     * Good Qs for Recruiter: "Company culture?", "Team structure?", "Runway/Stability?" (if startup), "Next steps?".
-     * Bad Qs for Recruiter: "What is your design process?", "Code stack details?".
-   - HM_SCREEN: Focus on past work, collaboration, leadership, and role expectations.
-   - LOOP/FINAL: Deep dive into craft, specific challenges, behavioral questions.
-
-2. COMPANY CONTEXT (Infer from domain/name):
-   - STARTUP (Seed-Series B): Focus on speed, ambiguity, shipping, impact, runway.
-   - ENTERPRISE/PUBLIC: Focus on stakeholders, process, scale, complexity, career ladder.
-   - AGENCY: Focus on client management, speed, variety.
-
-3. BESPOKE QUALITY:
-   - DO NOT generate generic questions like "What are your strengths?".
-   - Generate specific questions based on the Company + Role + Stage.
-   - Example for Airbnb + Designer + Recruiter: "How is the design team structured around the new Categories feature?" (Show research).
+RULES:
+  - BE BESPOKE: If the company is "Architect" (hardware AI), talk about chips/EDA. If it's "Rippling", talk about compound startups/identity.
+  - BE CONCISE: Use punchy, high-leverage language.
+  - NO FLUFF: Avoid "Show team spirit" or "Be yourself". Give tactical weapons.
+  - INFER DEEPLY: Use the snippets to guess the team's current focus (e.g. "Shipping v1", "Scaling to Enterprise").
 
 OUTPUT FORMAT:
 {
@@ -361,8 +326,8 @@ OUTPUT FORMAT:
   "company": string,
   "role": string,
   "stage_bucket": "RECRUITER_SCREEN" | "HM_SCREEN" | "ASSESSMENT" | "LOOP" | "OFFER" | "REJECTED",
-  "stage_detail": string, // One liner context
-  "predicted_stages": string[], // Bespoke predictive pipeline stages based on company/role (e.g. ["Recruiter Chat", "HM Screen", "Design Exercise", "Final Loop", "Offer"])
+  "stage_detail": string,
+  "predicted_stages": string[],
   "action_needed": string | null,
   "insights": {
     "stageReason": string,
@@ -373,62 +338,27 @@ OUTPUT FORMAT:
     "tone": "friendly" | "formal" | "neutral" | "urgent"
   },
   "prep": {
-    "stageFocus": string,
-    "questionsTheyMightAsk": string[],
-    "questionsYouShouldAsk": string[],
-    "whatToEmphasize": string[],
-    "storiesToPrepare": string[],
-    "homeworkNext24h": string[],
+    "stageFocus": string, // One sentence focus
+    "narrative": string, // The 30s pitch
+    "proof_stories": [{ "title": string, "detail": string }], // 2 stories
+    "primitives": [{ "name": string, "description": string }], // 3 primitives
+    "spicy_opinion": string, // The hot take
+    "questions_they_ask": [{ "category": string, "question": string }], // 4 questions
+    "questions_you_ask": [{ "category": string, "question": string }], // 4 questions
     "companyIntel": {
-      "industry": string,
-      "size": string,
-      "hqLocation": string,
-      "glassdoorRating": string,
       "summary": string,
       "recentNews": string[]
     }
   }
 }
-
 Return ONLY valid JSON.`
 
   const userPrompt = `${threadContext}From: ${input.fromName} <${input.fromEmail}>
 Subject: ${input.subject}
 Snippet: ${input.snippet}
-Body: ${input.bodyExcerpt.slice(0, 2000)}
+Body: ${input.bodyExcerpt.slice(0, 2500)}
 
-Analyze and return JSON:
-{
-  "is_recruiting": true/false,
-  "company": "Company Name",
-  "role": "Job Title or Unknown",
-  "stage_bucket": "RECRUITER_SCREEN" | "HM_SCREEN" | "ASSESSMENT" | "LOOP" | "OFFER" | "REJECTED",
-  "stage_detail": "Brief description of current stage",
-  "insights": {
-    "stageReason": "Why this stage - quote specific text from email",
-    "waitingOn": "you" or "them",
-    "nextAction": "Specific action to take",
-    "urgency": "low" | "med" | "high",
-    "responseLikelihood": "low" | "med" | "high",
-    "tone": "friendly" | "formal" | "neutral" | "urgent"
-  },
-  "prep": {
-    "stageFocus": "What to prepare for",
-    "questionsTheyMightAsk": ["5 specific questions"],
-    "questionsYouShouldAsk": ["5 questions to ask them"],
-    "whatToEmphasize": ["3 key points"],
-    "storiesToPrepare": ["3 STAR stories"],
-    "homeworkNext24h": ["3 prep tasks"],
-    "companyIntel": {
-      "industry": "string",
-      "size": "string",
-      "hqLocation": "string",
-      "glassdoorRating": "string",
-      "summary": "string",
-      "recentNews": []
-    }
-  }
-}`
+Analyze and return JSON:`
 
   try {
     if (!openai) {
@@ -476,11 +406,15 @@ Analyze and return JSON:
       },
       prep: {
         stageFocus: parsed.prep?.stageFocus || "Prepare for interview",
-        questionsTheyMightAsk: parsed.prep?.questionsTheyMightAsk?.length ? parsed.prep.questionsTheyMightAsk : ["Tell me about yourself", "Why this role?", "Relevant experience?", "Your strengths?", "Questions for us?"],
-        questionsYouShouldAsk: parsed.prep?.questionsYouShouldAsk?.length ? parsed.prep.questionsYouShouldAsk : ["What does success look like?", "Team structure?", "Biggest challenges?", "Growth opportunities?", "Next steps in process?"],
-        whatToEmphasize: parsed.prep?.whatToEmphasize?.length ? parsed.prep.whatToEmphasize : ["Relevant experience", "Problem-solving skills", "Communication"],
-        storiesToPrepare: parsed.prep?.storiesToPrepare?.length ? parsed.prep.storiesToPrepare : ["Challenging project", "Team collaboration", "Leadership moment"],
-        homeworkNext24h: parsed.prep?.homeworkNext24h?.length ? parsed.prep.homeworkNext24h : ["Research company", "Review job description", "Prepare intro pitch"],
+        narrative: parsed.prep?.narrative || "",
+        proofStories: parsed.prep?.proof_stories || [],
+        primitives: parsed.prep?.primitives || [],
+        spicyOpinion: parsed.prep?.spicy_opinion || "",
+        questionsTheyMightAsk: parsed.prep?.questions_they_ask || parsed.prep?.questions_they_might_ask || [],
+        questionsYouShouldAsk: parsed.prep?.questions_you_ask || parsed.prep?.questions_you_should_ask || [],
+        whatToEmphasize: parsed.prep?.whatToEmphasize || [],
+        storiesToPrepare: parsed.prep?.storiesToPrepare || [],
+        homeworkNext24h: parsed.prep?.homeworkNext24h || [],
         companyIntel: parsed.prep?.companyIntel || { industry: "Unknown", size: "Unknown", hqLocation: "Unknown", glassdoorRating: "Unknown", summary: "", recentNews: [] },
       },
       predicted_stages: parsed.predicted_stages || [],
@@ -862,132 +796,105 @@ export async function POST() {
 
       stats.detected++
 
-      const company = analysis.company || "Unknown"
-      const role = analysis.role || "Unknown"
-      const uiStage = getUiStage(analysis.stage_bucket)
+      // Create or update pipeline
+      let pipelineId = existingPipeline?.id
 
-      console.log(`[ACCEPT] ${company} - ${role} @ ${uiStage} (${analysis.stage_detail})`)
+      // Determine clean stage
+      const finalStage = getUiStage(analysis.stage_bucket)
 
-      // Find or create pipeline
-      const companyN = normalize(company)
-      let matchedPipeline = pipelines.find((p: any) => {
-        const pc = normalize(p.company)
-        return pc && companyN && (pc === companyN || pc.includes(companyN) || companyN.includes(pc))
-      })
-
-      let pipelineId: string
-      let actionTaken: string
-
-      if (!matchedPipeline) {
-        console.log(`[NEW] Creating pipeline: ${company}`)
-
-        const { data: created, error } = await supabase
+      if (!pipelineId) {
+        // Create new pipeline
+        console.log(`[PIPELINE] Creating for ${analysis.company}`)
+        const { data: newP, error: pErr } = await supabase
           .from("pipelines")
           .insert({
             user_email: userEmail,
-            company,
-            role,
-            stage: uiStage,
+            company: analysis.company,
+            role: analysis.role,
+            status: "WAITING", // Default
+            stage: finalStage,
             stage_detail: analysis.stage_detail,
-            last_email_subject: subject,
+            next_action: analysis.insights.nextAction,
+            action_needed: !!analysis.insights.nextAction,
             last_email_at: receivedAt,
-            last_email_from: fromEmail,
-            last_email_from_name: fromName,
+            last_email_subject: subject,
             last_email_snippet: snippet,
-            insights_json: analysis.insights,
+            last_email_from_name: fromName,
+            last_email_from_email: fromEmail,
             prep_json: analysis.prep,
             predicted_stages: analysis.predicted_stages,
+            insights_json: analysis.insights,
+            company_intel_json: analysis.prep.companyIntel,
           })
-          .select()
+          .select("id")
           .single()
 
-        if (error) {
-          console.error(`[ERROR] Insert pipeline:`, error)
+        if (pErr) {
+          console.error("[PIPELINE] Creation failed:", pErr)
           stats.errors++
           await logEmailProcessing({
             user_email: userEmail,
             gmail_thread_id: threadId,
             gmail_message_id: msg.id,
-            from_email: fromEmail,
-            from_domain: fromDomain,
-            company_guess: company,
+            company_guess: analysis.company,
             subject: subject.slice(0, 200),
             detected: true,
-            score,
-            strongest_hit: strongest,
-            matched_keywords: hits,
-            llm_called: true,
-            llm_is_recruiting: true,
-            llm_company: company,
-            llm_role: role,
-            llm_stage: analysis.stage_bucket,
-            rejection_reason: `pipeline_insert_error: ${error.message}`,
-            action_taken: "error",
+            action_taken: "error_creating_pipeline",
           })
           continue
         }
-
-        pipelineId = created.id
-        pipelines.push(created)
+        pipelineId = newP.id
         stats.inserted++
-        actionTaken = "created_pipeline"
-
       } else {
-        pipelineId = matchedPipeline.id
-        const oldStage = matchedPipeline.stage
-
-        console.log(`[UPDATE] ${company}: ${oldStage} → ${uiStage}`)
-
-        const { error: updateError } = await supabase
+        // Update existing pipeline.
+        // We only update if the new email is more recent than what's on the pipeline
+        // OR if we want to overwrite prep information. For now, generally overwrite.
+        console.log(`[PIPELINE] Updating ${analysis.company}`)
+        await supabase
           .from("pipelines")
           .update({
-            stage: uiStage,
+            stage: finalStage,
             stage_detail: analysis.stage_detail,
-            last_email_subject: subject,
             last_email_at: receivedAt,
-            last_email_from: fromEmail,
-            last_email_from_name: fromName,
+            last_email_subject: subject,
             last_email_snippet: snippet,
+            last_email_from_name: fromName,
+            last_email_from_email: fromEmail,
+            prep_json: analysis.prep, // Overwrite prep with latest thoughts
             insights_json: analysis.insights,
-            prep_json: analysis.prep,
             predicted_stages: analysis.predicted_stages,
+            company_intel_json: analysis.prep.companyIntel,
+            updated_at: new Date().toISOString(),
           })
           .eq("id", pipelineId)
-
-        if (updateError) {
-          console.error(`[ERROR] Update pipeline:`, updateError)
-          stats.errors++
-        }
-
-        matchedPipeline.stage = uiStage
         stats.updated++
-        actionTaken = "updated_pipeline"
       }
 
-      // Insert email
-      const { error: emailInsertError } = await supabase.from("emails").insert({
+      // Insert email record
+      await supabase.from("emails").insert({
         user_email: userEmail,
         pipeline_id: pipelineId,
+        gmail_id: msg.id,
+        gmail_thread_id: threadId, // We use threadId if available
         gmail_message_id: msg.id,
-        from_email: fromEmail,
         subject,
         snippet,
+        from_name: fromName,
+        from_email: fromEmail,
+        body_text: bodyText,
         received_at: receivedAt,
+        analysis_json: analysis,
+        is_recruiting: true,
       })
 
-      if (emailInsertError) {
-        console.error(`[ERROR] Insert email:`, emailInsertError)
-        stats.errors++
-      }
-
-      // Log successful processing
+      // Log success
       await logEmailProcessing({
         user_email: userEmail,
         gmail_thread_id: threadId,
         gmail_message_id: msg.id,
         from_email: fromEmail,
         from_domain: fromDomain,
-        company_guess: company,
+        company_guess: analysis.company,
         subject: subject.slice(0, 200),
         detected: true,
         score,
@@ -995,25 +902,32 @@ export async function POST() {
         matched_keywords: hits,
         llm_called: true,
         llm_is_recruiting: true,
-        llm_company: company,
-        llm_role: role,
+        llm_company: analysis.company,
+        llm_role: analysis.role,
         llm_stage: analysis.stage_bucket,
         created_pipeline_id: pipelineId,
-        action_taken: actionTaken,
+        action_taken: existingPipeline ? "updated_pipeline" : "created_pipeline",
       })
-    }
 
-    console.log(`[SYNC] ========== Complete ==========`)
-    console.log(`[SYNC] Stats:`, stats)
+    } // end for messages
+
+    console.log("[SYNC] Done. Stats:", stats)
 
     await updateSyncRun(syncRunId, stats, "completed")
 
-    return NextResponse.json({ success: true, stats, syncRunId })
+    return NextResponse.json({
+      success: true,
+      stats
+    })
 
   } catch (err: any) {
     console.error("[SYNC] Fatal error:", err)
-    stats.errors++
-    await updateSyncRun(syncRunId, stats, "failed", err?.message)
-    return NextResponse.json({ error: "EXCEPTION", message: err?.message, stats }, { status: 500 })
+    if (syncRunId) {
+      await updateSyncRun(syncRunId, stats, "failed", err?.message)
+    }
+    return NextResponse.json({
+      error: "INTERNAL_ERROR",
+      message: err?.message
+    }, { status: 500 })
   }
 }

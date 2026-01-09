@@ -69,20 +69,33 @@ function normalizeInterviewPrep(prepAny: any): any | undefined {
     ""
   )
 
+  const narrative = safeStr(pick(prepAny, ["narrative", "pitch", "elevator_pitch", "story"]))
+  const spicyOpinion = safeStr(pick(prepAny, ["spicy_opinion", "spicyOpinion", "hot_take", "opinion"]))
+
+  const primitives = safeArr(pick(prepAny, ["primitives", "core_concepts", "concepts"]))
+    .map((x) => (typeof x === "string" ? { name: x, description: "" } : x))
+    .filter((x) => x && x.name)
+
+  const proofStories = safeArr(pick(prepAny, ["proof_stories", "proofStories", "stories"]))
+    .map((x) => (typeof x === "string" ? { title: x, detail: "" } : x))
+    .filter((x) => x && x.title)
+
   const qTheyAsk = safeArr<string>(
-    pick(prepAny, ["questionsTheyMightAsk", "questions_they_might_ask", "theyMightAsk"])
-  ).map((x) => safeStr(x).trim()).filter(Boolean)
+    pick(prepAny, ["questionsTheyMightAsk", "questions_they_might_ask", "theyMightAsk", "questions_they_ask"])
+  ).map((x) => {
+    if (typeof x === "object") return x // Handle rich object { category, question }
+    return { question: safeStr(x), category: "General" }
+  }).filter(x => x.question)
 
   const qYouAsk = safeArr<string>(
-    pick(prepAny, ["questionsYouShouldAsk", "questions_you_should_ask", "questionsYouShouldAskThem", "youShouldAsk"])
-  ).map((x) => safeStr(x).trim()).filter(Boolean)
+    pick(prepAny, ["questionsYouShouldAsk", "questions_you_should_ask", "questionsYouShouldAskThem", "youShouldAsk", "questions_you_ask"])
+  ).map((x) => {
+    if (typeof x === "object") return x
+    return { question: safeStr(x), category: "General" }
+  }).filter(x => x.question)
 
   const emphasize = safeArr<string>(
     pick(prepAny, ["whatToEmphasize", "what_to_emphasize", "emphasize"])
-  ).map((x) => safeStr(x).trim()).filter(Boolean)
-
-  const stories = safeArr<string>(
-    pick(prepAny, ["storiesToPrepare", "stories_to_prepare", "stories"])
   ).map((x) => safeStr(x).trim()).filter(Boolean)
 
   const homework = safeArr<string>(
@@ -93,29 +106,20 @@ function normalizeInterviewPrep(prepAny: any): any | undefined {
 
   return {
     stageFocus,
-    stage_focus: stageFocus,
-    prepFocus: stageFocus,
+    narrative,
+    spicyOpinion,
+    primitives,
+    proofStories,
     questionsTheyMightAsk: qTheyAsk,
-    questions_they_might_ask: qTheyAsk,
     questionsYouShouldAsk: qYouAsk,
-    questionsYouShouldAskThem: qYouAsk,
-    questions_you_should_ask: qYouAsk,
     whatToEmphasize: emphasize,
-    what_to_emphasize: emphasize,
-    storiesToPrepare: stories,
-    stories_to_prepare: stories,
     homeworkNext24h: homework,
-    homework_next_24h: homework,
     industry: pick(companyIntel, ["industry"]) || "Unknown",
     size: pick(companyIntel, ["size"]) || "Unknown",
     hqLocation: pick(companyIntel, ["hqLocation", "hq_location"]) || "Unknown",
-    hq_location: pick(companyIntel, ["hqLocation", "hq_location"]) || "Unknown",
     glassdoorRating: pick(companyIntel, ["glassdoorRating", "glassdoor_rating"]) || "Unknown",
-    glassdoor_rating: pick(companyIntel, ["glassdoorRating", "glassdoor_rating"]) || "Unknown",
     summary: pick(companyIntel, ["summary"]) || "",
-    companyIntelSummary: pick(companyIntel, ["summary"]) || "",
     recentNews: safeArr(pick(companyIntel, ["recentNews", "recent_news"])),
-    recent_news: safeArr(pick(companyIntel, ["recentNews", "recent_news"])),
   }
 }
 
@@ -594,15 +598,15 @@ export default function PipelinesPage() {
       {/* Main content - gray background for whole area */}
       <div className="flex-1 overflow-hidden bg-gray-100">
         <div className="flex h-full">
-          {/* Left column - Pipelines (gray background) */}
-          <div className="w-full lg:w-1/2 min-w-0 overflow-y-auto p-4">
+          {/* Left column - Pipelines (narrower 1/3) */}
+          <div className="w-full lg:w-[380px] xl:w-[420px] min-w-0 overflow-y-auto p-4 border-r bg-[#FAFAF8]">
             {jobs.length === 0 ? (
-              <div className="rounded-xl border bg-[#FAFAF8] p-6 text-center">
+              <div className="rounded-xl border border-dashed bg-white p-6 text-center">
                 <div className="text-gray-600 mb-2 font-medium">No pipelines yet</div>
                 <div className="text-sm text-gray-500">
                   {syncStatus === 'syncing'
-                    ? "Scanning your Gmail for recruiting emails…"
-                    : "We'll automatically detect interview emails and create pipelines."}
+                    ? "Scanning inbox..."
+                    : "Connect Gmail to start."}
                 </div>
               </div>
             ) : (
@@ -621,8 +625,8 @@ export default function PipelinesPage() {
             )}
           </div>
 
-          {/* Right column - Details (white background) */}
-          <div className="hidden lg:block w-1/2 min-w-0 bg-white border-l overflow-y-auto">
+          {/* Right column - Details (WIDER 2/3) */}
+          <div className="hidden lg:block flex-1 min-w-0 bg-white overflow-y-auto">
             <PanelErrorBoundary>
               <JobDetailPanel job={selectedJob} onSaveNotes={() => { }} />
             </PanelErrorBoundary>
