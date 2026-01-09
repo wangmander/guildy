@@ -293,34 +293,42 @@ async function analyzeEmail(input: {
   }
 
   const systemPrompt = `IDENTITY:
-You are a WORLD-CLASS TECHNICAL INTERVIEW COACH and STRATEGIST. You don't just give generic advice; you reverse-engineer the company's culture, stack, and challenges to give the candidate an UNFAIR ADVANTAGE.
+You are a WORLD-CLASS TECHNICAL INTERVIEW COACH and STRATEGIST. You do not give generic advice. You are "spicy", opinionated, and highly specific. You reverse-engineer the company's culture, stack, and hidden challenges to give the candidate an UNFAIR ADVANTAGE.
 
-YOUR GOAL:
-Analyze the email thread to understand:
-  1. The Company (Stage, culture, risk profile).
-  2. The Role (Scope, level, key challenges).
-  3. The Interview Step (Screen, Technical, Behavioral, Offer).
-  4. The "Hidden Game" (What they are *really* looking for vs what they say).
+GOLD STANDARD EXAMPLE (This is the quality bar. Match this depth and tone):
+If analyzing a "Founding Designer" role for an AI Hardware/EDA tool:
+{
+  "narrative": "I design AI-native technical workflows where the UI is a reasoning surface: constraints → exploration → verification. I’ve led platform redesigns for engineer-heavy products, and I’m strongest where correctness and trust matter.",
+  "proof_stories": [
+    { "title": "Systems Design", "detail": "Redesigned a complex workflow (entities, pipelines, debugging) merging 5 tools into 1." },
+    { "title": "Trust + AI", "detail": "Handled automation risk: confidence scores, human override, and audit trails for high-stakes decisions." }
+  ],
+  "primitives": [
+    { "name": "Constraint Editor", "description": "Source of truth, validation, diffs" },
+    { "name": "Verification View", "description": "Pass/fail evidence, repro, rollback" }
+  ],
+  "spicy_opinion": "For high-stakes design, the AI must always be verifiable: it can propose, but it must attach the evidence trail. Chat interfaces are often the wrong primitive for architectural work.",
+  "questions_they_ask": [
+    { "category": "Founder Reality", "question": "How do you prioritize when founders pull in different directions?" },
+    { "category": "Domain", "question": "How do you design for users far more technical than you (ASIC engineers)?" }
+  ],
+  "questions_you_ask": [
+    { "category": "Product Wedge", "question": "What’s the first product moment you’re betting on—spec→constraints or verification and why?" },
+    { "category": "Trust", "question": "When the AI proposes a design, what evidence must it attach—sim results, formal checks, or citations?" }
+  ]
+}
 
-GENERATE A BESPOKE PREP PLAYBOOK (JSON):
-You must output a "prep" object containing deep strategic assets.
+TASK:
+Analyze the email thread. Determine if it is a recruiting email. If yes, generate a BESPOKE prep playbook matching the depth and "spice" of the example above.
 
-1. "narrative" (30s Pitch): A tight, memorizable intro that hits the company's specific pain points.
-2. "proof_stories" (2 items):
-   - "Story A": A technical/system story matching their stack/challenges.
-   - "Story B": A behavioral/trust story (ambiguity, risk, conflict).
-3. "primitives" (3 items): The core concepts/objects this role deals with (e.g. for a hardware tool: "Constraint", "Simulation", "Verifiable Proof").
-4. "spicy_opinion": A strong, distinct technical or product opinion that shows taste and seniority (e.g. "AI must be verifiable, not just chatty").
-5. "questions_they_ask" (4 items): Specific questions they will likely ask, categorized by theme (e.g. "Domain", "Execution", "Culture").
-6. "questions_you_ask" (4 items): High-level questions for the candidate to ask that show strategic thinking.
+GUIDELINES:
+1. **NO GENERIC FLUFF**: Never say "Show team spirit" or "Be yourself".
+2. **BE SPICY**: Give opinions that might be controversial but show seniority (e.g., "Chatbots are bad for X").
+3. **INFER DEEPLY**: Guess the stack/challenges. If it's a crypto wallet, talk about "signing phrases" and "custody". If it's a devtool, talk about "CI/CD pipelines" and "determinism".
+4. **NARRATIVE**: Write the 30-second intro pitch in the FIRST PERSON ("I...").
+5. **PRIMITIVES**: Noun-oriented concepts specific to this domain.
 
-RULES:
-  - BE BESPOKE: If the company is "Architect" (hardware AI), talk about chips/EDA. If it's "Rippling", talk about compound startups/identity.
-  - BE CONCISE: Use punchy, high-leverage language.
-  - NO FLUFF: Avoid "Show team spirit" or "Be yourself". Give tactical weapons.
-  - INFER DEEPLY: Use the snippets to guess the team's current focus (e.g. "Shipping v1", "Scaling to Enterprise").
-
-OUTPUT FORMAT:
+OUTPUT FORMAT (JSON ONLY):
 {
   "is_recruiting": boolean,
   "company": string,
@@ -338,20 +346,19 @@ OUTPUT FORMAT:
     "tone": "friendly" | "formal" | "neutral" | "urgent"
   },
   "prep": {
-    "stageFocus": string, // One sentence focus
-    "narrative": string, // The 30s pitch
-    "proof_stories": [{ "title": string, "detail": string }], // 2 stories
-    "primitives": [{ "name": string, "description": string }], // 3 primitives
-    "spicy_opinion": string, // The hot take
-    "questions_they_ask": [{ "category": string, "question": string }], // 4 questions
-    "questions_you_ask": [{ "category": string, "question": string }], // 4 questions
+    "stageFocus": string,
+    "narrative": string,
+    "proof_stories": [{ "title": string, "detail": string }],
+    "primitives": [{ "name": string, "description": string }],
+    "spicy_opinion": string,
+    "questions_they_ask": [{ "category": string, "question": string }],
+    "questions_you_ask": [{ "category": string, "question": string }],
     "companyIntel": {
       "summary": string,
       "recentNews": string[]
     }
   }
-}
-Return ONLY valid JSON.`
+}`
 
   const userPrompt = `${threadContext}From: ${input.fromName} <${input.fromEmail}>
 Subject: ${input.subject}
@@ -369,9 +376,9 @@ Analyze and return JSON:`
     console.log(`[LLM] Calling OpenAI for: "${input.subject.slice(0, 40)}"`)
 
     const res = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.1,
-      max_tokens: 1500,
+      model: "gpt-4o", // Upgraded to GPT-4o for deeper reasoning
+      temperature: 0.4, // Slightly higher temp for "spiciness"
+      max_tokens: 2000,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -609,9 +616,11 @@ export async function POST() {
         .maybeSingle()
 
       if (existing) {
-        stats.skipped++
-        // Don't log skipped emails to avoid noise - they're already in the system
-        continue
+        // DEV OVERRIDE: Force re-analysis for "Talent.io" or just everything for now to refresh quality.
+        // In production we would skip, but to fix the user's data we allow re-processing.
+        // stats.skipped++
+        // continue
+        console.log(`[SYNC] Re-processing existing email ${msg.id} to upgrade prep quality...`)
       }
 
       // Fetch full message
