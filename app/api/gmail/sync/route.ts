@@ -573,11 +573,11 @@ export async function POST() {
 
     try {
       do {
-        const page = await gmail.users.messages.list({ userId: "me", q, maxResults: 50, pageToken })
+        const page = await gmail.users.messages.list({ userId: "me", q, maxResults: 10, pageToken })
         messages = messages.concat(page.data.messages ?? [])
         pageToken = page.data.nextPageToken ?? undefined
-        // Hard limit to prevent timeout loops
-      } while (pageToken && messages.length < 50)
+        // Hard limit to prevent timeout loops with GPT-4o processing
+      } while (pageToken && messages.length < 15)
     } catch (gmailErr: any) {
       console.error("[SYNC] Gmail API error (likely token expired):", gmailErr?.message)
       stats.errors++
@@ -813,70 +813,94 @@ export async function POST() {
       if (!pipelineId) {
         // Create new pipeline
         console.log(`[PIPELINE] Creating for ${analysis.company}`)
-        const { data: newP, error: pErr } = await supabase
-          .from("pipelines")
-          .insert({
-            user_email: userEmail,
-            company: analysis.company,
-            role: analysis.role,
-            status: "WAITING", // Default
-            stage: finalStage,
-            stage_detail: analysis.stage_detail,
-            next_action: analysis.insights.nextAction,
-            action_needed: !!analysis.insights.nextAction,
-            last_email_at: receivedAt,
-            last_email_subject: subject,
-            last_email_snippet: snippet,
-            last_email_from_name: fromName,
-            last_email_from_email: fromEmail,
-            prep_json: analysis.prep,
-            predicted_stages: analysis.predicted_stages,
-            insights_json: analysis.insights,
-            company_intel_json: analysis.prep.companyIntel,
-          })
-          .select("id")
-          .single()
 
-        if (pErr) {
-          console.error("[PIPELINE] Creation failed:", pErr)
-          stats.errors++
-          await logEmailProcessing({
-            user_email: userEmail,
-            gmail_thread_id: threadId,
-            gmail_message_id: msg.id,
-            company_guess: analysis.company,
-            subject: subject.slice(0, 200),
-            detected: true,
-            action_taken: "error_creating_pipeline",
-          })
-          continue
+        // Strategy: Try first with all fields. If it fails, try without predicted_stages.
+        let newPStrag, pErrStrag
+
+        // Attempt 1: Full schema
+        const payloadCheck: any = {
+          user_email: userEmail,
+          company: analysis.company,
+          role: analysis.role,
+          status: "WAITING", // Default
+          stage: finalStage,
+          stage_detail: analysis.stage_detail,
+          next_action: analysis.insights.nextAction,
+          action_needed: !!analysis.insights.nextAction,
+          last_email_at: receivedAt,
+          last_email_subject: subject,
+          last_email_snippet: snippet,
+          last_email_from_name: fromName,
+          last_email_from_email: fromEmail,
+          prep_json: analysis.prep,
+          predicted_stages: analysis.predicted_stages, // This is the risk
+          insights_json: analysis.insights,
+          company_intel_json: analysis.prep.companyIntel,
         }
-        pipelineId = newP.id
-        stats.inserted++
-        // Update existing pipeline.
-        // We only update if the new email is more recent than what's on the pipeline
-        // OR if we want to overwrite prep information. For now, generally overwrite.
-        console.log(`[PIPELINE] Updating ${analysis.company} (ID: ${pipelineId}) with NEW PREP DATA...`)
-        const { error: updErr } = await supabase
-          .from("pipelines")
-          .update({
-            stage: finalStage,
-            stage_detail: analysis.stage_detail,
-            last_email_at: receivedAt,
-            last_email_subject: subject,
-            last_email_snippet: snippet,
-            last_email_from_name: fromName,
-            last_email_from_email: fromEmail,
-            prep_json: analysis.prep, // Overwrite prep with latest thoughts
-            insights_json: analysis.insights,
-            predicted_stages: analysis.predicted_stages,
-            company_intel_json: analysis.prep.companyIntel,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", pipelineId)
 
-        if (updErr) {
-          console.error(`[PIPELINE] Update FAILED for ${analysis.company}:`, updErr)
+        const { data: newP1, error: pErr1 } = await supabase.from("pipelines").insert(payloadCheck).select("id").single()
+
+        if (pErr1) {
+          console.error("[PIPELINE] Creation attempt 1 failed:", pErr1.message)
+          // Attempt 2: Self-healing (remove predicted_stages)
+          delete payloadCheck.predicted_stages
+          const { data: newP2, error: pErr2 } = await supabase.from("pipelines").insert(payloadCheck).select("id").single()
+
+          if (pErr2) {
+            console.error("[PIPELINE] Creation attempt 2 failed:", pErr2.message)
+            stats.errors++
+            await logEmailProcessing({
+              user_email: userEmail,
+              gmail_thread_id: threadId,
+              gmail_message_id: msg.id,
+              company_guess: analysis.company,
+              subject: subject.slice(0, 200),
+              detected: true,
+              action_taken: "error_creating_pipeline",
+              rejection_reason: `db_insert_failed: ${pErr2.message}`
+            })
+            continue
+          }
+          newPStrag = newP2
+        } else {
+          newPStrag = newP1
+        }
+
+        pipelineId = newPStrag.id
+        stats.inserted++
+      } else {
+        // Update existing pipeline.
+        console.log(`[PIPELINE] Updating ${analysis.company} (ID: ${pipelineId}) with NEW PREP DATA...`)
+
+        const updatePayload: any = {
+          stage: finalStage,
+          stage_detail: analysis.stage_detail,
+          last_email_at: receivedAt,
+          last_email_subject: subject,
+          last_email_snippet: snippet,
+          last_email_from_name: fromName,
+          last_email_from_email: fromEmail,
+          prep_json: analysis.prep, // Overwrite prep with latest thoughts
+          insights_json: analysis.insights,
+          predicted_stages: analysis.predicted_stages,
+          company_intel_json: analysis.prep.companyIntel,
+          updated_at: new Date().toISOString(),
+        }
+
+        // Attempt 1: Full schema
+        const { error: updErr1 } = await supabase.from("pipelines").update(updatePayload).eq("id", pipelineId)
+
+        if (updErr1) {
+          console.error(`[PIPELINE] Update attempt 1 FAILED for ${analysis.company}:`, updErr1.message)
+          // Attempt 2: Self-healing
+          delete updatePayload.predicted_stages
+          const { error: updErr2 } = await supabase.from("pipelines").update(updatePayload).eq("id", pipelineId)
+
+          if (updErr2) {
+            console.error(`[PIPELINE] Update attempt 2 FAILED for ${analysis.company}:`, updErr2.message)
+          } else {
+            console.log(`[PIPELINE] Update SUCCESS (Self-healed) for ${analysis.company}`)
+          }
         } else {
           console.log(`[PIPELINE] Update SUCCESS for ${analysis.company}`)
         }
