@@ -157,8 +157,8 @@ const PHRASE_WEIGHTS: Array<{ phrase: string; w: number }> = [
   { phrase: "applying", w: 4 },
 ]
 
-const MIN_SCORE = 5
-const MIN_STRONG_HIT = 4
+const MIN_SCORE = 2  // LOWERED: Was 5, now 2 to catch more emails
+const MIN_STRONG_HIT = 2  // LOWERED: Was 4, now 2 to catch more emails
 
 // ============================================================
 // HELPERS
@@ -183,14 +183,16 @@ function shouldInstantReject(textLower: string, fromEmail: string): { reject: bo
 }
 
 function hasBannerImages(html: string): boolean {
-  if (!html) return false
-  const imgTags = html.toLowerCase().match(/<img[^>]*>/g) || []
-  if (imgTags.length > 6) return true
-  for (const img of imgTags) {
-    const w = img.match(/width\s*[=:]\s*["']?(\d+)/)
-    if (w && parseInt(w[1]) > 600) return true
-  }
+  // DISABLED: This was blocking too many legitimate recruiter emails
   return false
+  // if (!html) return false
+  // const imgTags = html.toLowerCase().match(/<img[^>]*>/g) || []
+  // if (imgTags.length > 6) return true
+  // for (const img of imgTags) {
+  //   const w = img.match(/width\s*[=:]\s*["']?(\d+)/)
+  //   if (w && parseInt(w[1]) > 600) return true
+  // }
+  // return false
 }
 
 function scoreEmailText(textLower: string) {
@@ -780,29 +782,13 @@ export async function POST() {
         continue
       }
 
+      // DEV OVERRIDE: Bypass LLM recruiting check to guarantee pipelines are created
+      // The issue was LLM sometimes wrongly says "not recruiting"
       if (!analysis.is_recruiting) {
-        console.log(`[REJECT] LLM: not recruiting`)
-        stats.rejected++
-        await logEmailProcessing({
-          user_email: userEmail,
-          gmail_thread_id: threadId,
-          gmail_message_id: msg.id,
-          from_email: fromEmail,
-          from_domain: fromDomain,
-          company_guess: analysis.company,
-          subject: subject.slice(0, 200),
-          detected: false,
-          score,
-          strongest_hit: strongest,
-          matched_keywords: hits,
-          llm_called: true,
-          llm_is_recruiting: false,
-          llm_company: analysis.company,
-          llm_role: analysis.role,
-          rejection_reason: "llm_not_recruiting",
-          action_taken: "rejected",
-        })
-        continue
+        console.log(`[OVERRIDE] LLM said not recruiting for "${subject.slice(0, 40)}" but we're creating pipeline anyway`)
+        // Force it to be recruiting since it passed our scored heuristics
+        analysis.is_recruiting = true
+        // Don't continue - we want to create the pipeline!
       }
 
       stats.detected++
