@@ -35,6 +35,13 @@ const INSTANT_REJECT_PATTERNS: string[] = [
   // Social
   "friend request", "tagged you", "liked your post",
   "new follower", "commented on",
+
+  // Schools/Education (NOT job interviews)
+  "school admission", "school application", "student enrollment",
+  "parent interview", "school interview", "school tour",
+  "tuition", "school calendar", "school newsletter",
+  "christian school", "elementary school", "high school",
+  "middle school", "preschool", "kindergarten",
 ]
 
 const BLOCKED_SENDER_PATTERNS: string[] = [
@@ -809,7 +816,22 @@ export async function POST() {
       stats.detected++
 
       // Create or update pipeline
-      let pipelineId = existingPipeline?.id
+      // FIXED: Match by LLM-extracted company name to prevent duplicates
+      const llmCompanyNormalized = normalize(analysis.company)
+      let matchedPipeline = existingPipeline
+
+      // If no match by domain, try matching by exact company name (this prevents duplicates)
+      if (!matchedPipeline && llmCompanyNormalized) {
+        matchedPipeline = pipelines.find((p: any) => {
+          const pCompanyNorm = normalize(p.company)
+          return pCompanyNorm === llmCompanyNormalized
+        })
+        if (matchedPipeline) {
+          console.log(`[PIPELINE] Found existing by company name: "${analysis.company}"`)
+        }
+      }
+
+      let pipelineId = matchedPipeline?.id
 
       // Determine clean stage
       const finalStage = getUiStage(analysis.stage_bucket)
