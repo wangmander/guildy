@@ -573,11 +573,11 @@ export async function POST() {
 
     try {
       do {
-        const page = await gmail.users.messages.list({ userId: "me", q, maxResults: 10, pageToken })
+        const page = await gmail.users.messages.list({ userId: "me", q, maxResults: 5, pageToken })
         messages = messages.concat(page.data.messages ?? [])
         pageToken = page.data.nextPageToken ?? undefined
         // Hard limit to prevent timeout loops with GPT-4o processing
-      } while (pageToken && messages.length < 15)
+      } while (pageToken && messages.length < 5)
     } catch (gmailErr: any) {
       console.error("[SYNC] Gmail API error (likely token expired):", gmailErr?.message)
       stats.errors++
@@ -814,7 +814,6 @@ export async function POST() {
         // Create new pipeline
         console.log(`[PIPELINE] Creating for ${analysis.company}`)
 
-        // Strategy: Try first with all fields. If it fails, try without predicted_stages.
         let newPStrag, pErrStrag
 
         // Attempt 1: Full schema
@@ -822,7 +821,7 @@ export async function POST() {
           user_email: userEmail,
           company: analysis.company,
           role: analysis.role,
-          status: "WAITING", // Default
+          status: "WAITING",
           stage: finalStage,
           stage_detail: analysis.stage_detail,
           next_action: analysis.insights.nextAction,
@@ -833,7 +832,7 @@ export async function POST() {
           last_email_from_name: fromName,
           last_email_from_email: fromEmail,
           prep_json: analysis.prep,
-          predicted_stages: analysis.predicted_stages, // This is the risk
+          predicted_stages: analysis.predicted_stages,
           insights_json: analysis.insights,
           company_intel_json: analysis.prep.companyIntel,
         }
@@ -848,20 +847,41 @@ export async function POST() {
 
           if (pErr2) {
             console.error("[PIPELINE] Creation attempt 2 failed:", pErr2.message)
-            stats.errors++
-            await logEmailProcessing({
+
+            // Attempt 3: SKELETON FALLBACK (Minimal fields only)
+            // This ensures we show SOMETHING even if rich data fails.
+            console.log("[PIPELINE] Attempting SKELETON INSERT...")
+            const skeleton = {
               user_email: userEmail,
-              gmail_thread_id: threadId,
-              gmail_message_id: msg.id,
-              company_guess: analysis.company,
-              subject: subject.slice(0, 200),
-              detected: true,
-              action_taken: "error_creating_pipeline",
-              rejection_reason: `db_insert_failed: ${pErr2.message}`
-            })
-            continue
+              company: analysis.company,
+              role: analysis.role,
+              status: "WAITING",
+              stage: "Applied", // Fallback safe stage
+              last_email_at: receivedAt,
+              last_email_subject: subject,
+              updated_at: new Date().toISOString()
+            }
+            const { data: newP3, error: pErr3 } = await supabase.from("pipelines").insert(skeleton).select("id").single()
+
+            if (pErr3) {
+              console.error("[PIPELINE] Skeleton creation failed (Critical):", pErr3.message)
+              stats.errors++
+              await logEmailProcessing({
+                user_email: userEmail,
+                gmail_thread_id: threadId,
+                gmail_message_id: msg.id,
+                company_guess: analysis.company,
+                subject: subject.slice(0, 200),
+                detected: true,
+                action_taken: "error_creating_pipeline",
+                rejection_reason: `db_insert_failed_skeleton: ${pErr3.message}`
+              })
+              continue
+            }
+            newPStrag = newP3
+          } else {
+            newPStrag = newP2
           }
-          newPStrag = newP2
         } else {
           newPStrag = newP1
         }
