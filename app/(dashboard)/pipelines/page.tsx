@@ -436,31 +436,41 @@ export default function PipelinesPage() {
     }
   }, [status, syncGmail, loadPipelines])
 
-  // Auto-sync setup
+  // Auto-sync setup - FIXED: Use refs to prevent infinite re-render loops
+  const lastSyncTimeRef = useRef<number>(0)
+  const hasInitialSyncedRef = useRef(false)
+
   useEffect(() => {
     mountedRef.current = true
 
     if (status !== "authenticated") return
 
-    // Initial sync
-    syncAndReload()
+    // Only run initial sync ONCE
+    if (!hasInitialSyncedRef.current) {
+      hasInitialSyncedRef.current = true
+      syncAndReload()
+      lastSyncTimeRef.current = Date.now()
+    }
 
     // 10-minute interval
     const intervalId = setInterval(() => {
       syncAndReload()
+      lastSyncTimeRef.current = Date.now()
     }, 10 * 60 * 1000)
 
     // Focus handler - only sync if last sync was more than 10 minutes ago
     const handleFocus = () => {
-      if (!lastSyncTime || Date.now() - lastSyncTime.getTime() > 10 * 60 * 1000) {
+      if (Date.now() - lastSyncTimeRef.current > 10 * 60 * 1000) {
         syncAndReload()
+        lastSyncTimeRef.current = Date.now()
       }
     }
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        if (!lastSyncTime || Date.now() - lastSyncTime.getTime() > 10 * 60 * 1000) {
+        if (Date.now() - lastSyncTimeRef.current > 10 * 60 * 1000) {
           syncAndReload()
+          lastSyncTimeRef.current = Date.now()
         }
       }
     }
@@ -474,7 +484,7 @@ export default function PipelinesPage() {
       window.removeEventListener("focus", handleFocus)
       document.removeEventListener("visibilitychange", handleVisibilityChange)
     }
-  }, [status, syncAndReload, lastSyncTime])
+  }, [status]) // FIXED: Only depend on status, not on syncAndReload or lastSyncTime
 
   useEffect(() => {
     if (status === "authenticated") {
