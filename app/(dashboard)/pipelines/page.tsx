@@ -450,16 +450,16 @@ export default function PipelinesPage() {
       syncAndReload()
     }, 10 * 60 * 1000)
 
-    // Focus handler
+    // Focus handler - only sync if last sync was more than 10 minutes ago
     const handleFocus = () => {
-      if (!lastSyncTime || Date.now() - lastSyncTime.getTime() > 2 * 60 * 1000) {
+      if (!lastSyncTime || Date.now() - lastSyncTime.getTime() > 10 * 60 * 1000) {
         syncAndReload()
       }
     }
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        if (!lastSyncTime || Date.now() - lastSyncTime.getTime() > 2 * 60 * 1000) {
+        if (!lastSyncTime || Date.now() - lastSyncTime.getTime() > 10 * 60 * 1000) {
           syncAndReload()
         }
       }
@@ -598,8 +598,8 @@ export default function PipelinesPage() {
       {/* Main content - gray background for whole area */}
       <div className="flex-1 overflow-hidden bg-gray-100">
         <div className="flex h-full">
-          {/* Left column - Pipelines (narrower 1/3) */}
-          <div className="w-full lg:w-[380px] xl:w-[420px] min-w-0 overflow-y-auto p-4 border-r bg-[#FAFAF8]">
+          {/* Left column - Pipelines (WIDER) */}
+          <div className="w-full lg:w-[480px] xl:w-[550px] min-w-0 overflow-y-auto p-4 border-r bg-[#FAFAF8]">
             {jobs.length === 0 ? (
               <div className="rounded-xl border border-dashed bg-white p-6 text-center">
                 <div className="text-gray-600 mb-2 font-medium">No pipelines yet</div>

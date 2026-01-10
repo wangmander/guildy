@@ -157,8 +157,8 @@ const PHRASE_WEIGHTS: Array<{ phrase: string; w: number }> = [
   { phrase: "applying", w: 4 },
 ]
 
-const MIN_SCORE = 6  // Reasonable threshold - needs multiple signals
-const MIN_STRONG_HIT = 5  // Must have at least one medium-strong signal
+const MIN_SCORE = 6  // Total score must be at least 6 (needs multiple signals)
+const MIN_STRONG_HIT = 4  // Must have at least one 4-point phrase (e.g., "application", "hiring")
 
 // ============================================================
 // HELPERS
