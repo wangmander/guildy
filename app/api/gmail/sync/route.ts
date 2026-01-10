@@ -523,7 +523,7 @@ async function logEmailProcessing(log: {
 export async function POST() {
   console.log("[SYNC] ========== Starting sync ==========")
 
-  const stats = { scanned: 0, detected: 0, inserted: 0, updated: 0, skipped: 0, rejected: 0, errors: 0 }
+  const stats: { scanned: number; detected: number; inserted: number; updated: number; skipped: number; rejected: number; errors: number; lastError?: string } = { scanned: 0, detected: 0, inserted: 0, updated: 0, skipped: 0, rejected: 0, errors: 0 }
   let syncRunId: string | null = null
   let userEmail = ""
 
@@ -853,21 +853,37 @@ export async function POST() {
             const { data: newP3, error: pErr3 } = await supabase.from("pipelines").insert(skeleton).select("id").single()
 
             if (pErr3) {
-              console.error("[PIPELINE] Skeleton creation failed (Critical):", pErr3.message)
-              stats.errors++
-              await logEmailProcessing({
+              console.error("[PIPELINE] Skeleton creation failed:", pErr3.message)
+
+              // Attempt 4: ABSOLUTE MINIMUM (just 2 fields)
+              console.log("[PIPELINE] Attempting ABSOLUTE MINIMUM INSERT (user_email + company only)...")
+              const absolute = {
                 user_email: userEmail,
-                gmail_thread_id: threadId,
-                gmail_message_id: msg.id,
-                company_guess: analysis.company,
-                subject: subject.slice(0, 200),
-                detected: true,
-                action_taken: "error_creating_pipeline",
-                rejection_reason: `db_insert_failed_skeleton: ${pErr3.message}`
-              })
-              continue
+                company: analysis.company || "Unknown"
+              }
+              const { data: newP4, error: pErr4 } = await supabase.from("pipelines").insert(absolute).select("id").single()
+
+              if (pErr4) {
+                console.error("[PIPELINE] ABSOLUTE MINIMUM failed (Critical DB issue):", pErr4.message)
+                // Store the error for API response
+                stats.lastError = `Pipeline insert failed: ${pErr4.message} (table may not exist or user_email constraint)`
+                stats.errors++
+                await logEmailProcessing({
+                  user_email: userEmail,
+                  gmail_thread_id: threadId,
+                  gmail_message_id: msg.id,
+                  company_guess: analysis.company,
+                  subject: subject.slice(0, 200),
+                  detected: true,
+                  action_taken: "error_creating_pipeline",
+                  rejection_reason: `db_insert_failed_absolute: ${pErr4.message}`
+                })
+                continue
+              }
+              newPStrag = newP4
+            } else {
+              newPStrag = newP3
             }
-            newPStrag = newP3
           } else {
             newPStrag = newP2
           }
