@@ -157,8 +157,8 @@ const PHRASE_WEIGHTS: Array<{ phrase: string; w: number }> = [
   { phrase: "applying", w: 4 },
 ]
 
-const MIN_SCORE = 2  // LOWERED: Was 5, now 2 to catch more emails
-const MIN_STRONG_HIT = 2  // LOWERED: Was 4, now 2 to catch more emails
+const MIN_SCORE = 6  // Reasonable threshold - needs multiple signals
+const MIN_STRONG_HIT = 5  // Must have at least one medium-strong signal
 
 // ============================================================
 // HELPERS
@@ -782,13 +782,28 @@ export async function POST() {
         continue
       }
 
-      // DEV OVERRIDE: Bypass LLM recruiting check to guarantee pipelines are created
-      // The issue was LLM sometimes wrongly says "not recruiting"
+      // LLM recruiting check - only create pipelines for actual interviews
       if (!analysis.is_recruiting) {
-        console.log(`[OVERRIDE] LLM said not recruiting for "${subject.slice(0, 40)}" but we're creating pipeline anyway`)
-        // Force it to be recruiting since it passed our scored heuristics
-        analysis.is_recruiting = true
-        // Don't continue - we want to create the pipeline!
+        console.log(`[REJECT] LLM: not recruiting for "${subject.slice(0, 40)}"`)
+        stats.rejected++
+        await logEmailProcessing({
+          user_email: userEmail,
+          gmail_thread_id: threadId,
+          gmail_message_id: msg.id,
+          from_email: fromEmail,
+          from_domain: fromDomain,
+          company_guess: analysis.company,
+          subject: subject.slice(0, 200),
+          detected: false,
+          score,
+          strongest_hit: strongest,
+          matched_keywords: hits,
+          llm_called: true,
+          llm_is_recruiting: false,
+          rejection_reason: "llm_not_recruiting",
+          action_taken: "rejected",
+        })
+        continue
       }
 
       stats.detected++

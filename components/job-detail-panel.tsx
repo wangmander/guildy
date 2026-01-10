@@ -201,9 +201,9 @@ export function JobDetailPanel({ job, onSaveNotes }: Props) {
 
         {/* 2. Primitives & Spicy Opinion (The "Genius" Section) */}
         {(primitives.length > 0 || spicyOpinion) && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="space-y-6">
             {/* Spicy Opinion */}
-            <div className="lg:col-span-1 rounded-xl border border-rose-100 bg-rose-50/50 p-5">
+            <div className="rounded-xl border border-rose-100 bg-rose-50/50 p-5">
               <div className="flex items-center gap-2 mb-3 text-rose-700 font-bold text-sm uppercase tracking-wide">
                 <AlertCircle className="h-4 w-4" />
                 Spicy Opinion
@@ -215,12 +215,12 @@ export function JobDetailPanel({ job, onSaveNotes }: Props) {
             </div>
 
             {/* Primitives */}
-            <div className="lg:col-span-2 rounded-xl border border-gray-200 bg-white p-5">
+            <div className="rounded-xl border border-gray-200 bg-white p-5">
               <div className="flex items-center gap-2 mb-4 text-gray-500 font-bold text-sm uppercase tracking-wide">
                 <Brain className="h-4 w-4" />
                 Core Primitives & Mental Models
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {primitives.map((p: any, i: number) => (
                   <div key={i} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
                     <div className="font-semibold text-gray-900 text-sm mb-1">{p.name}</div>
@@ -235,7 +235,7 @@ export function JobDetailPanel({ job, onSaveNotes }: Props) {
         {/* 3. Proof Stories */}
         {proofStories.length > 0 && (
           <SectionCard title="Proof Stories" icon={<Award className="h-5 w-5 text-amber-500" />}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               {proofStories.map((story: any, i: number) => (
                 <div key={i} className="rounded-lg border border-amber-100 bg-amber-50/30 p-4">
                   <div className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">
@@ -250,7 +250,7 @@ export function JobDetailPanel({ job, onSaveNotes }: Props) {
         )}
 
         {/* 4. Strategic Questions */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="space-y-6">
           <SectionCard title="Questions They Ask" icon={<Target className="h-5 w-5 text-gray-400" />}>
             <div className="space-y-4">
               {qThey.map((q: any, i) => (

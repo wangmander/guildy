@@ -503,7 +503,7 @@ export default function PipelinesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl h-[calc(100vh-64px)] flex flex-col overflow-hidden">
+    <div className="mx-auto max-w-[1600px] h-[calc(100vh-64px)] flex flex-col overflow-hidden">
       {/* Progress bar for first sync or syncing state */}
       {syncStatus === 'syncing' && (isFirstSync || jobs.length === 0) ? (
         <SyncProgressBar progress={syncProgress} message={syncMessage} />
