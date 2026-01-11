@@ -298,6 +298,81 @@ function SyncProgressBar({ progress, message }: { progress: number; message: str
   )
 }
 
+// Debug Logs Component
+function DebugLogsView() {
+  const [logs, setLogs] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchLogs = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch("/api/debug/logs")
+      if (!res.ok) throw new Error("Failed to fetch logs")
+      const data = await res.json()
+      setLogs(data.logs || [])
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchLogs()
+  }, [fetchLogs])
+
+  if (loading) return <div className="text-xs text-gray-400 p-2">Loading debug logs...</div>
+  if (error) return <div className="text-xs text-red-500 p-2">Error loading logs: {error}</div>
+  if (logs.length === 0) return <div className="text-xs text-gray-400 p-2">No logs found.</div>
+
+  return (
+    <div className="overflow-x-auto">
+      <div className="flex justify-between items-center mb-2">
+        <h4 className="text-xs font-semibold text-gray-700">Recent Rejections (Debug)</h4>
+        <button onClick={fetchLogs} className="text-[10px] text-blue-600 hover:underline">Refresh</button>
+      </div>
+      <table className="w-full text-left text-[10px]">
+        <thead>
+          <tr className="border-b text-gray-500">
+            <th className="pb-1 font-medium">Time</th>
+            <th className="pb-1 font-medium">Status</th>
+            <th className="pb-1 font-medium">Subject</th>
+            <th className="pb-1 font-medium">Score</th>
+            <th className="pb-1 font-medium">Reason</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y">
+          {logs.map((log) => (
+            <tr key={log.id} className="group hover:bg-gray-50">
+              <td className="py-1 pr-2 whitespace-nowrap text-gray-400">
+                {new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </td>
+              <td className="py-1 pr-2">
+                {log.detected ? (
+                  <span className="text-green-600 font-bold">MATCH</span>
+                ) : (
+                  <span className="text-red-500 font-bold">REJECT</span>
+                )}
+              </td>
+              <td className="py-1 pr-2 max-w-[150px] truncate text-gray-700" title={log.subject}>
+                {log.subject}
+              </td>
+              <td className="py-1 pr-2">
+                {log.score !== undefined ? `${log.score} (Max: ${log.strongest_hit ?? 0})` : "-"}
+              </td>
+              <td className="py-1 text-gray-500 max-w-[200px] truncate" title={log.rejection_reason}>
+                {log.rejection_reason}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 export default function PipelinesPage() {
   const { data: session, status } = useSession()
   const userEmail = useMemo(() => session?.user?.email ?? "", [session?.user?.email])
@@ -559,47 +634,56 @@ export default function PipelinesPage() {
             </button>
           </div>
 
+
+
           {/* Expandable sync stats panel */}
-          {showSyncDetails && syncStats && (
-            <div className="mt-3 p-3 bg-gray-50 rounded-lg border">
-              <div className="text-xs font-semibold text-gray-700 mb-2">Last Sync Results</div>
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-center">
-                <div className="bg-white rounded p-2 border">
-                  <div className="text-lg font-bold text-gray-900">{syncStats.scanned}</div>
-                  <div className="text-[10px] text-gray-500">Scanned</div>
+          {showSyncDetails && (
+            <div className="mt-3 space-y-3">
+              {syncStats ? (
+                <div className="p-3 bg-gray-50 rounded-lg border">
+                  <div className="text-xs font-semibold text-gray-700 mb-2">Last Sync Results</div>
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-center">
+                    <div className="bg-white rounded p-2 border">
+                      <div className="text-lg font-bold text-gray-900">{syncStats.scanned}</div>
+                      <div className="text-[10px] text-gray-500">Scanned</div>
+                    </div>
+                    <div className="bg-white rounded p-2 border">
+                      <div className="text-lg font-bold text-green-600">{syncStats.detected}</div>
+                      <div className="text-[10px] text-gray-500">Detected</div>
+                    </div>
+                    <div className="bg-white rounded p-2 border">
+                      <div className="text-lg font-bold text-blue-600">{syncStats.inserted}</div>
+                      <div className="text-[10px] text-gray-500">New Jobs</div>
+                    </div>
+                    <div className="bg-white rounded p-2 border">
+                      <div className="text-lg font-bold text-purple-600">{syncStats.updated}</div>
+                      <div className="text-[10px] text-gray-500">Updated</div>
+                    </div>
+                    <div className="bg-white rounded p-2 border">
+                      <div className="text-lg font-bold text-gray-400">{syncStats.rejected}</div>
+                      <div className="text-[10px] text-gray-500">Rejected</div>
+                    </div>
+                    <div className="bg-white rounded p-2 border">
+                      <div className={`text-lg font-bold ${syncStats.errors > 0 ? 'text-red-600' : 'text-gray-400'}`}>{syncStats.errors}</div>
+                      <div className="text-[10px] text-gray-500">Errors</div>
+                    </div>
+                  </div>
+                  {lastSyncTime && (
+                    <div className="mt-2 text-[10px] text-gray-400 text-right">
+                      Last sync: {lastSyncTime.toLocaleTimeString()} • Checks every 10 min
+                    </div>
+                  )}
                 </div>
-                <div className="bg-white rounded p-2 border">
-                  <div className="text-lg font-bold text-green-600">{syncStats.detected}</div>
-                  <div className="text-[10px] text-gray-500">Detected</div>
-                </div>
-                <div className="bg-white rounded p-2 border">
-                  <div className="text-lg font-bold text-blue-600">{syncStats.inserted}</div>
-                  <div className="text-[10px] text-gray-500">New Jobs</div>
-                </div>
-                <div className="bg-white rounded p-2 border">
-                  <div className="text-lg font-bold text-purple-600">{syncStats.updated}</div>
-                  <div className="text-[10px] text-gray-500">Updated</div>
-                </div>
-                <div className="bg-white rounded p-2 border">
-                  <div className="text-lg font-bold text-gray-400">{syncStats.rejected}</div>
-                  <div className="text-[10px] text-gray-500">Rejected</div>
-                </div>
-                <div className="bg-white rounded p-2 border">
-                  <div className={`text-lg font-bold ${syncStats.errors > 0 ? 'text-red-600' : 'text-gray-400'}`}>{syncStats.errors}</div>
-                  <div className="text-[10px] text-gray-500">Errors</div>
-                </div>
-              </div>
-              {lastSyncTime && (
-                <div className="mt-2 text-[10px] text-gray-400 text-right">
-                  Last sync: {lastSyncTime.toLocaleTimeString()} • Checks every 10 min
+              ) : (
+                <div className="p-3 bg-gray-50 rounded-lg border text-sm text-gray-500">
+                  No sync data yet. Sync will run automatically.
                 </div>
               )}
-            </div>
-          )}
 
-          {showSyncDetails && !syncStats && (
-            <div className="mt-3 p-3 bg-gray-50 rounded-lg border text-sm text-gray-500">
-              No sync data yet. Sync will run automatically.
+              {/* Debug Logs Section */}
+              <div className="p-3 bg-gray-50 rounded-lg border mt-2">
+                <DebugLogsView />
+              </div>
             </div>
           )}
         </div>
