@@ -309,7 +309,10 @@ function DebugLogsView() {
     setError(null)
     try {
       const res = await fetch("/api/debug/logs")
-      if (!res.ok) throw new Error("Failed to fetch logs")
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || `Error ${res.status}: Failed to fetch logs`)
+      }
       const data = await res.json()
       setLogs(data.logs || [])
     } catch (err: any) {
