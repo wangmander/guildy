@@ -197,8 +197,8 @@ const PHRASE_WEIGHTS: Array<{ phrase: string; w: number }> = [
   { phrase: "applying", w: 4 },
 ]
 
-const MIN_SCORE = 8  // Higher threshold - needs strong recruiting signals
-const MIN_STRONG_HIT = 6  // Must have at least one 6+ point phrase (e.g., "interview", "phone screen")
+const MIN_SCORE = 4  // Lowered from 8 to catch more potential interviews
+const MIN_STRONG_HIT = 3  // Lowered from 6 to allow medium signals to trigger detection
 
 // ============================================================
 // HELPERS

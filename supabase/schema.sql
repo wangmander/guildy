@@ -180,3 +180,41 @@ END $$;
 
 -- Done! RLS is now enabled with permissive policies for service role.
 -- The Security Advisor warnings should be resolved.
+
+-- ============================================================
+-- SECURITY ADVISOR FIXES (2025-01-13)
+-- ============================================================
+
+-- 1. pipelines
+ALTER TABLE IF EXISTS pipelines ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users can view own pipelines" ON pipelines;
+CREATE POLICY "Users can view own pipelines" ON pipelines
+    FOR ALL
+    USING (auth.uid()::text IS NOT NULL AND user_email = (SELECT email FROM auth.users WHERE id = auth.uid()));
+
+-- 2. emails
+ALTER TABLE IF EXISTS emails ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users can view own emails" ON emails;
+CREATE POLICY "Users can view own emails" ON emails
+    FOR ALL
+    USING (auth.uid()::text IS NOT NULL AND user_email = (SELECT email FROM auth.users WHERE id = auth.uid()));
+
+-- 3. test_pipelines
+CREATE TABLE IF NOT EXISTS test_pipelines (id UUID PRIMARY KEY DEFAULT gen_random_uuid()); -- Ensure table exists for schema correctness
+ALTER TABLE IF EXISTS test_pipelines ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "service_role_full_access_test_pipelines" ON test_pipelines;
+CREATE POLICY "service_role_full_access_test_pipelines" ON test_pipelines FOR ALL USING (true) WITH CHECK (true);
+
+-- 4. interviewers
+CREATE TABLE IF NOT EXISTS interviewers (id UUID PRIMARY KEY DEFAULT gen_random_uuid()); -- Ensure table exists
+ALTER TABLE IF EXISTS interviewers ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "service_role_full_access_interviewers" ON interviewers;
+CREATE POLICY "service_role_full_access_interviewers" ON interviewers FOR ALL USING (true) WITH CHECK (true);
+
+-- 5. early_access_requests
+CREATE TABLE IF NOT EXISTS early_access_requests (id UUID PRIMARY KEY DEFAULT gen_random_uuid()); -- Ensure table exists
+ALTER TABLE IF EXISTS early_access_requests ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "service_role_full_access_early_access_requests" ON early_access_requests;
+CREATE POLICY "service_role_full_access_early_access_requests" ON early_access_requests FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Public can insert early access requests" ON early_access_requests;
+CREATE POLICY "Public can insert early access requests" ON early_access_requests FOR INSERT WITH CHECK (true);
