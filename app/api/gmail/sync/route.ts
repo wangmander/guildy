@@ -362,6 +362,7 @@ If analyzing a "Founding Designer" role for an AI Hardware/EDA tool:
 
 TASK:
 Analyze the email thread. Determine if it is a recruiting email. If yes, generate a BESPOKE prep playbook matching the depth and "spice" of the example above.
+CRITICAL: You MUST populate the 'prep' object with rich, high-quality content. Do NOT leave 'narrative', 'primitives', or 'proof_stories' empty. If you lack context, INFER IT based on the company's probable stack and the role type.
 
 GUIDELINES:
 1. **NO GENERIC FLUFF**: Never say "Show team spirit" or "Be yourself".
@@ -371,6 +372,7 @@ GUIDELINES:
 5. **PRIMITIVES**: Noun-oriented concepts specific to this domain.
 6. **QUANTITY**: Generate exactly 8 questions for "questions_they_ask" and 8 for "questions_you_ask".
 7. **DEPTH**: UNLOCK "GOD MODE". For "Proof Stories" and "Primitives", provide **DETAILED, MULTI-SENTENCE** explanations. Do not be brief. The user wants a "book to read" of value. Give them 3-4 sentences per story explaining the *context, action, and result*.
+8. **MANDATORY**: The 'prep' fields must NOT be null. Invent plausible, high-IQ strategies if strictly necessary to fill the UI.
 
 OUTPUT FORMAT (JSON ONLY):
 {
@@ -391,10 +393,10 @@ OUTPUT FORMAT (JSON ONLY):
   },
   "prep": {
     "stageFocus": string,
-    "narrative": string,
-    "proof_stories": [{ "title": string, "detail": string }],
-    "primitives": [{ "name": string, "description": string }],
-    "spicy_opinion": string,
+    "narrative": string, // MUST be filled
+    "proof_stories": [{ "title": string, "detail": string }], // At least 2
+    "primitives": [{ "name": string, "description": string }], // At least 2
+    "spicy_opinion": string, // MUST be filled
     "questions_they_ask": [{ "category": string, "question": string }], // 8 items
     "questions_you_ask": [{ "category": string, "question": string }], // 8 items
     "companyIntel": {
