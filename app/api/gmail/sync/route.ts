@@ -668,17 +668,33 @@ export async function POST() {
 
       const threadId = msg.threadId || undefined
 
-      // Check if already processed
+      // Check if already processed — but re-process if pipeline has empty prep
       const { data: existing } = await supabase
         .from("emails")
-        .select("id")
+        .select("id, pipeline_id")
         .eq("user_email", userEmail)
         .eq("gmail_message_id", msg.id)
         .maybeSingle()
 
       if (existing) {
-        stats.skipped++
-        continue
+        // Check if the linked pipeline needs a prep refresh
+        let needsRefresh = false
+        if (existing.pipeline_id) {
+          const { data: pl } = await supabase
+            .from("pipelines")
+            .select("prep_json, stage")
+            .eq("id", existing.pipeline_id)
+            .maybeSingle()
+          // Re-process if prep is missing/empty or stage is stale
+          if (!pl?.prep_json || !pl.prep_json.narrative || pl.stage === "HM" || pl.stage === "ASSESSMENT" || pl.stage === "Applied") {
+            needsRefresh = true
+            console.log(`[SYNC] Re-processing ${msg.id} — pipeline needs prep refresh`)
+          }
+        }
+        if (!needsRefresh) {
+          stats.skipped++
+          continue
+        }
       }
 
       // Fetch full message
