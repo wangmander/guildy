@@ -48,6 +48,13 @@ const INSTANT_REJECT_PATTERNS: string[] = [
   "tuition", "school calendar", "school newsletter",
   "christian school", "elementary school", "high school",
   "middle school", "preschool", "kindergarten",
+
+  // Auto-confirmation emails (not a recruiter reaching out)
+  "thanks for applying", "thank you for applying",
+  "received your application", "application has been received",
+  "we received your application", "application was submitted",
+  "successfully submitted", "application confirmed",
+  "thank you for your interest", "thanks for your interest",
 ]
 
 const BLOCKED_SENDER_PATTERNS: string[] = [
@@ -60,16 +67,10 @@ const BLOCKED_SENDER_PATTERNS: string[] = [
 // RECRUITING PHRASE WEIGHTS - Comprehensive
 // ============================================================
 const PHRASE_WEIGHTS: Array<{ phrase: string; w: number }> = [
-  // === DEFINITIVE SIGNALS (10) ===
+  // === DEFINITIVE SIGNALS (10) - Only real recruiter outreach ===
   { phrase: "interview", w: 10 },
   { phrase: "interviews", w: 10 },
   { phrase: "interviewing", w: 10 },
-  { phrase: "your application", w: 10 },
-  { phrase: "job application", w: 10 },
-  { phrase: "thanks for applying", w: 10 },
-  { phrase: "thank you for applying", w: 10 },
-  { phrase: "received your application", w: 10 },
-  { phrase: "application status", w: 10 },
   { phrase: "your candidacy", w: 10 },
   { phrase: "not moving forward", w: 10 },
   { phrase: "regret to inform", w: 10 },
@@ -341,6 +342,11 @@ async function analyzeEmail(input: {
   }
 
   const systemPrompt = `You are the world's most elite interview strategist. You produce prep material so specific and insightful that it feels like insider knowledge. You never give generic advice. Every word is tailored to THIS company, THIS role, THIS stage, and THIS interviewer.
+
+CRITICAL — is_recruiting RULES:
+- Set is_recruiting=TRUE only when a REAL HUMAN (recruiter, hiring manager, interviewer) is reaching out or responding to the candidate.
+- Set is_recruiting=FALSE for: auto-confirmation emails ("Thanks for applying", "We received your application", "Application submitted"), marketing blasts, job board notifications (LinkedIn, Indeed, Glassdoor digest emails), and newsletters.
+- The test: Did a specific person at a company write or trigger this email because they want to talk to THIS candidate? If no → is_recruiting=false.
 
 INTERVIEWER PROFILING:
 When you see a sender name/title, you MUST profile them:
@@ -933,13 +939,10 @@ export async function POST() {
       const finalStage = getUiStage(analysis.stage_bucket)
 
       if (!pipelineId) {
-        // Create new pipeline
+        // Create new pipeline — never include predicted_stages in insert (column may not exist)
         console.log(`[PIPELINE] Creating for ${analysis.company}`)
 
-        let newPStrag, pErrStrag
-
-        // Attempt 1: Full schema
-        const payloadCheck: any = {
+        const payload: any = {
           user_email: userEmail,
           company: analysis.company,
           role: analysis.role,
@@ -947,88 +950,54 @@ export async function POST() {
           stage: finalStage,
           stage_detail: analysis.stage_detail,
           next_action: analysis.insights.nextAction,
-          action_needed: !!analysis.insights.nextAction,
           last_email_at: receivedAt,
           last_email_subject: subject,
           last_email_snippet: snippet,
           last_email_from_name: fromName,
           last_email_from_email: fromEmail,
           prep_json: analysis.prep,
-          predicted_stages: analysis.predicted_stages,
           insights_json: analysis.insights,
           company_intel_json: analysis.prep.companyIntel,
         }
 
-        const { data: newP1, error: pErr1 } = await supabase.from("pipelines").insert(payloadCheck).select("id").single()
+        const { data: newP, error: pErr } = await supabase.from("pipelines").insert(payload).select("id").single()
 
-        if (pErr1) {
-          console.error("[PIPELINE] Creation attempt 1 failed:", pErr1.message)
-          // Attempt 2: Self-healing (remove predicted_stages)
-          delete payloadCheck.predicted_stages
-          const { data: newP2, error: pErr2 } = await supabase.from("pipelines").insert(payloadCheck).select("id").single()
+        if (pErr) {
+          console.error("[PIPELINE] Insert failed:", pErr.message)
+          // Fallback: core fields only but ALWAYS include prep_json
+          const fallback: any = {
+            user_email: userEmail,
+            company: analysis.company,
+            role: analysis.role,
+            status: "WAITING",
+            stage: finalStage,
+            last_email_at: receivedAt,
+            last_email_subject: subject,
+            prep_json: analysis.prep,
+            insights_json: analysis.insights,
+          }
+          const { data: newP2, error: pErr2 } = await supabase.from("pipelines").insert(fallback).select("id").single()
 
           if (pErr2) {
-            console.error("[PIPELINE] Creation attempt 2 failed:", pErr2.message)
-
-            // Attempt 3: SKELETON FALLBACK (Minimal fields only)
-            // This ensures we show SOMETHING even if rich data fails.
-            console.log("[PIPELINE] Attempting SKELETON INSERT...")
-            const skeleton = {
-              user_email: userEmail,
-              company: analysis.company,
-              role: analysis.role,
-              status: "WAITING",
-              stage: "Applied", // Fallback safe stage
-              last_email_at: receivedAt,
-              last_email_subject: subject,
-              updated_at: new Date().toISOString()
-            }
-            const { data: newP3, error: pErr3 } = await supabase.from("pipelines").insert(skeleton).select("id").single()
-
-            if (pErr3) {
-              console.error("[PIPELINE] Skeleton creation failed:", pErr3.message)
-
-              // Attempt 4: ABSOLUTE MINIMUM (just 2 fields)
-              console.log("[PIPELINE] Attempting ABSOLUTE MINIMUM INSERT (user_email + company only)...")
-              const absolute = {
-                user_email: userEmail,
-                company: analysis.company || "Unknown"
-              }
-              const { data: newP4, error: pErr4 } = await supabase.from("pipelines").insert(absolute).select("id").single()
-
-              if (pErr4) {
-                console.error("[PIPELINE] ABSOLUTE MINIMUM failed (Critical DB issue):", pErr4.message)
-                // Store the error for API response
-                stats.lastError = `Pipeline insert failed: ${pErr4.message} (table may not exist or user_email constraint)`
-                stats.errors++
-                await logEmailProcessing({
-                  user_email: userEmail,
-                  gmail_thread_id: threadId,
-                  gmail_message_id: msg.id,
-                  company_guess: analysis.company,
-                  subject: subject.slice(0, 200),
-                  detected: true,
-                  action_taken: "error_creating_pipeline",
-                  rejection_reason: `db_insert_failed_absolute: ${pErr4.message}`
-                })
-                continue
-              }
-              newPStrag = newP4
-            } else {
-              newPStrag = newP3
-            }
-          } else {
-            newPStrag = newP2
+            console.error("[PIPELINE] Fallback also failed:", pErr2.message)
+            stats.errors++
+            continue
           }
+          pipelineId = newP2.id
         } else {
-          newPStrag = newP1
+          pipelineId = newP.id
         }
 
-        pipelineId = newPStrag.id
+        // Try to set predicted_stages separately (OK if column doesn't exist)
+        if (analysis.predicted_stages?.length > 0) {
+          await supabase.from("pipelines").update({ predicted_stages: analysis.predicted_stages }).eq("id", pipelineId).then(() => {})
+            .catch(() => console.log("[PIPELINE] predicted_stages column not available, skipping"))
+        }
+
         stats.inserted++
       } else {
-        // Update existing pipeline.
-        console.log(`[PIPELINE] Updating ${analysis.company} (ID: ${pipelineId}) with NEW PREP DATA...`)
+        // Update existing pipeline — always save prep_json
+        console.log(`[PIPELINE] Updating ${analysis.company} (ID: ${pipelineId})`)
 
         const updatePayload: any = {
           stage: finalStage,
@@ -1038,30 +1007,24 @@ export async function POST() {
           last_email_snippet: snippet,
           last_email_from_name: fromName,
           last_email_from_email: fromEmail,
-          prep_json: analysis.prep, // Overwrite prep with latest thoughts
+          prep_json: analysis.prep,
           insights_json: analysis.insights,
-          predicted_stages: analysis.predicted_stages,
           company_intel_json: analysis.prep.companyIntel,
           updated_at: new Date().toISOString(),
         }
 
-        // Attempt 1: Full schema
-        const { error: updErr1 } = await supabase.from("pipelines").update(updatePayload).eq("id", pipelineId)
+        const { error: updErr } = await supabase.from("pipelines").update(updatePayload).eq("id", pipelineId)
 
-        if (updErr1) {
-          console.error(`[PIPELINE] Update attempt 1 FAILED for ${analysis.company}:`, updErr1.message)
-          // Attempt 2: Self-healing
-          delete updatePayload.predicted_stages
-          const { error: updErr2 } = await supabase.from("pipelines").update(updatePayload).eq("id", pipelineId)
-
-          if (updErr2) {
-            console.error(`[PIPELINE] Update attempt 2 FAILED for ${analysis.company}:`, updErr2.message)
-          } else {
-            console.log(`[PIPELINE] Update SUCCESS (Self-healed) for ${analysis.company}`)
-          }
-        } else {
-          console.log(`[PIPELINE] Update SUCCESS for ${analysis.company}`)
+        if (updErr) {
+          console.error(`[PIPELINE] Update FAILED for ${analysis.company}:`, updErr.message)
         }
+
+        // Try predicted_stages separately
+        if (analysis.predicted_stages?.length > 0) {
+          await supabase.from("pipelines").update({ predicted_stages: analysis.predicted_stages }).eq("id", pipelineId)
+            .then(() => {}).catch(() => {})
+        }
+
         stats.updated++
       }
 
