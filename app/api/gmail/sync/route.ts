@@ -5,12 +5,18 @@ import { google } from "googleapis"
 import { supabaseAdmin } from "@/lib/supabaseAdmin"
 import OpenAI from "openai"
 
+// Allow up to 120s on Vercel Pro (default is 10s on Hobby)
+export const maxDuration = 120
+
 const openaiKey = process.env.OPENAI_API_KEY
 
 // Service role client from supabaseAdmin (bypasses RLS)
 const supabase = supabaseAdmin
 
 const openai = openaiKey ? new OpenAI({ apiKey: openaiKey }) : null
+
+// Max LLM calls per sync to stay within timeout
+const MAX_LLM_CALLS_PER_SYNC = 8
 
 // ============================================================
 // INSTANT REJECT - Minimal, only obvious non-recruiting
@@ -584,6 +590,7 @@ export async function POST() {
   const stats: { scanned: number; detected: number; inserted: number; updated: number; skipped: number; rejected: number; errors: number; lastError?: string } = { scanned: 0, detected: 0, inserted: 0, updated: 0, skipped: 0, rejected: 0, errors: 0 }
   let syncRunId: string | null = null
   let userEmail = ""
+  let llmCallCount = 0
 
   try {
     // Guard against missing env vars
@@ -636,10 +643,10 @@ export async function POST() {
 
     try {
       do {
-        const page = await gmail.users.messages.list({ userId: "me", q, maxResults: 50, pageToken })
+        const page = await gmail.users.messages.list({ userId: "me", q, maxResults: 100, pageToken })
         messages = messages.concat(page.data.messages ?? [])
         pageToken = page.data.nextPageToken ?? undefined
-      } while (pageToken && messages.length < 50)
+      } while (pageToken && messages.length < 100)
     } catch (gmailErr: any) {
       console.error("[SYNC] Gmail API error (likely token expired):", gmailErr?.message)
       stats.errors++
@@ -837,7 +844,15 @@ export async function POST() {
         }
       }
 
+      // Budget check — stop making LLM calls if we've hit the limit
+      if (llmCallCount >= MAX_LLM_CALLS_PER_SYNC) {
+        console.log(`[SYNC] LLM budget exhausted (${MAX_LLM_CALLS_PER_SYNC}), skipping remaining`)
+        stats.skipped++
+        continue
+      }
+
       // LLM Analysis
+      llmCallCount++
       const analysis = await analyzeEmail({
         subject,
         snippet,

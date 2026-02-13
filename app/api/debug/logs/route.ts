@@ -10,8 +10,6 @@ export async function GET() {
             return NextResponse.json({ error: "supabaseAdmin is null - check SUPABASE_SERVICE_ROLE_KEY" }, { status: 500 })
         }
 
-        console.log("Fetching debug logs...")
-
         const { data: logs, error } = await supabaseAdmin
             .from('email_processing_log')
             .select('*')
@@ -19,13 +17,15 @@ export async function GET() {
             .limit(20)
 
         if (error) {
-            console.error("Error fetching logs:", error)
+            // Table might not exist — return empty logs instead of crashing
+            if (error.code === 'PGRST205' || error.message?.includes('not find the table')) {
+                return NextResponse.json({ logs: [] })
+            }
             return NextResponse.json({ error: `DB Error: ${error.message} (${error.code})` }, { status: 500 })
         }
 
-        return NextResponse.json({ logs })
+        return NextResponse.json({ logs: logs || [] })
     } catch (err: any) {
-        console.error("Exception fetching logs:", err)
-        return NextResponse.json({ error: `Exception: ${err.message}` }, { status: 500 })
+        return NextResponse.json({ logs: [] })
     }
 }
