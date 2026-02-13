@@ -1,4 +1,4 @@
-export type Stage = "APPLIED" | "RECRUITER_SCREEN" | "INTERVIEW" | "OFFER"
+export type Stage = "SCREENING" | "HIRING_MANAGER" | "PRESENTATION" | "FULL_LOOP" | "OFFER_DISCUSSION" | "REJECTED"
 export type Status = "WAITING" | "SCHEDULED" | "FEEDBACK_PENDING" | "DECLINED" | "NEGOTIATING"
 
 export interface EmailSnippet {
@@ -13,19 +13,30 @@ export interface ScheduledMeeting {
   date: string
   type: string
   meetingLink: string
-  duration: number // in minutes
+  duration: number
 }
 
 export interface InterviewPrep {
-  interviewer: {
-    name: string
-    role: string
-    profileUrl?: string
-    bio: string
-    goals: string[]
-  }
-  sampleQuestions: string[]
-  tips: string[]
+  stageFocus?: string
+  narrative?: string
+  spicyOpinion?: string
+  primitives?: Array<{ name: string; description: string }>
+  proofStories?: Array<{ title: string; detail: string }>
+  questionsTheyMightAsk?: Array<{ category: string; question: string }>
+  questionsYouShouldAsk?: Array<{ category: string; question: string }>
+  whatToEmphasize?: string[]
+  homeworkNext24h?: string[]
+  industry?: string
+  size?: string
+  hqLocation?: string
+  companyIntelSummary?: string
+  summary?: string
+  recentNews?: string[]
+  insights?: any
+  nextAction?: string
+  tone?: string
+  urgency?: string
+  responseLikelihood?: string
 }
 
 export interface NewsItem {
@@ -43,7 +54,7 @@ export interface Job {
     glassdoorRating?: number
   }
   location?: string
-  industry?: "Tech" | "Healthcare" | "Finance" | "Other"
+  industry?: string
   jobType?: "PM" | "Design" | "Eng" | "Data" | "Other"
   tags?: string[]
   stage: Stage

@@ -45,9 +45,9 @@ const INSTANT_REJECT_PATTERNS: string[] = [
 ]
 
 const BLOCKED_SENDER_PATTERNS: string[] = [
-  "noreply@", "no-reply@", "donotreply@",
+  // Only block actual mail infrastructure - NOT noreply/sendgrid/mailgun
+  // since Greenhouse, Lever, Workday, Ashby, and most ATS send from those
   "mailer-daemon", "postmaster@",
-  "sendgrid.net", "mailchimp.com", "mailgun.org",
 ]
 
 // ============================================================
@@ -305,8 +305,8 @@ function extractBodyFromPayload(payload: any): { text: string; html: string } {
 function getUiStage(bucket: string): string {
   const map: Record<string, string> = {
     "RECRUITER_SCREEN": "SCREENING",
-    "HM_SCREEN": "HM",
-    "ASSESSMENT": "ASSESSMENT",
+    "HM_SCREEN": "HIRING_MANAGER",
+    "ASSESSMENT": "PRESENTATION",
     "LOOP": "FULL_LOOP",
     "OFFER": "OFFER_DISCUSSION",
     "REJECTED": "REJECTED",
@@ -334,74 +334,84 @@ async function analyzeEmail(input: {
     threadContext += "\nNEW EMAIL TO ANALYZE:\n"
   }
 
-  const systemPrompt = `IDENTITY:
-You are a WORLD-CLASS TECHNICAL INTERVIEW COACH and STRATEGIST. You do not give generic advice. You are "spicy", opinionated, and highly specific. You reverse-engineer the company's culture, stack, and hidden challenges to give the candidate an UNFAIR ADVANTAGE.
+  const systemPrompt = `You are the world's most elite interview strategist. You produce prep material so specific and insightful that it feels like insider knowledge. You never give generic advice. Every word is tailored to THIS company, THIS role, THIS stage, and THIS interviewer.
 
-GOLD STANDARD EXAMPLE (This is the quality bar. Match this depth and tone):
-If analyzing a "Founding Designer" role for an AI Hardware/EDA tool:
-{
-  "narrative": "I design AI-native technical workflows where the UI is a reasoning surface: constraints → exploration → verification. I’ve led platform redesigns for engineer-heavy products, and I’m strongest where correctness and trust matter.",
-  "proof_stories": [
-    { "title": "Systems Design", "detail": "Redesigned a complex workflow (entities, pipelines, debugging) merging 5 tools into 1." },
-    { "title": "Trust + AI", "detail": "Handled automation risk: confidence scores, human override, and audit trails for high-stakes decisions." }
-  ],
-  "primitives": [
-    { "name": "Constraint Editor", "description": "Source of truth, validation, diffs" },
-    { "name": "Verification View", "description": "Pass/fail evidence, repro, rollback" }
-  ],
-  "spicy_opinion": "For high-stakes design, the AI must always be verifiable: it can propose, but it must attach the evidence trail. Chat interfaces are often the wrong primitive for architectural work.",
-  "questions_they_ask": [
-    { "category": "Founder Reality", "question": "How do you prioritize when founders pull in different directions?" },
-    { "category": "Domain", "question": "How do you design for users far more technical than you (ASIC engineers)?" }
-  ],
-  "questions_you_ask": [
-    { "category": "Product Wedge", "question": "What’s the first product moment you’re betting on—spec→constraints or verification and why?" },
-    { "category": "Trust", "question": "When the AI proposes a design, what evidence must it attach—sim results, formal checks, or citations?" }
-  ]
-}
+INTERVIEWER PROFILING:
+When you see a sender name/title, you MUST profile them:
+- Infer their likely role, seniority, and what they evaluate (a "Senior Engineering Manager" cares about system design and team scaling; a "Recruiter" cares about culture fit and comp expectations; a "VP Product" cares about strategic thinking and customer empathy).
+- Tailor ALL questions and stories to what THIS person would probe for.
+- If the sender is a recruiter from an ATS (Greenhouse, Lever), infer who the NEXT interviewer likely is based on the stage and tailor prep for that upcoming conversation.
 
-TASK:
-Analyze the email thread. Determine if it is a recruiting email. If yes, generate a BESPOKE prep playbook matching the depth and "spice" of the example above.
-CRITICAL: You MUST populate the 'prep' object with rich, high-quality content. Do NOT leave 'narrative', 'primitives', or 'proof_stories' empty. If you lack context, INFER IT based on the company's probable stack and the role type.
+ROLE-SPECIFIC PIPELINE STAGES (predicted_stages):
+Generate bespoke pipeline stages based on the actual role type. Examples:
+- Software Engineer: ["Recruiter Screen", "Technical Phone Screen", "Coding Challenge", "System Design", "Team Fit / Bar Raiser", "Offer"]
+- Product Designer: ["Recruiter Screen", "Portfolio Review", "Design Challenge", "Hiring Manager", "Cross-functional Panel", "Offer"]
+- Product Manager: ["Recruiter Screen", "PM Screen", "Case Study / Product Sense", "Technical Depth", "Leadership / Cross-functional", "Offer"]
+- Data Scientist: ["Recruiter Screen", "Technical Screen", "Take-Home Analysis", "Modeling Deep Dive", "Stakeholder Presentation", "Offer"]
+- Sales/BizDev: ["Recruiter Screen", "Hiring Manager", "Mock Pitch / Role Play", "VP/C-Suite Final", "Offer"]
+- General/Unknown: ["Recruiter Screen", "Hiring Manager Screen", "Skills Assessment", "Final Round", "Offer"]
+Adapt these to the specific company (e.g., FAANG has "Bar Raiser", startups have "Founder Chat").
+
+STAGE-SPECIFIC PREP DEPTH:
+- RECRUITER_SCREEN: Narrative-heavy. "Why you, why them, why now." Comp expectations. Culture signals. Questions that show you've researched the company deeply.
+- HM_SCREEN: Impact stories mapped to their team's actual problems. "How would you approach X in your first 90 days?" Questions about roadmap, team structure, what success looks like.
+- ASSESSMENT: Deep technical prep. For engineers: data structures, system design patterns relevant to their stack. For designers: portfolio walkthrough strategy, critique frameworks. For PMs: product sense frameworks, estimation practice. Questions about evaluation rubric.
+- LOOP: Full coverage. One story per competency (technical, collaboration, leadership, ambiguity). Questions about decision-making culture, conflict resolution, how they ship.
+- OFFER: Negotiation leverage. Research comp bands. Questions about equity structure, vesting, refreshers, growth trajectory, team budget.
+
+COMPANY DEEP DIVE:
+For the company, you MUST infer and provide:
+- What they actually build (not just the industry category)
+- Their likely tech stack and architecture decisions
+- Their competitive landscape and what differentiates them
+- Their stage (seed, Series A-D, public) and what that implies for the role
+- Recent strategic moves, funding, product launches based on your knowledge
+- The company culture archetype (move-fast-break-things, engineering-excellence, design-led, sales-driven)
 
 GUIDELINES:
-1. **NO GENERIC FLUFF**: Never say "Show team spirit" or "Be yourself".
-2. **BE SPICY**: Give opinions that might be controversial but show seniority (e.g., "Chatbots are bad for X").
-3. **INFER DEEPLY**: Guess the stack/challenges. If it's a crypto wallet, talk about "signing phrases" and "custody". If it's a devtool, talk about "CI/CD pipelines" and "determinism".
-4. **NARRATIVE**: Write the 30-second intro pitch in the FIRST PERSON ("I...").
-5. **PRIMITIVES**: Noun-oriented concepts specific to this domain.
-6. **QUANTITY**: Generate exactly 8 questions for "questions_they_ask" and 8 for "questions_you_ask".
-7. **DEPTH**: UNLOCK "GOD MODE". For "Proof Stories" and "Primitives", provide **DETAILED, MULTI-SENTENCE** explanations. Do not be brief. The user wants a "book to read" of value. Give them 3-4 sentences per story explaining the *context, action, and result*.
-8. **MANDATORY**: The 'prep' fields must NOT be null. Invent plausible, high-IQ strategies if strictly necessary to fill the UI.
+1. NO GENERIC FLUFF: Never say "Show enthusiasm" or "Be yourself" or "Research the company". Every bullet must contain a specific, actionable insight.
+2. BE SPICY: Give opinions that demonstrate deep domain expertise. "Most companies get X wrong because..." or "The real challenge at their scale is..."
+3. NARRATIVE: Write a 30-second pitch in FIRST PERSON ("I...") that connects the candidate's likely strengths to THIS company's specific challenges. Not a resume summary—a story arc.
+4. PROOF STORIES: 3-4 sentences each. Context (what was broken), Action (what you did and why that approach), Result (quantified impact). Tailored to what THIS interviewer evaluates.
+5. PRIMITIVES: 4+ domain-specific concepts the candidate must fluently discuss. For Stripe: "payment intents", "idempotency keys". For Figma: "multiplayer cursors", "component variants". NOT generic CS terms.
+6. QUESTIONS THEY ASK: Exactly 8. Categorized by what the interviewer probes for. Include the HARD questions—the ones that trip people up.
+7. QUESTIONS YOU ASK: Exactly 8. Questions that signal seniority and genuine curiosity. "What's the hardest technical decision your team made this quarter?" NOT "What's a typical day like?"
+8. WHAT TO EMPHASIZE: 4-6 specific themes to weave into every answer. Not skills—strategic angles. e.g., "Your experience with migration projects maps directly to their monolith→microservice transition."
+9. COMPANY INTEL: Industry, size (employees), HQ, 2-3 sentence summary of what they do and their competitive position, and any recent news/moves you know about.
+10. ALL PREP FIELDS MUST BE POPULATED. If you lack specific context, infer aggressively based on the company name, role type, and email signals. Better to be confidently specific than vaguely generic.
 
-OUTPUT FORMAT (JSON ONLY):
+OUTPUT (JSON ONLY, no markdown wrapping):
 {
   "is_recruiting": boolean,
-  "company": string,
-  "role": string,
+  "company": "string",
+  "role": "string",
   "stage_bucket": "RECRUITER_SCREEN" | "HM_SCREEN" | "ASSESSMENT" | "LOOP" | "OFFER" | "REJECTED",
-  "stage_detail": string,
-  "predicted_stages": string[],
-  "action_needed": string | null,
+  "stage_detail": "string describing the specific stage",
+  "predicted_stages": ["Bespoke Stage 1", "Bespoke Stage 2", "..."],
+  "action_needed": "string | null",
   "insights": {
-    "stageReason": string,
+    "stageReason": "Why this is the current stage based on email evidence",
     "waitingOn": "you" | "them",
-    "nextAction": string,
+    "nextAction": "Specific next step the candidate should take",
     "urgency": "low" | "med" | "high",
     "responseLikelihood": "low" | "med" | "high",
     "tone": "friendly" | "formal" | "neutral" | "urgent"
   },
   "prep": {
-    "stageFocus": string,
-    "narrative": string, // MUST be filled
-    "proof_stories": [{ "title": string, "detail": string }], // At least 2
-    "primitives": [{ "name": string, "description": string }], // At least 2
-    "spicy_opinion": string, // MUST be filled
-    "questions_they_ask": [{ "category": string, "question": string }], // 8 items
-    "questions_you_ask": [{ "category": string, "question": string }], // 8 items
+    "stageFocus": "What to optimize for at this specific stage",
+    "narrative": "First-person 30-second pitch tailored to this company and role",
+    "proof_stories": [{ "title": "Story Name", "detail": "3-4 sentences: context, action, result" }],
+    "primitives": [{ "name": "Domain Concept", "description": "2-3 sentences on what this means in their context" }],
+    "spicy_opinion": "A bold, defensible take that shows deep domain expertise",
+    "questions_they_ask": [{ "category": "Category", "question": "The actual question" }],
+    "questions_you_ask": [{ "category": "Category", "question": "The actual question" }],
+    "whatToEmphasize": ["Specific theme 1", "Specific theme 2", "..."],
     "companyIntel": {
-      "summary": string,
-      "recentNews": string[]
+      "industry": "string",
+      "size": "string (e.g., '500-1000 employees')",
+      "hqLocation": "string",
+      "summary": "2-3 sentences on what they build, their position, and stage",
+      "recentNews": ["Recent move or event 1", "Recent move or event 2"]
     }
   }
 }`
@@ -409,9 +419,11 @@ OUTPUT FORMAT (JSON ONLY):
   const userPrompt = `${threadContext}From: ${input.fromName} <${input.fromEmail}>
 Subject: ${input.subject}
 Snippet: ${input.snippet}
-Body: ${input.bodyExcerpt.slice(0, 2500)}
 
-Analyze and return JSON:`
+Email body:
+${input.bodyExcerpt}
+
+Analyze this email. Return JSON only.`
 
   try {
     if (!openai) {
@@ -422,9 +434,9 @@ Analyze and return JSON:`
     console.log(`[LLM] Calling OpenAI for: "${input.subject.slice(0, 40)}"`)
 
     const res = await openai.chat.completions.create({
-      model: "gpt-4o", // Upgraded to GPT-4o for deeper reasoning
-      temperature: 0.4, // Slightly higher temp for "spiciness"
-      max_tokens: 2000,
+      model: "gpt-4o",
+      temperature: 0.5,
+      max_tokens: 4000,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -465,10 +477,14 @@ Analyze and return JSON:`
         spicyOpinion: parsed.prep?.spicy_opinion || "",
         questionsTheyMightAsk: parsed.prep?.questions_they_ask || parsed.prep?.questions_they_might_ask || [],
         questionsYouShouldAsk: parsed.prep?.questions_you_ask || parsed.prep?.questions_you_should_ask || [],
-        whatToEmphasize: parsed.prep?.whatToEmphasize || [],
-        storiesToPrepare: parsed.prep?.storiesToPrepare || [],
-        homeworkNext24h: parsed.prep?.homeworkNext24h || [],
-        companyIntel: parsed.prep?.companyIntel || { industry: "Unknown", size: "Unknown", hqLocation: "Unknown", glassdoorRating: "Unknown", summary: "", recentNews: [] },
+        whatToEmphasize: parsed.prep?.whatToEmphasize || parsed.prep?.what_to_emphasize || [],
+        companyIntel: {
+          industry: parsed.prep?.companyIntel?.industry || "Unknown",
+          size: parsed.prep?.companyIntel?.size || "Unknown",
+          hqLocation: parsed.prep?.companyIntel?.hqLocation || parsed.prep?.companyIntel?.hq_location || "Unknown",
+          summary: parsed.prep?.companyIntel?.summary || "",
+          recentNews: parsed.prep?.companyIntel?.recentNews || parsed.prep?.companyIntel?.recent_news || [],
+        },
       },
       predicted_stages: parsed.predicted_stages || [],
     }
@@ -620,11 +636,10 @@ export async function POST() {
 
     try {
       do {
-        const page = await gmail.users.messages.list({ userId: "me", q, maxResults: 5, pageToken })
+        const page = await gmail.users.messages.list({ userId: "me", q, maxResults: 50, pageToken })
         messages = messages.concat(page.data.messages ?? [])
         pageToken = page.data.nextPageToken ?? undefined
-        // Hard limit to prevent timeout loops with GPT-4o processing
-      } while (pageToken && messages.length < 5)
+      } while (pageToken && messages.length < 50)
     } catch (gmailErr: any) {
       console.error("[SYNC] Gmail API error (likely token expired):", gmailErr?.message)
       stats.errors++
@@ -662,11 +677,8 @@ export async function POST() {
         .maybeSingle()
 
       if (existing) {
-        // DEV OVERRIDE: Force re-analysis for "Talent.io" or just everything for now to refresh quality.
-        // In production we would skip, but to fix the user's data we allow re-processing.
-        // stats.skipped++
-        // continue
-        console.log(`[SYNC] Re-processing existing email ${msg.id} to upgrade prep quality...`)
+        stats.skipped++
+        continue
       }
 
       // Fetch full message
@@ -774,7 +786,7 @@ export async function POST() {
         return pc && ed && (pc.includes(ed) || ed.includes(pc))
       })
 
-      // Get thread context
+      // Get thread context from existing pipeline OR from Gmail thread
       let threadEmails: Array<{ subject: string; snippet: string; from: string; date: string }> = []
       if (existingPipeline) {
         const { data: pEmails } = await supabase
@@ -789,6 +801,24 @@ export async function POST() {
           from: e.from_email || "",
           date: e.received_at || "",
         }))
+      } else if (threadId) {
+        // Even for new pipelines, try to get Gmail thread context
+        try {
+          const thread = await gmail.users.threads.get({ userId: "me", id: threadId, format: "metadata", metadataHeaders: ["Subject", "From", "Date"] })
+          const threadMsgs = thread.data.messages || []
+          for (const tm of threadMsgs) {
+            if (tm.id === msg.id) continue // Skip current message
+            const tmHeaders = tm.payload?.headers || []
+            threadEmails.push({
+              subject: tmHeaders.find(h => h.name === "Subject")?.value || "",
+              snippet: tm.snippet || "",
+              from: tmHeaders.find(h => h.name === "From")?.value || "",
+              date: tmHeaders.find(h => h.name === "Date")?.value || "",
+            })
+          }
+        } catch {
+          // Thread fetch failed, continue without context
+        }
       }
 
       // LLM Analysis
@@ -797,7 +827,7 @@ export async function POST() {
         snippet,
         fromEmail,
         fromName,
-        bodyExcerpt: bodyText.slice(0, 2500),
+        bodyExcerpt: bodyText.slice(0, 4000),
         threadEmails: threadEmails.length > 0 ? threadEmails : undefined,
       })
 
@@ -1004,12 +1034,12 @@ export async function POST() {
         stats.updated++
       }
 
-      // Insert email record
-      await supabase.from("emails").insert({
+      // Upsert email record (prevents duplicate errors on re-sync)
+      await supabase.from("emails").upsert({
         user_email: userEmail,
         pipeline_id: pipelineId,
         gmail_id: msg.id,
-        gmail_thread_id: threadId, // We use threadId if available
+        gmail_thread_id: threadId,
         gmail_message_id: msg.id,
         subject,
         snippet,
@@ -1019,7 +1049,7 @@ export async function POST() {
         received_at: receivedAt,
         analysis_json: analysis,
         is_recruiting: true,
-      })
+      }, { onConflict: "gmail_message_id" })
 
       // Log success
       await logEmailProcessing({

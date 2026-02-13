@@ -144,7 +144,7 @@ export function JobDetailPanel({ job, onSaveNotes }: Props) {
   const proofStories = safeArr(prep?.proofStories || prep?.proof_stories)
   const primitives = safeArr(prep?.primitives)
 
-  const companySummary = safeStr(j?.company?.intelSummary || prep?.companyIntelSummary || prep?.company_intel_summary || "")
+  const companySummary = safeStr(j?.company?.intelSummary || prep?.companyIntelSummary || prep?.company_intel_summary || prep?.summary || "")
 
   const nextAction = safeStr(insights?.nextAction || prep?.next_action || prep?.nextAction || "")
   const why = safeStr(insights?.why || insights?.rationale || insights?.reasoning || "")
@@ -300,11 +300,11 @@ export function JobDetailPanel({ job, onSaveNotes }: Props) {
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="text-gray-400 text-xs block">Industry</span>
-                <span className="font-medium text-gray-900">{safeStr(prep?.industry, "Unknown")}</span>
+                <span className="font-medium text-gray-900">{safeStr(prep?.industry || j?.industry, "Unknown")}</span>
               </div>
               <div>
                 <span className="text-gray-400 text-xs block">HQ</span>
-                <span className="font-medium text-gray-900">{safeStr(prep?.hq_location, "Unknown")}</span>
+                <span className="font-medium text-gray-900">{safeStr(prep?.hqLocation || prep?.hq_location || j?.location, "Unknown")}</span>
               </div>
             </div>
           </SectionCard>

@@ -117,7 +117,9 @@ function normalizeInterviewPrep(prepAny: any): any | undefined {
     industry: pick(companyIntel, ["industry"]) || "Unknown",
     size: pick(companyIntel, ["size"]) || "Unknown",
     hqLocation: pick(companyIntel, ["hqLocation", "hq_location"]) || "Unknown",
+    hq_location: pick(companyIntel, ["hqLocation", "hq_location"]) || "Unknown",
     glassdoorRating: pick(companyIntel, ["glassdoorRating", "glassdoor_rating"]) || "Unknown",
+    companyIntelSummary: pick(companyIntel, ["summary"]) || "",
     summary: pick(companyIntel, ["summary"]) || "",
     recentNews: safeArr(pick(companyIntel, ["recentNews", "recent_news"])),
   }
