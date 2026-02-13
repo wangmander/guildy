@@ -44,9 +44,6 @@ export async function GET() {
       tables[t] = !error
     }
 
-    // Get column info for pipelines table
-    const { data: cols } = await supabaseAdmin.rpc("get_columns", { table_name: "pipelines" }).catch(() => ({ data: null }))
-
     const pipelineSummary = (pipelines || []).map((p: any) => ({
       id: p.id,
       company: p.company,
