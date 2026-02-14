@@ -32,18 +32,37 @@ export async function GET() {
       return NextResponse.json({ error: `query failed: ${pErr?.message}` })
     }
 
-    // Group by normalized company name
-    const groups: Record<string, any[]> = {}
+    // Group by fuzzy company name (substring matching)
+    // "Chalk" and "Chalk.ai" should be in the same group
+    const groups: any[][] = []
+    const assigned = new Set<string>()
+
     for (const p of pipelines) {
-      const key = normalize(p.company)
-      if (!key) continue
-      if (!groups[key]) groups[key] = []
-      groups[key].push(p)
+      if (assigned.has(p.id)) continue
+      const pNorm = normalize(p.company)
+      if (!pNorm) continue
+
+      const group = [p]
+      assigned.add(p.id)
+
+      for (const q of pipelines) {
+        if (assigned.has(q.id)) continue
+        const qNorm = normalize(q.company)
+        if (!qNorm) continue
+
+        // Match if one name contains the other (fuzzy)
+        if (pNorm.includes(qNorm) || qNorm.includes(pNorm)) {
+          group.push(q)
+          assigned.add(q.id)
+        }
+      }
+
+      groups.push(group)
     }
 
     const results: any[] = []
 
-    for (const [companyKey, group] of Object.entries(groups)) {
+    for (const group of groups) {
       if (group.length <= 1) continue // no duplicates
 
       // Sort by prep richness (most content first), then by updated_at
@@ -75,7 +94,7 @@ export async function GET() {
           .eq("pipeline_id", dup.id)
 
         if (moveErr) {
-          results.push({ company: companyKey, action: "email_move_failed", error: moveErr.message })
+          results.push({ company: keeper.company, action: "email_move_failed", error: moveErr.message })
           continue
         }
 
@@ -86,7 +105,7 @@ export async function GET() {
           .eq("id", dup.id)
 
         if (delErr) {
-          results.push({ company: companyKey, action: "delete_failed", dupId: dup.id, error: delErr.message })
+          results.push({ company: keeper.company, action: "delete_failed", dupId: dup.id, error: delErr.message })
         } else {
           results.push({
             company: keeper.company,
