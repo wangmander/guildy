@@ -933,6 +933,18 @@ export async function POST() {
         }
       }
 
+      // Also try fuzzy substring match on company name (e.g. "Stripe" matches "Stripe, Inc.")
+      if (!matchedPipeline && llmCompanyNormalized) {
+        matchedPipeline = pipelines.find((p: any) => {
+          const pn = normalize(p.company)
+          if (!pn || !llmCompanyNormalized) return false
+          return pn.includes(llmCompanyNormalized) || llmCompanyNormalized.includes(pn)
+        })
+        if (matchedPipeline) {
+          console.log(`[PIPELINE] Fuzzy company match: "${analysis.company}" ≈ "${matchedPipeline.company}"`)
+        }
+      }
+
       let pipelineId = matchedPipeline?.id
 
       // Determine clean stage
@@ -960,7 +972,7 @@ export async function POST() {
           company_intel_json: analysis.prep.companyIntel,
         }
 
-        const { data: newP, error: pErr } = await supabase.from("pipelines").insert(payload).select("id").single()
+        const { data: newP, error: pErr } = await supabase.from("pipelines").insert(payload).select("*").single()
 
         if (pErr) {
           console.error("[PIPELINE] Insert failed:", pErr.message)
@@ -976,7 +988,7 @@ export async function POST() {
             prep_json: analysis.prep,
             insights_json: analysis.insights,
           }
-          const { data: newP2, error: pErr2 } = await supabase.from("pipelines").insert(fallback).select("id").single()
+          const { data: newP2, error: pErr2 } = await supabase.from("pipelines").insert(fallback).select("*").single()
 
           if (pErr2) {
             console.error("[PIPELINE] Fallback also failed:", pErr2.message)
@@ -984,8 +996,12 @@ export async function POST() {
             continue
           }
           pipelineId = newP2.id
+          // Push into local array so subsequent emails in this sync find it
+          pipelines.push(newP2)
         } else {
           pipelineId = newP.id
+          // Push into local array so subsequent emails in this sync find it
+          pipelines.push(newP)
         }
 
         // Try to set predicted_stages separately (OK if column doesn't exist)
@@ -996,8 +1012,30 @@ export async function POST() {
 
         stats.inserted++
       } else {
-        // Update existing pipeline — always save prep_json
+        // Update existing pipeline — only overwrite prep_json if new content is richer
         console.log(`[PIPELINE] Updating ${analysis.company} (ID: ${pipelineId})`)
+
+        // Compare prep richness: count non-empty fields in old vs new
+        const existingPrep = matchedPipeline?.prep_json || {}
+        const newPrep = analysis.prep || {}
+        const prepRichness = (p: any) => {
+          let score = 0
+          if (p?.narrative) score += 3
+          if (p?.spicyOpinion || p?.spicy_opinion) score += 2
+          if (p?.questionsTheyMightAsk?.length || p?.questions_they_ask?.length || p?.questions_they_might_ask?.length) score += 2
+          if (p?.questionsYouShouldAsk?.length || p?.questions_you_ask?.length || p?.questions_you_should_ask?.length) score += 2
+          if (p?.primitives?.length) score += 2
+          if (p?.proofStories?.length || p?.proof_stories?.length) score += 2
+          if (p?.whatToEmphasize?.length || p?.what_to_emphasize?.length) score += 1
+          if (p?.companyIntel?.summary || p?.companyIntelSummary) score += 1
+          return score
+        }
+
+        const oldScore = prepRichness(existingPrep)
+        const newScore = prepRichness(newPrep)
+        const useNewPrep = newScore >= oldScore
+
+        console.log(`[PIPELINE] Prep richness: existing=${oldScore}, new=${newScore}, using ${useNewPrep ? "new" : "existing"}`)
 
         const updatePayload: any = {
           stage: finalStage,
@@ -1007,16 +1045,26 @@ export async function POST() {
           last_email_snippet: snippet,
           last_email_from_name: fromName,
           last_email_from_email: fromEmail,
-          prep_json: analysis.prep,
           insights_json: analysis.insights,
-          company_intel_json: analysis.prep.companyIntel,
           updated_at: new Date().toISOString(),
+        }
+
+        // Only overwrite prep if new is richer
+        if (useNewPrep) {
+          updatePayload.prep_json = newPrep
+          updatePayload.company_intel_json = analysis.prep.companyIntel
         }
 
         const { error: updErr } = await supabase.from("pipelines").update(updatePayload).eq("id", pipelineId)
 
         if (updErr) {
           console.error(`[PIPELINE] Update FAILED for ${analysis.company}:`, updErr.message)
+        } else {
+          // Update the local array so subsequent matches see the latest data
+          const idx = pipelines.findIndex((p: any) => p.id === pipelineId)
+          if (idx !== -1) {
+            pipelines[idx] = { ...pipelines[idx], ...updatePayload }
+          }
         }
 
         // Try predicted_stages separately
