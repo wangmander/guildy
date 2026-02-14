@@ -385,7 +385,7 @@ GUIDELINES:
 2. BE SPICY: Give opinions that demonstrate deep domain expertise. "Most companies get X wrong because..." or "The real challenge at their scale is..."
 3. NARRATIVE: Write a 30-second pitch in FIRST PERSON ("I...") that connects the candidate's likely strengths to THIS company's specific challenges. Not a resume summary—a story arc.
 4. PROOF STORIES: 3-4 sentences each. Context (what was broken), Action (what you did and why that approach), Result (quantified impact). Tailored to what THIS interviewer evaluates.
-5. PRIMITIVES: 4+ domain-specific concepts the candidate must fluently discuss. For Stripe: "payment intents", "idempotency keys". For Figma: "multiplayer cursors", "component variants". NOT generic CS terms.
+5. PRIMITIVES: 4+ key topics the company cares about that the candidate should be ready to discuss. Write the description in plain language that a non-technical person can understand — explain WHY this topic matters to this company and what to say about it. For Stripe: "Payment Processing" — "Stripe handles billions in payments. Show you understand how money moves online and the challenges of doing it reliably." NOT jargon-heavy descriptions.
 6. QUESTIONS THEY ASK: Exactly 8. Categorized by what the interviewer probes for. Include the HARD questions—the ones that trip people up.
 7. QUESTIONS YOU ASK: Exactly 8. Questions that signal seniority and genuine curiosity. "What's the hardest technical decision your team made this quarter?" NOT "What's a typical day like?"
 8. WHAT TO EMPHASIZE: 4-6 specific themes to weave into every answer. Not skills—strategic angles. e.g., "Your experience with migration projects maps directly to their monolith→microservice transition."

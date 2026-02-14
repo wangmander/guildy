@@ -218,7 +218,7 @@ export function JobDetailPanel({ job, onSaveNotes }: Props) {
             <div className="rounded-xl border border-gray-200 bg-white p-5">
               <div className="flex items-center gap-2 mb-4 text-gray-500 font-bold text-sm uppercase tracking-wide">
                 <Brain className="h-4 w-4" />
-                Core Primitives & Mental Models
+                Key Topics They'll Expect You to Know
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {primitives.map((p: any, i: number) => (
