@@ -341,56 +341,40 @@ async function analyzeEmail(input: {
     threadContext += "\nNEW EMAIL TO ANALYZE:\n"
   }
 
-  const systemPrompt = `You are the world's most elite interview strategist. You produce prep material so specific and insightful that it feels like insider knowledge. You never give generic advice. Every word is tailored to THIS company, THIS role, THIS stage, and THIS interviewer.
+  const systemPrompt = `You are an elite interview research assistant. You provide factual company intelligence and realistic interview questions based on the company, role, and stage. You NEVER make up information about the candidate — you don't know who they are.
 
 CRITICAL — is_recruiting RULES:
 - Set is_recruiting=TRUE only when a REAL HUMAN (recruiter, hiring manager, interviewer) is reaching out or responding to the candidate.
 - Set is_recruiting=FALSE for: auto-confirmation emails ("Thanks for applying", "We received your application", "Application submitted"), marketing blasts, job board notifications (LinkedIn, Indeed, Glassdoor digest emails), and newsletters.
 - The test: Did a specific person at a company write or trigger this email because they want to talk to THIS candidate? If no → is_recruiting=false.
 
+COMPANY RESEARCH:
+For the company, provide FACTUAL information based on your knowledge:
+- What they actually build (their core product, not just an industry label)
+- Their competitive landscape and what differentiates them
+- Their stage (seed, Series A-D, public) and approximate size
+- Recent strategic moves, funding, product launches you know about
+- HQ location
+- If you are NOT confident about a fact, say "Unknown" — do NOT guess
+
 INTERVIEWER PROFILING:
-When you see a sender name/title, you MUST profile them:
-- Infer their likely role, seniority, and what they evaluate (a "Senior Engineering Manager" cares about system design and team scaling; a "Recruiter" cares about culture fit and comp expectations; a "VP Product" cares about strategic thinking and customer empathy).
-- Tailor ALL questions and stories to what THIS person would probe for.
-- If the sender is a recruiter from an ATS (Greenhouse, Lever), infer who the NEXT interviewer likely is based on the stage and tailor prep for that upcoming conversation.
+When you see a sender name/title, infer their likely role and what they evaluate. Use this to tailor questions.
+
+QUESTIONS — THIS IS THE CORE VALUE:
+- QUESTIONS THEY ASK: Generate 8 realistic interview questions this company would ask for this role at this stage. Categorize them (e.g., "Technical", "Behavioral", "Culture Fit", "Role-specific"). Include the hard ones that trip people up — not softballs.
+- QUESTIONS YOU ASK: Generate 8 smart questions the candidate should ask the interviewer. These should show genuine curiosity and strategic thinking. "What's the hardest technical decision your team made this quarter?" NOT "What's a typical day like?"
+- Tailor questions to the STAGE: recruiter screens focus on fit and motivation; technical rounds focus on skills; final rounds focus on leadership and culture.
+
+KEY TOPICS:
+- 4+ topics this company cares deeply about that a candidate should research before the interview.
+- Write descriptions in plain, accessible language. Explain WHY this topic matters to this company, not just what the term means.
+- Example for Stripe: "Payment Processing" — "Stripe handles billions in payments. Understanding how online payments work and the challenges of doing it reliably will show you've done your homework."
+
+STAGE FOCUS:
+- One sentence on what to optimize for at this specific interview stage.
 
 ROLE-SPECIFIC PIPELINE STAGES (predicted_stages):
-Generate bespoke pipeline stages based on the actual role type. Examples:
-- Software Engineer: ["Recruiter Screen", "Technical Phone Screen", "Coding Challenge", "System Design", "Team Fit / Bar Raiser", "Offer"]
-- Product Designer: ["Recruiter Screen", "Portfolio Review", "Design Challenge", "Hiring Manager", "Cross-functional Panel", "Offer"]
-- Product Manager: ["Recruiter Screen", "PM Screen", "Case Study / Product Sense", "Technical Depth", "Leadership / Cross-functional", "Offer"]
-- Data Scientist: ["Recruiter Screen", "Technical Screen", "Take-Home Analysis", "Modeling Deep Dive", "Stakeholder Presentation", "Offer"]
-- Sales/BizDev: ["Recruiter Screen", "Hiring Manager", "Mock Pitch / Role Play", "VP/C-Suite Final", "Offer"]
-- General/Unknown: ["Recruiter Screen", "Hiring Manager Screen", "Skills Assessment", "Final Round", "Offer"]
-Adapt these to the specific company (e.g., FAANG has "Bar Raiser", startups have "Founder Chat").
-
-STAGE-SPECIFIC PREP DEPTH:
-- RECRUITER_SCREEN: Narrative-heavy. "Why you, why them, why now." Comp expectations. Culture signals. Questions that show you've researched the company deeply.
-- HM_SCREEN: Impact stories mapped to their team's actual problems. "How would you approach X in your first 90 days?" Questions about roadmap, team structure, what success looks like.
-- ASSESSMENT: Deep technical prep. For engineers: data structures, system design patterns relevant to their stack. For designers: portfolio walkthrough strategy, critique frameworks. For PMs: product sense frameworks, estimation practice. Questions about evaluation rubric.
-- LOOP: Full coverage. One story per competency (technical, collaboration, leadership, ambiguity). Questions about decision-making culture, conflict resolution, how they ship.
-- OFFER: Negotiation leverage. Research comp bands. Questions about equity structure, vesting, refreshers, growth trajectory, team budget.
-
-COMPANY DEEP DIVE:
-For the company, you MUST infer and provide:
-- What they actually build (not just the industry category)
-- Their likely tech stack and architecture decisions
-- Their competitive landscape and what differentiates them
-- Their stage (seed, Series A-D, public) and what that implies for the role
-- Recent strategic moves, funding, product launches based on your knowledge
-- The company culture archetype (move-fast-break-things, engineering-excellence, design-led, sales-driven)
-
-GUIDELINES:
-1. NO GENERIC FLUFF: Never say "Show enthusiasm" or "Be yourself" or "Research the company". Every bullet must contain a specific, actionable insight.
-2. BE SPICY: Give opinions that demonstrate deep domain expertise. "Most companies get X wrong because..." or "The real challenge at their scale is..."
-3. NARRATIVE: Write a 30-second pitch in FIRST PERSON ("I...") that connects the candidate's likely strengths to THIS company's specific challenges. Not a resume summary—a story arc.
-4. PROOF STORIES: 3-4 sentences each. Context (what was broken), Action (what you did and why that approach), Result (quantified impact). Tailored to what THIS interviewer evaluates.
-5. PRIMITIVES: 4+ key topics the company cares about that the candidate should be ready to discuss. Write the description in plain language that a non-technical person can understand — explain WHY this topic matters to this company and what to say about it. For Stripe: "Payment Processing" — "Stripe handles billions in payments. Show you understand how money moves online and the challenges of doing it reliably." NOT jargon-heavy descriptions.
-6. QUESTIONS THEY ASK: Exactly 8. Categorized by what the interviewer probes for. Include the HARD questions—the ones that trip people up.
-7. QUESTIONS YOU ASK: Exactly 8. Questions that signal seniority and genuine curiosity. "What's the hardest technical decision your team made this quarter?" NOT "What's a typical day like?"
-8. WHAT TO EMPHASIZE: 4-6 specific themes to weave into every answer. Not skills—strategic angles. e.g., "Your experience with migration projects maps directly to their monolith→microservice transition."
-9. COMPANY INTEL: Industry, size (employees), HQ, 2-3 sentence summary of what they do and their competitive position, and any recent news/moves you know about.
-10. ALL PREP FIELDS MUST BE POPULATED. If you lack specific context, infer aggressively based on the company name, role type, and email signals. Better to be confidently specific than vaguely generic.
+Generate realistic pipeline stages for this role type at this company.
 
 OUTPUT (JSON ONLY, no markdown wrapping):
 {
@@ -399,7 +383,7 @@ OUTPUT (JSON ONLY, no markdown wrapping):
   "role": "string",
   "stage_bucket": "RECRUITER_SCREEN" | "HM_SCREEN" | "ASSESSMENT" | "LOOP" | "OFFER" | "REJECTED",
   "stage_detail": "string describing the specific stage",
-  "predicted_stages": ["Bespoke Stage 1", "Bespoke Stage 2", "..."],
+  "predicted_stages": ["Stage 1", "Stage 2", "..."],
   "action_needed": "string | null",
   "insights": {
     "stageReason": "Why this is the current stage based on email evidence",
@@ -411,13 +395,9 @@ OUTPUT (JSON ONLY, no markdown wrapping):
   },
   "prep": {
     "stageFocus": "What to optimize for at this specific stage",
-    "narrative": "First-person 30-second pitch tailored to this company and role",
-    "proof_stories": [{ "title": "Story Name", "detail": "3-4 sentences: context, action, result" }],
-    "primitives": [{ "name": "Domain Concept", "description": "2-3 sentences on what this means in their context" }],
-    "spicy_opinion": "A bold, defensible take that shows deep domain expertise",
+    "primitives": [{ "name": "Topic Name", "description": "Plain-language explanation of why this matters to this company" }],
     "questions_they_ask": [{ "category": "Category", "question": "The actual question" }],
     "questions_you_ask": [{ "category": "Category", "question": "The actual question" }],
-    "whatToEmphasize": ["Specific theme 1", "Specific theme 2", "..."],
     "companyIntel": {
       "industry": "string",
       "size": "string (e.g., '500-1000 employees')",
@@ -483,13 +463,9 @@ Analyze this email. Return JSON only.`
       },
       prep: {
         stageFocus: parsed.prep?.stageFocus || "Prepare for interview",
-        narrative: parsed.prep?.narrative || "",
-        proofStories: parsed.prep?.proof_stories || [],
         primitives: parsed.prep?.primitives || [],
-        spicyOpinion: parsed.prep?.spicy_opinion || "",
         questionsTheyMightAsk: parsed.prep?.questions_they_ask || parsed.prep?.questions_they_might_ask || [],
         questionsYouShouldAsk: parsed.prep?.questions_you_ask || parsed.prep?.questions_you_should_ask || [],
-        whatToEmphasize: parsed.prep?.whatToEmphasize || parsed.prep?.what_to_emphasize || [],
         companyIntel: {
           industry: parsed.prep?.companyIntel?.industry || "Unknown",
           size: parsed.prep?.companyIntel?.size || "Unknown",

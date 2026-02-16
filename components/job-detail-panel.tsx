@@ -2,7 +2,7 @@
 
 import React from "react"
 import type { Job } from "@/types"
-import { Mail, Sparkles, Building2, Newspaper, LineChart, Quote, Target, Brain, Award, AlertCircle, ArrowUpRight } from "lucide-react"
+import { Mail, Building2, Target, Brain, ArrowUpRight } from "lucide-react"
 
 type Props = {
   job: Job | null
@@ -46,12 +46,6 @@ function stageLabel(stage: any): string {
   return titleCase(s)
 }
 
-function statusLabel(status: any): string {
-  const s = safeStr(status, "")
-  if (!s) return "Unknown"
-  return titleCase(s)
-}
-
 function Pill({
   children,
   tone,
@@ -77,40 +71,20 @@ function SectionCard({
   icon,
   children,
   className = "",
-  headerAction,
 }: {
   title: string
   icon?: React.ReactNode
   children: React.ReactNode
   className?: string
-  headerAction?: React.ReactNode
 }) {
   return (
     <div className={`rounded-xl border bg-white shadow-sm ${className}`}>
-      <div className="flex items-center justify-between gap-2 border-b px-5 py-4">
-        <div className="flex items-center gap-2">
-          {icon}
-          <div className="text-base font-semibold text-gray-900">{title}</div>
-        </div>
-        {headerAction}
+      <div className="flex items-center gap-2 border-b px-5 py-4">
+        {icon}
+        <div className="text-base font-semibold text-gray-900">{title}</div>
       </div>
       <div className="px-5 py-5">{children}</div>
     </div>
-  )
-}
-
-function Bullets({ items, empty }: { items: any[]; empty: string }) {
-  const list = safeArr(items).filter((x) => safeStr(x, "").trim())
-  if (!list.length) return <div className="text-sm text-gray-500 italic">{empty}</div>
-  return (
-    <ul className="space-y-3 text-sm text-gray-700">
-      {list.map((x, i) => (
-        <li key={i} className="flex gap-2.5 items-start">
-          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500/60" />
-          <span className="leading-relaxed">{safeStr(x)}</span>
-        </li>
-      ))}
-    </ul>
   )
 }
 
@@ -120,10 +94,10 @@ export function JobDetailPanel({ job, onSaveNotes }: Props) {
       <div className="h-full min-h-0 overflow-y-auto p-8 flex items-center justify-center bg-gray-50/50">
         <div className="text-center max-w-sm">
           <div className="h-12 w-12 bg-white rounded-xl shadow-sm border mx-auto flex items-center justify-center mb-4">
-            <Sparkles className="h-6 w-6 text-gray-300" />
+            <Building2 className="h-6 w-6 text-gray-300" />
           </div>
           <h3 className="text-gray-900 font-semibold mb-1">Select a pipeline</h3>
-          <p className="text-sm text-gray-500">Choose a job from the list to view your bespoke prep and strategy.</p>
+          <p className="text-sm text-gray-500">Choose a job from the list to view company intel and interview prep.</p>
         </div>
       </div>
     )
@@ -133,35 +107,25 @@ export function JobDetailPanel({ job, onSaveNotes }: Props) {
   const companyName = safeStr(j?.company?.name, "Unknown company")
   const roleTitle = safeStr(j?.title, "Interview")
   const stage = stageLabel(j?.stage)
-  const status = statusLabel(j?.status)
 
   const prep: any = j?.interviewPrep || {}
   const insights: any = prep?.insights || {}
 
-  // New Rich Data Fields
-  const narrative = safeStr(prep?.narrative, "")
-  const spicyOpinion = safeStr(prep?.spicyOpinion || prep?.spicy_opinion, "")
-  const proofStories = safeArr(prep?.proofStories || prep?.proof_stories)
   const primitives = safeArr(prep?.primitives)
-
   const companySummary = safeStr(j?.company?.intelSummary || prep?.companyIntelSummary || prep?.company_intel_summary || prep?.summary || "")
 
   const nextAction = safeStr(insights?.nextAction || prep?.next_action || prep?.nextAction || "")
-  const why = safeStr(insights?.why || insights?.rationale || insights?.reasoning || "")
+  const stageFocus = safeStr(prep?.stageFocus || prep?.stage_focus, "")
 
   const lastEmail: any = j?.lastEmail || {}
-  const lastSubject = safeStr(lastEmail?.subject, "")
-  const lastFrom = safeStr(lastEmail?.fromName || lastEmail?.fromEmail, "")
   const lastSnippet = safeStr(lastEmail?.snippet, "")
   const lastAt = safeStr(lastEmail?.receivedAt, "")
-
-  const prepFocus = safeStr(prep?.stageFocus || prep?.stage_focus, "")
 
   // Questions
   const qThey = safeArr(prep?.questionsTheyMightAsk || prep?.questions_they_might_ask)
   const qYou = safeArr(prep?.questionsYouShouldAsk || prep?.questions_you_should_ask)
 
-  const emphasize = safeArr(prep?.whatToEmphasize || prep?.what_to_emphasize)
+  const recentNews = safeArr(prep?.companyIntel?.recentNews || prep?.companyIntel?.recent_news)
 
   return (
     <div className="h-full min-h-0 overflow-y-auto bg-gray-50/30">
@@ -183,130 +147,39 @@ export function JobDetailPanel({ job, onSaveNotes }: Props) {
 
       <div className="p-8 space-y-8 max-w-5xl mx-auto">
 
-        {/* 1. The Bespoke Narrative Card */}
-        {narrative ? (
-          <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-white to-indigo-50/30 p-6 shadow-sm ring-4 ring-indigo-50/20">
-            <div className="flex items-start gap-4">
-              <div className="h-10 w-10 shrink-0 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-lg shadow-indigo-200">
-                <Quote className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-gray-900 mb-1">Your 30-Second Narrative</h3>
-                <p className="text-indigo-900 font-medium leading-relaxed text-[15px]">"{narrative}"</p>
-                <div className="mt-2 text-xs text-indigo-400 font-medium uppercase tracking-wider">Memorize this</div>
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        {/* 2. Primitives & Spicy Opinion (The "Genius" Section) */}
-        {(primitives.length > 0 || spicyOpinion) && (
-          <div className="space-y-6">
-            {/* Spicy Opinion */}
-            <div className="rounded-xl border border-rose-100 bg-rose-50/50 p-5">
-              <div className="flex items-center gap-2 mb-3 text-rose-700 font-bold text-sm uppercase tracking-wide">
-                <AlertCircle className="h-4 w-4" />
-                Spicy Opinion
-              </div>
-              <div className="text-gray-900 font-serif italic text-lg leading-snug">
-                {spicyOpinion || "Loading opinion..."}
-              </div>
-              <div className="mt-3 text-xs text-rose-600/80">Use this to show taste & seniority.</div>
-            </div>
-
-            {/* Primitives */}
-            <div className="rounded-xl border border-gray-200 bg-white p-5">
-              <div className="flex items-center gap-2 mb-4 text-gray-500 font-bold text-sm uppercase tracking-wide">
-                <Brain className="h-4 w-4" />
-                Key Topics They'll Expect You to Know
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {primitives.map((p: any, i: number) => (
-                  <div key={i} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-                    <div className="font-semibold text-gray-900 text-sm mb-1">{p.name}</div>
-                    <div className="text-xs text-gray-500 leading-tight">{p.description}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 3. Proof Stories */}
-        {proofStories.length > 0 && (
-          <SectionCard title="Proof Stories" icon={<Award className="h-5 w-5 text-amber-500" />}>
-            <div className="grid grid-cols-1 gap-4">
-              {proofStories.map((story: any, i: number) => (
-                <div key={i} className="rounded-lg border border-amber-100 bg-amber-50/30 p-4">
-                  <div className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">
-                    {i === 0 ? "Story A (Systems)" : "Story B (Behaviors)"}
-                  </div>
-                  <div className="font-semibold text-gray-900 mb-1">{story.title}</div>
-                  <div className="text-sm text-gray-600 leading-relaxed">{story.detail}</div>
-                </div>
-              ))}
-            </div>
-          </SectionCard>
-        )}
-
-        {/* 4. Strategic Questions */}
-        <div className="space-y-6">
-          <SectionCard title="Questions They Ask" icon={<Target className="h-5 w-5 text-gray-400" />}>
-            <div className="space-y-4">
-              {qThey.map((q: any, i) => (
-                <div key={i}>
-                  <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">
-                    {q.category || "General"}
-                  </div>
-                  <div className="text-sm text-gray-800 font-medium">{q.question}</div>
-                </div>
-              ))}
-              {qThey.length === 0 && <div className="text-gray-400 italic text-sm">Waiting for more context...</div>}
-            </div>
-          </SectionCard>
-
-          <SectionCard title="Questions You Ask" icon={<ArrowUpRight className="h-5 w-5 text-green-500" />}>
-            <div className="space-y-4">
-              {qYou.map((q: any, i) => (
-                <div key={i}>
-                  <div className="text-[10px] text-green-600/70 font-bold uppercase tracking-wider mb-0.5">
-                    {q.category || "Strategic"}
-                  </div>
-                  <div className="text-sm text-gray-800 font-medium">{q.question}</div>
-                </div>
-              ))}
-              {qYou.length === 0 && <div className="text-gray-400 italic text-sm">Waiting for more context...</div>}
-            </div>
-          </SectionCard>
-        </div>
-
-        {/* 5. What to Emphasize */}
-        <SectionCard title="What to Emphasize" icon={<Sparkles className="h-5 w-5 text-purple-500" />}>
-          <div className="flex flex-wrap gap-2">
-            {emphasize.length > 0 ? emphasize.map((item, i) => (
-              <span key={i} className="inline-flex items-center px-3 py-1.5 rounded-full bg-purple-50 text-purple-700 text-sm font-medium border border-purple-100">
-                {item}
-              </span>
-            )) : <span className="text-gray-400 italic text-sm">No emphasis points generated yet.</span>}
-          </div>
-        </SectionCard>
-
-        {/* 6. Intel & Logistics */}
+        {/* 1. Company Intel + Context (top) */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <SectionCard title="Company Intel" icon={<Building2 className="h-5 w-5 text-gray-400" />}>
+          <SectionCard title="Company Intel" icon={<Building2 className="h-5 w-5 text-indigo-500" />}>
             <p className="text-sm text-gray-600 leading-relaxed mb-4">
-              {companySummary || "No detailed summary available yet."}
+              {companySummary || "No company summary available yet."}
             </p>
-            <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="grid grid-cols-2 gap-4 text-sm mb-4">
               <div>
                 <span className="text-gray-400 text-xs block">Industry</span>
-                <span className="font-medium text-gray-900">{safeStr(prep?.industry || j?.industry, "Unknown")}</span>
+                <span className="font-medium text-gray-900">{safeStr(prep?.companyIntel?.industry || prep?.industry || j?.industry, "Unknown")}</span>
+              </div>
+              <div>
+                <span className="text-gray-400 text-xs block">Size</span>
+                <span className="font-medium text-gray-900">{safeStr(prep?.companyIntel?.size || prep?.size, "Unknown")}</span>
               </div>
               <div>
                 <span className="text-gray-400 text-xs block">HQ</span>
-                <span className="font-medium text-gray-900">{safeStr(prep?.hqLocation || prep?.hq_location || j?.location, "Unknown")}</span>
+                <span className="font-medium text-gray-900">{safeStr(prep?.companyIntel?.hqLocation || prep?.companyIntel?.hq_location || prep?.hqLocation || prep?.hq_location || j?.location, "Unknown")}</span>
               </div>
             </div>
+            {recentNews.length > 0 && (
+              <div>
+                <span className="text-gray-400 text-xs block mb-2">Recent News</span>
+                <ul className="space-y-1.5">
+                  {recentNews.map((n: any, i: number) => (
+                    <li key={i} className="text-sm text-gray-700 flex gap-2 items-start">
+                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-400" />
+                      {safeStr(n)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </SectionCard>
 
           <SectionCard title="Context" icon={<Mail className="h-5 w-5 text-gray-400" />}>
@@ -318,6 +191,13 @@ export function JobDetailPanel({ job, onSaveNotes }: Props) {
                 </div>
               </div>
 
+              {stageFocus && (
+                <div className="rounded-lg bg-indigo-50 p-3 border border-indigo-100">
+                  <div className="text-xs font-bold text-indigo-700 uppercase mb-1">Stage Focus</div>
+                  <div className="text-sm text-indigo-900 font-medium">{stageFocus}</div>
+                </div>
+              )}
+
               <div className="text-sm">
                 <div className="font-medium text-gray-900 mb-1">Last Email</div>
                 <div className="text-gray-600 line-clamp-2 italic">"{lastSnippet}"</div>
@@ -326,6 +206,50 @@ export function JobDetailPanel({ job, onSaveNotes }: Props) {
             </div>
           </SectionCard>
         </div>
+
+        {/* 2. Questions They'll Ask — the core prep value */}
+        <SectionCard title="Questions They'll Ask You" icon={<Target className="h-5 w-5 text-red-400" />}>
+          <div className="space-y-4">
+            {qThey.map((q: any, i: number) => (
+              <div key={i} className="border-l-2 border-red-200 pl-4">
+                <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-0.5">
+                  {q.category || "General"}
+                </div>
+                <div className="text-sm text-gray-800 font-medium">{q.question}</div>
+              </div>
+            ))}
+            {qThey.length === 0 && <div className="text-gray-400 italic text-sm">Waiting for more context...</div>}
+          </div>
+        </SectionCard>
+
+        {/* 3. Questions You Should Ask */}
+        <SectionCard title="Smart Questions to Ask Them" icon={<ArrowUpRight className="h-5 w-5 text-green-500" />}>
+          <div className="space-y-4">
+            {qYou.map((q: any, i: number) => (
+              <div key={i} className="border-l-2 border-green-200 pl-4">
+                <div className="text-[10px] text-green-600/70 font-bold uppercase tracking-wider mb-0.5">
+                  {q.category || "Strategic"}
+                </div>
+                <div className="text-sm text-gray-800 font-medium">{q.question}</div>
+              </div>
+            ))}
+            {qYou.length === 0 && <div className="text-gray-400 italic text-sm">Waiting for more context...</div>}
+          </div>
+        </SectionCard>
+
+        {/* 4. Key Topics — what this company cares about */}
+        {primitives.length > 0 && (
+          <SectionCard title="Key Topics to Know" icon={<Brain className="h-5 w-5 text-gray-400" />}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {primitives.map((p: any, i: number) => (
+                <div key={i} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                  <div className="font-semibold text-gray-900 text-sm mb-1">{p.name}</div>
+                  <div className="text-xs text-gray-500 leading-relaxed">{p.description}</div>
+                </div>
+              ))}
+            </div>
+          </SectionCard>
+        )}
 
         <div className="pb-10">
           <details className="group">
