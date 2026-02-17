@@ -11,7 +11,7 @@ export function TopNav() {
 
   return (
     <nav className="border-b bg-white">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-[1600px] px-4">
         <div className="flex h-16 items-center justify-between">
           <Link href="/pipelines" className="flex items-center">
             <Image src="/images/logo-20m-20-28day-29.png" alt="Guildy" width={120} height={40} className="h-8 w-auto" />
