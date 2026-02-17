@@ -405,8 +405,18 @@ Bad examples (DO NOT use):
 - "Get a good night's sleep" (not interview prep)
 
 === QUESTIONS (the core value — go deep here) ===
-- questions_they_ask: Generate 12-15 realistic questions grouped into 3-5 categories. Categories should be tailored to the role, seniority, and interviewer — e.g., for a senior engineer: "System Design", "Behavioral / Leadership", "Technical Deep-Dive", "Culture & Values", "Role-Specific". For a PM: "Product Sense", "Analytical / Metrics", "Stakeholder Management", "Strategic Thinking". Include the HARD questions that trip people up, not softballs. Every question should feel like it could actually be asked at THIS company.
-- questions_you_ask: Generate 12-15 smart questions grouped into 3-5 categories. Categories like "About the Team", "About the Role", "About the Company Direction", "About Engineering Culture", "About Growth". These should signal seniority and real curiosity. NOT "What's a typical day like?" — instead "What's the biggest technical bet your team is making right now and what would it look like if it fails?"
+IMPORTANT: Weight the number of questions PER CATEGORY by how important that category is for this specific role, seniority, and interviewer. The most critical categories get 4-5 questions, moderately important categories get 2-3, and minor categories get 1-2. Total should be 15-25 questions across all categories.
+
+- questions_they_ask: Generate questions grouped into 4-6 categories. Categories must be tailored to the role, seniority, and interviewer.
+  Examples by role:
+  - Senior Engineer + HM interview: "System Design" (5 questions), "Leadership & Influence" (4), "Technical Deep-Dive" (3), "Culture & Collaboration" (2), "Role-Specific" (2)
+  - Junior PM + Recruiter screen: "Product Sense" (3), "Motivation & Fit" (4), "Analytical Thinking" (2), "Communication" (2)
+  - Staff Designer + VP interview: "Design Leadership" (5), "Strategic Thinking" (4), "Cross-functional Impact" (3), "Portfolio Deep-Dive" (3)
+  The heaviest categories should reflect what THIS interviewer at THIS stage will actually spend the most time on. Include the HARD questions — the ones that trip people up, not softballs.
+
+- questions_you_ask: Generate questions grouped into 4-6 categories, also weighted by importance. More questions in categories that will make the biggest impression on THIS interviewer.
+  Examples: "About the Team" (3-4), "Technical Direction" (3-4), "Growth & Impact" (2-3), "Company Strategy" (2), "Role Expectations" (2).
+  These must signal seniority and genuine curiosity. NOT "What's a typical day like?" — instead "What's the biggest technical bet your team is making right now and what would it look like if it fails?"
 
 === KEY TOPICS (primitives) ===
 4+ topics in plain language with WHY they matter to this company.
