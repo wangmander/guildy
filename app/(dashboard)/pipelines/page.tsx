@@ -103,25 +103,55 @@ function normalizeInterviewPrep(prepAny: any): any | undefined {
   ).map((x) => safeStr(x).trim()).filter(Boolean)
 
   const companyIntel = pick(prepAny, ["companyIntel", "company_intel"]) || {}
+  const interviewStrategy = pick(prepAny, ["interviewStrategy", "interview_strategy"]) || {}
+  const interviewerIntel = pick(prepAny, ["interviewerIntel", "interviewer_intel"]) || {}
+  const stageRoadmap = safeArr(pick(prepAny, ["stageRoadmap", "stage_roadmap"]))
+  const compensationIntel = pick(prepAny, ["compensationIntel", "compensation_intel"]) || {}
+  const prepChecklist = safeArr(pick(prepAny, ["prepChecklist", "prep_checklist"]))
 
   return {
     stageFocus,
-    narrative,
-    spicyOpinion,
     primitives,
-    proofStories,
     questionsTheyMightAsk: qTheyAsk,
     questionsYouShouldAsk: qYouAsk,
-    whatToEmphasize: emphasize,
-    homeworkNext24h: homework,
-    industry: pick(companyIntel, ["industry"]) || "Unknown",
-    size: pick(companyIntel, ["size"]) || "Unknown",
-    hqLocation: pick(companyIntel, ["hqLocation", "hq_location"]) || "Unknown",
-    hq_location: pick(companyIntel, ["hqLocation", "hq_location"]) || "Unknown",
-    glassdoorRating: pick(companyIntel, ["glassdoorRating", "glassdoor_rating"]) || "Unknown",
+    companyIntel: {
+      industry: pick(companyIntel, ["industry"]) || "Unknown",
+      size: pick(companyIntel, ["size"]) || "Unknown",
+      hqLocation: pick(companyIntel, ["hqLocation", "hq_location"]) || "Unknown",
+      summary: pick(companyIntel, ["summary"]) || "",
+      product: pick(companyIntel, ["product"]) || "",
+      businessModel: pick(companyIntel, ["businessModel", "business_model"]) || "",
+      competitors: safeArr(pick(companyIntel, ["competitors"])),
+      techStack: pick(companyIntel, ["techStack", "tech_stack"]) || "",
+      culture: pick(companyIntel, ["culture"]) || "",
+      recentNews: safeArr(pick(companyIntel, ["recentNews", "recent_news"])),
+    },
+    interviewStrategy: {
+      goalForThisStage: pick(interviewStrategy, ["goalForThisStage", "goal"]) || "",
+      whatTheyEvaluate: safeArr(pick(interviewStrategy, ["whatTheyEvaluate", "evaluate"])),
+      howToSucceed: safeArr(pick(interviewStrategy, ["howToSucceed", "succeed"])),
+      commonMistakes: safeArr(pick(interviewStrategy, ["commonMistakes", "mistakes"])),
+      answerLength: pick(interviewStrategy, ["answerLength", "answer_length"]) || "",
+    },
+    interviewerIntel: {
+      name: pick(interviewerIntel, ["name"]) || "",
+      likelyRole: pick(interviewerIntel, ["likelyRole", "likely_role"]) || "",
+      seniority: pick(interviewerIntel, ["seniority"]) || "",
+      whatTheyEvaluate: pick(interviewerIntel, ["whatTheyEvaluate"]) || "",
+      topicsTheyProbe: safeArr(pick(interviewerIntel, ["topicsTheyProbe", "topics"])),
+      howToCalibrateAnswers: pick(interviewerIntel, ["howToCalibrateAnswers"]) || "",
+    },
+    stageRoadmap,
+    compensationIntel: {
+      salaryRange: pick(compensationIntel, ["salaryRange", "salary_range"]) || "",
+      equityInfo: pick(compensationIntel, ["equityInfo", "equity_info"]) || "",
+      negotiationTips: safeArr(pick(compensationIntel, ["negotiationTips", "negotiation_tips"])),
+      whenToDiscuss: pick(compensationIntel, ["whenToDiscuss", "when_to_discuss"]) || "",
+    },
+    prepChecklist,
+    // Keep legacy aliases for backward compat with existing data
     companyIntelSummary: pick(companyIntel, ["summary"]) || "",
     summary: pick(companyIntel, ["summary"]) || "",
-    recentNews: safeArr(pick(companyIntel, ["recentNews", "recent_news"])),
   }
 }
 

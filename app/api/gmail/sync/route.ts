@@ -341,40 +341,75 @@ async function analyzeEmail(input: {
     threadContext += "\nNEW EMAIL TO ANALYZE:\n"
   }
 
-  const systemPrompt = `You are an elite interview research assistant. You provide factual company intelligence and realistic interview questions based on the company, role, and stage. You NEVER make up information about the candidate — you don't know who they are.
+  const systemPrompt = `You are an elite interview research assistant. You provide factual company intelligence, realistic interview questions, and actionable interview strategy. You NEVER fabricate information about the candidate — you don't know who they are. Everything you produce is based on the COMPANY, ROLE, STAGE, and INTERVIEWER.
 
 CRITICAL — is_recruiting RULES:
 - Set is_recruiting=TRUE only when a REAL HUMAN (recruiter, hiring manager, interviewer) is reaching out or responding to the candidate.
 - Set is_recruiting=FALSE for: auto-confirmation emails ("Thanks for applying", "We received your application", "Application submitted"), marketing blasts, job board notifications (LinkedIn, Indeed, Glassdoor digest emails), and newsletters.
 - The test: Did a specific person at a company write or trigger this email because they want to talk to THIS candidate? If no → is_recruiting=false.
 
-COMPANY RESEARCH:
-For the company, provide FACTUAL information based on your knowledge:
-- What they actually build (their core product, not just an industry label)
-- Their competitive landscape and what differentiates them
-- Their stage (seed, Series A-D, public) and approximate size
-- Recent strategic moves, funding, product launches you know about
-- HQ location
-- If you are NOT confident about a fact, say "Unknown" — do NOT guess
+=== SECTION 1: COMPANY DEEP DIVE (companyIntel) ===
+Provide FACTUAL information. If you are not confident, say "Unknown".
+- summary: 2-3 sentences on what they build, who their customers are, and their market position.
+- product: What exactly is their core product? Be specific — not "a tech company" but "a real-time feature platform that lets ML teams compute features from streaming data for model inference."
+- businessModel: How do they make money? (SaaS, usage-based, enterprise contracts, marketplace, ads, etc.)
+- competitors: 2-4 direct competitors and how this company differentiates.
+- techStack: Known technologies they use (from your knowledge of their engineering blog, job posts, etc.). Say "Unknown" if unsure.
+- culture: Their culture archetype in one sentence. (e.g., "Engineering-excellence culture with strong written communication norms" or "Move-fast startup energy, founder-led decisions")
+- industry, size, hqLocation, recentNews as before.
 
-INTERVIEWER PROFILING:
-When you see a sender name/title, infer their likely role and what they evaluate. Use this to tailor questions.
+=== SECTION 2: INTERVIEW STRATEGY (interviewStrategy) ===
+Stage-specific tactical advice. Be direct, specific, and actionable.
+- goalForThisStage: One sentence on what success looks like at this stage. e.g., "The goal of a recruiter screen is to get to the next round — demonstrate fit and enthusiasm, don't go deep on technical details."
+- whatTheyEvaluate: 2-3 bullet points on what this specific stage assesses. e.g., "Communication clarity, motivation for the role, salary alignment."
+- howToSucceed: 3-4 specific, actionable tactics. NOT "be yourself" or "show enthusiasm." e.g., "Keep answers under 90 seconds. Lead with the result, then explain how. Ask about the team's biggest challenge this quarter."
+- commonMistakes: 3-4 things that get people rejected at this stage. e.g., "Rambling for 3+ minutes on a single answer. Badmouthing a previous employer. Not having questions prepared."
+- answerLength: How long answers should be at this stage. e.g., "60-90 seconds for screening, 2-3 minutes for behavioral, 5-10 minutes for technical deep-dives."
 
-QUESTIONS — THIS IS THE CORE VALUE:
-- QUESTIONS THEY ASK: Generate 8 realistic interview questions this company would ask for this role at this stage. Categorize them (e.g., "Technical", "Behavioral", "Culture Fit", "Role-specific"). Include the hard ones that trip people up — not softballs.
-- QUESTIONS YOU ASK: Generate 8 smart questions the candidate should ask the interviewer. These should show genuine curiosity and strategic thinking. "What's the hardest technical decision your team made this quarter?" NOT "What's a typical day like?"
-- Tailor questions to the STAGE: recruiter screens focus on fit and motivation; technical rounds focus on skills; final rounds focus on leadership and culture.
+=== SECTION 3: INTERVIEWER INTEL (interviewerIntel) ===
+Based on the sender's name and email, infer what you can:
+- name: The interviewer's name from the email.
+- likelyRole: Their probable title/function. e.g., "Technical Recruiter", "Engineering Manager", "VP of Product."
+- seniority: junior / mid / senior / executive.
+- whatTheyEvaluate: What someone in this role typically probes for. e.g., "A recruiter evaluates culture fit, comp expectations, and communication skills. They're gatekeepers, not technical evaluators."
+- topicsTheyProbe: 3-5 specific topics this person will likely focus on based on their role.
+- howToCalibrateAnswers: How to adjust your communication style for this person's level. e.g., "Speak in business outcomes, not technical implementation details — this person cares about impact, not architecture."
 
-KEY TOPICS:
-- 4+ topics this company cares deeply about that a candidate should research before the interview.
-- Write descriptions in plain, accessible language. Explain WHY this topic matters to this company, not just what the term means.
-- Example for Stripe: "Payment Processing" — "Stripe handles billions in payments. Understanding how online payments work and the challenges of doing it reliably will show you've done your homework."
+=== SECTION 4: STAGE ROADMAP (stageRoadmap) ===
+An array of stages showing the likely interview pipeline:
+- Each entry: { "stage": "Stage Name", "status": "completed" | "current" | "upcoming", "whatItTests": "One sentence on what this stage evaluates" }
+- Mark the current stage based on the email evidence.
+- Generate 4-6 stages typical for this role at this type of company.
 
-STAGE FOCUS:
-- One sentence on what to optimize for at this specific interview stage.
+=== SECTION 5: COMPENSATION INTEL (compensationIntel) ===
+Based on the company's size, stage, location, and role:
+- salaryRange: Estimated total comp range. e.g., "$150K-$200K base + equity" or "Unknown for this company."
+- equityInfo: What type of equity is typical at their stage. e.g., "Series B startup — likely ISO stock options with 4-year vest, 1-year cliff."
+- negotiationTips: 2-3 specific tips for negotiating with this type of company. e.g., "At this stage, equity is negotiable but base salary ranges are tighter. Ask about refresh grants."
+- whenToDiscuss: When in the process to bring up comp. e.g., "Let the recruiter bring it up first in the screen. If they ask your expectations, give a range based on total comp, not just base."
+NOTE: Only populate this in detail for OFFER stage. For earlier stages, provide brief estimates and say "Focus on this after you have an offer in hand."
 
-ROLE-SPECIFIC PIPELINE STAGES (predicted_stages):
-Generate realistic pipeline stages for this role type at this company.
+=== SECTION 6: 24-HOUR PREP CHECKLIST (prepChecklist) ===
+5-8 specific, actionable things to do before the interview. These must be CONCRETE tasks, not vague advice.
+Good examples:
+- "Look up [interviewer name] on LinkedIn — note their career path and recent posts"
+- "Try [company]'s product for 10 minutes — note one thing you'd improve"
+- "Read their most recent blog post or press release"
+- "Prepare 2 specific examples of [relevant skill for this role]"
+- "Review their pricing page to understand their market positioning"
+- "Google '[company name] interview questions' on Glassdoor for real examples"
+- "Prepare a 60-second answer to 'Why [company]?' that references something specific"
+Bad examples (DO NOT use):
+- "Research the company" (too vague)
+- "Practice your answers" (not specific)
+- "Get a good night's sleep" (not interview prep)
+
+=== QUESTIONS (the core value — go deep here) ===
+- questions_they_ask: Generate 12-15 realistic questions grouped into 3-5 categories. Categories should be tailored to the role, seniority, and interviewer — e.g., for a senior engineer: "System Design", "Behavioral / Leadership", "Technical Deep-Dive", "Culture & Values", "Role-Specific". For a PM: "Product Sense", "Analytical / Metrics", "Stakeholder Management", "Strategic Thinking". Include the HARD questions that trip people up, not softballs. Every question should feel like it could actually be asked at THIS company.
+- questions_you_ask: Generate 12-15 smart questions grouped into 3-5 categories. Categories like "About the Team", "About the Role", "About the Company Direction", "About Engineering Culture", "About Growth". These should signal seniority and real curiosity. NOT "What's a typical day like?" — instead "What's the biggest technical bet your team is making right now and what would it look like if it fails?"
+
+=== KEY TOPICS (primitives) ===
+4+ topics in plain language with WHY they matter to this company.
 
 OUTPUT (JSON ONLY, no markdown wrapping):
 {
@@ -386,25 +421,55 @@ OUTPUT (JSON ONLY, no markdown wrapping):
   "predicted_stages": ["Stage 1", "Stage 2", "..."],
   "action_needed": "string | null",
   "insights": {
-    "stageReason": "Why this is the current stage based on email evidence",
+    "stageReason": "Why this is the current stage",
     "waitingOn": "you" | "them",
-    "nextAction": "Specific next step the candidate should take",
+    "nextAction": "Specific next step",
     "urgency": "low" | "med" | "high",
     "responseLikelihood": "low" | "med" | "high",
     "tone": "friendly" | "formal" | "neutral" | "urgent"
   },
   "prep": {
-    "stageFocus": "What to optimize for at this specific stage",
-    "primitives": [{ "name": "Topic Name", "description": "Plain-language explanation of why this matters to this company" }],
-    "questions_they_ask": [{ "category": "Category", "question": "The actual question" }],
-    "questions_you_ask": [{ "category": "Category", "question": "The actual question" }],
+    "stageFocus": "One sentence on what to optimize for",
+    "primitives": [{ "name": "Topic", "description": "Why it matters here" }],
+    "questions_they_ask": [{ "category": "Meaningful Category", "question": "Question" }, "... 12-15 total"],
+    "questions_you_ask": [{ "category": "Meaningful Category", "question": "Question" }, "... 12-15 total"],
     "companyIntel": {
       "industry": "string",
-      "size": "string (e.g., '500-1000 employees')",
+      "size": "string",
       "hqLocation": "string",
-      "summary": "2-3 sentences on what they build, their position, and stage",
-      "recentNews": ["Recent move or event 1", "Recent move or event 2"]
-    }
+      "summary": "string",
+      "product": "What they build specifically",
+      "businessModel": "How they make money",
+      "competitors": ["Competitor 1", "Competitor 2"],
+      "techStack": "Known technologies",
+      "culture": "Culture description",
+      "recentNews": ["News 1", "News 2"]
+    },
+    "interviewStrategy": {
+      "goalForThisStage": "string",
+      "whatTheyEvaluate": ["Point 1", "Point 2"],
+      "howToSucceed": ["Tactic 1", "Tactic 2", "Tactic 3"],
+      "commonMistakes": ["Mistake 1", "Mistake 2", "Mistake 3"],
+      "answerLength": "string"
+    },
+    "interviewerIntel": {
+      "name": "string",
+      "likelyRole": "string",
+      "seniority": "string",
+      "whatTheyEvaluate": "string",
+      "topicsTheyProbe": ["Topic 1", "Topic 2"],
+      "howToCalibrateAnswers": "string"
+    },
+    "stageRoadmap": [
+      { "stage": "Stage Name", "status": "completed | current | upcoming", "whatItTests": "string" }
+    ],
+    "compensationIntel": {
+      "salaryRange": "string",
+      "equityInfo": "string",
+      "negotiationTips": ["Tip 1", "Tip 2"],
+      "whenToDiscuss": "string"
+    },
+    "prepChecklist": ["Task 1", "Task 2", "Task 3", "Task 4", "Task 5"]
   }
 }`
 
@@ -428,7 +493,7 @@ Analyze this email. Return JSON only.`
     const res = await openai.chat.completions.create({
       model: "gpt-4o",
       temperature: 0.5,
-      max_tokens: 4000,
+      max_tokens: 6000,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -471,8 +536,36 @@ Analyze this email. Return JSON only.`
           size: parsed.prep?.companyIntel?.size || "Unknown",
           hqLocation: parsed.prep?.companyIntel?.hqLocation || parsed.prep?.companyIntel?.hq_location || "Unknown",
           summary: parsed.prep?.companyIntel?.summary || "",
+          product: parsed.prep?.companyIntel?.product || "",
+          businessModel: parsed.prep?.companyIntel?.businessModel || "",
+          competitors: parsed.prep?.companyIntel?.competitors || [],
+          techStack: parsed.prep?.companyIntel?.techStack || "",
+          culture: parsed.prep?.companyIntel?.culture || "",
           recentNews: parsed.prep?.companyIntel?.recentNews || parsed.prep?.companyIntel?.recent_news || [],
         },
+        interviewStrategy: {
+          goalForThisStage: parsed.prep?.interviewStrategy?.goalForThisStage || "",
+          whatTheyEvaluate: parsed.prep?.interviewStrategy?.whatTheyEvaluate || [],
+          howToSucceed: parsed.prep?.interviewStrategy?.howToSucceed || [],
+          commonMistakes: parsed.prep?.interviewStrategy?.commonMistakes || [],
+          answerLength: parsed.prep?.interviewStrategy?.answerLength || "",
+        },
+        interviewerIntel: {
+          name: parsed.prep?.interviewerIntel?.name || "",
+          likelyRole: parsed.prep?.interviewerIntel?.likelyRole || "",
+          seniority: parsed.prep?.interviewerIntel?.seniority || "",
+          whatTheyEvaluate: parsed.prep?.interviewerIntel?.whatTheyEvaluate || "",
+          topicsTheyProbe: parsed.prep?.interviewerIntel?.topicsTheyProbe || [],
+          howToCalibrateAnswers: parsed.prep?.interviewerIntel?.howToCalibrateAnswers || "",
+        },
+        stageRoadmap: parsed.prep?.stageRoadmap || [],
+        compensationIntel: {
+          salaryRange: parsed.prep?.compensationIntel?.salaryRange || "",
+          equityInfo: parsed.prep?.compensationIntel?.equityInfo || "",
+          negotiationTips: parsed.prep?.compensationIntel?.negotiationTips || [],
+          whenToDiscuss: parsed.prep?.compensationIntel?.whenToDiscuss || "",
+        },
+        prepChecklist: parsed.prep?.prepChecklist || [],
       },
       predicted_stages: parsed.predicted_stages || [],
     }
@@ -996,14 +1089,18 @@ export async function POST() {
         const newPrep = analysis.prep || {}
         const prepRichness = (p: any) => {
           let score = 0
-          if (p?.narrative) score += 3
-          if (p?.spicyOpinion || p?.spicy_opinion) score += 2
-          if (p?.questionsTheyMightAsk?.length || p?.questions_they_ask?.length || p?.questions_they_might_ask?.length) score += 2
-          if (p?.questionsYouShouldAsk?.length || p?.questions_you_ask?.length || p?.questions_you_should_ask?.length) score += 2
+          if (p?.questionsTheyMightAsk?.length || p?.questions_they_ask?.length) score += 3
+          if (p?.questionsYouShouldAsk?.length || p?.questions_you_ask?.length) score += 3
           if (p?.primitives?.length) score += 2
-          if (p?.proofStories?.length || p?.proof_stories?.length) score += 2
-          if (p?.whatToEmphasize?.length || p?.what_to_emphasize?.length) score += 1
-          if (p?.companyIntel?.summary || p?.companyIntelSummary) score += 1
+          if (p?.companyIntel?.summary) score += 2
+          if (p?.companyIntel?.product) score += 1
+          if (p?.companyIntel?.competitors?.length) score += 1
+          if (p?.interviewStrategy?.goalForThisStage) score += 2
+          if (p?.interviewStrategy?.howToSucceed?.length) score += 2
+          if (p?.interviewerIntel?.name) score += 1
+          if (p?.stageRoadmap?.length) score += 1
+          if (p?.prepChecklist?.length) score += 1
+          if (p?.compensationIntel?.salaryRange) score += 1
           return score
         }
 
