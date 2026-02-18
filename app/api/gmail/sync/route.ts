@@ -49,12 +49,10 @@ const INSTANT_REJECT_PATTERNS: string[] = [
   "christian school", "elementary school", "high school",
   "middle school", "preschool", "kindergarten",
 
-  // Auto-confirmation emails (not a recruiter reaching out)
-  "thanks for applying", "thank you for applying",
-  "received your application", "application has been received",
-  "we received your application", "application was submitted",
-  "successfully submitted", "application confirmed",
-  "thank you for your interest", "thanks for your interest",
+  // Auto-confirmation emails are NOT instant-rejected anymore.
+  // The LLM handles this classification — instant reject was killing
+  // legitimate recruiter emails that include phrases like
+  // "thank you for your interest — we'd like to schedule an interview".
 ]
 
 const BLOCKED_SENDER_PATTERNS: string[] = [
@@ -826,8 +824,10 @@ export async function POST() {
       const fullText = `${subject}\n${snippet}\n${fromHeader}\n${bodyText}`
       const textLower = fullText.toLowerCase()
 
-      // Gate 1: Instant reject
-      const instantRejectResult = shouldInstantReject(textLower, fromEmail)
+      // Gate 1: Instant reject — only check subject+snippet, NOT full body
+      // (footer text like "unsubscribe here" was killing legit recruiter emails)
+      const rejectText = `${subject}\n${snippet}`.toLowerCase()
+      const instantRejectResult = shouldInstantReject(rejectText, fromEmail)
       if (instantRejectResult.reject) {
         console.log(`[REJECT] Instant reject: "${subject.slice(0, 30)}" - ${instantRejectResult.reason}`)
         stats.rejected++
