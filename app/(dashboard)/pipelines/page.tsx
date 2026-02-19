@@ -379,29 +379,36 @@ function DebugLogsView() {
           </tr>
         </thead>
         <tbody className="divide-y">
-          {logs.map((log) => (
-            <tr key={log.id} className="group hover:bg-gray-50">
-              <td className="py-1 pr-2 whitespace-nowrap text-gray-400">
-                {new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </td>
-              <td className="py-1 pr-2">
-                {log.detected ? (
-                  <span className="text-green-600 font-bold">MATCH</span>
-                ) : (
-                  <span className="text-red-500 font-bold">REJECT</span>
-                )}
-              </td>
-              <td className="py-1 pr-2 max-w-[150px] truncate text-gray-700" title={log.subject}>
-                {log.subject}
-              </td>
-              <td className="py-1 pr-2">
-                {log.score !== undefined ? `${log.score} (Max: ${log.strongest_hit ?? 0})` : "-"}
-              </td>
-              <td className="py-1 text-gray-500 max-w-[200px] truncate" title={log.rejection_reason}>
-                {log.rejection_reason}
-              </td>
-            </tr>
-          ))}
+          {logs.map((log) => {
+            let timeStr = "—"
+            try {
+              const d = new Date(log.created_at)
+              if (!isNaN(d.getTime())) timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            } catch { /* ignore */ }
+            const subject = typeof log.subject === "string" ? log.subject : ""
+            const reason = typeof log.rejection_reason === "string" ? log.rejection_reason : ""
+            return (
+              <tr key={log.id} className="group hover:bg-gray-50">
+                <td className="py-1 pr-2 whitespace-nowrap text-gray-400">{timeStr}</td>
+                <td className="py-1 pr-2">
+                  {log.detected ? (
+                    <span className="text-green-600 font-bold">MATCH</span>
+                  ) : (
+                    <span className="text-red-500 font-bold">REJECT</span>
+                  )}
+                </td>
+                <td className="py-1 pr-2 max-w-[150px] truncate text-gray-700" title={subject}>
+                  {subject}
+                </td>
+                <td className="py-1 pr-2">
+                  {log.score !== undefined ? `${log.score} (Max: ${log.strongest_hit ?? 0})` : "-"}
+                </td>
+                <td className="py-1 text-gray-500 max-w-[200px] truncate" title={reason}>
+                  {reason}
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>

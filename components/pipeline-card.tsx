@@ -17,14 +17,17 @@ interface PipelineCardProps {
 const defaultVisualStages = ["Screening", "Hiring manager", "Presentation", "Full loop", "Offer discussion"]
 
 export function PipelineCard({ job, onClick, onActionClick, isSelected }: PipelineCardProps) {
-  const visualStages = job.predicted_stages && job.predicted_stages.length > 0
-    ? job.predicted_stages
-    : defaultVisualStages
+  // Ensure predicted_stages only contains strings (LLM can return objects)
+  const rawStages = job.predicted_stages && job.predicted_stages.length > 0
+    ? job.predicted_stages.filter((s): s is string => typeof s === "string" && s.length > 0)
+    : []
+  const visualStages = rawStages.length > 0 ? rawStages : defaultVisualStages
 
   const getVisualStageIndex = (stage: string) => {
     // 1. Try to find exact or fuzzy match in our visual stages
-    const stageNorm = stage.toLowerCase().replace("_", " ")
+    const stageNorm = (stage || "").toLowerCase().replace("_", " ")
     const idx = visualStages.findIndex(s => {
+      if (typeof s !== "string") return false
       const sNorm = s.toLowerCase()
       return sNorm.includes(stageNorm) || stageNorm.includes(sNorm)
     })
@@ -56,16 +59,18 @@ export function PipelineCard({ job, onClick, onActionClick, isSelected }: Pipeli
 
   const getMeetingDate = () => {
     if (job.scheduledMeeting) {
-      const date = new Date(job.scheduledMeeting.date)
-      return {
-        date: date.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" }),
-        time: date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZoneName: "short" }),
-        relative: `In ${formatDistanceToNow(date).replace("about ", "")}`,
-      }
+      try {
+        const date = new Date(job.scheduledMeeting.date)
+        if (isNaN(date.getTime())) throw new Error("Invalid date")
+        return {
+          date: date.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" }),
+          time: date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZoneName: "short" }),
+          relative: `In ${formatDistanceToNow(date).replace("about ", "")}`,
+        }
+      } catch { /* fall through to default */ }
     }
-    // Fallback for no meeting
     const date = new Date()
-    date.setDate(date.getDate() + 2) // Fake future date for demo if no meeting
+    date.setDate(date.getDate() + 2)
     return {
       date: date.toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" }),
       time: "3:00 PM PST",

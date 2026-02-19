@@ -16,7 +16,7 @@ const supabase = supabaseAdmin
 const openai = openaiKey ? new OpenAI({ apiKey: openaiKey }) : null
 
 // Max LLM calls per sync to stay within timeout
-const MAX_LLM_CALLS_PER_SYNC = 8
+const MAX_LLM_CALLS_PER_SYNC = 15
 
 // ============================================================
 // INSTANT REJECT - Minimal, only obvious non-recruiting
@@ -307,6 +307,16 @@ function extractBodyFromPayload(payload: any): { text: string; html: string } {
   return { text: text.trim(), html: html.trim() }
 }
 
+// Stage ordering for regression prevention
+const STAGE_ORDER: Record<string, number> = {
+  "SCREENING": 0,
+  "HIRING_MANAGER": 1,
+  "PRESENTATION": 2,
+  "FULL_LOOP": 3,
+  "OFFER_DISCUSSION": 4,
+  "REJECTED": -1,
+}
+
 function getUiStage(bucket: string): string {
   const map: Record<string, string> = {
     "RECRUITER_SCREEN": "SCREENING",
@@ -317,6 +327,15 @@ function getUiStage(bucket: string): string {
     "REJECTED": "REJECTED",
   }
   return map[bucket] || "SCREENING"
+}
+
+// Prevent stage regression: only allow forward movement or "REJECTED"
+function resolveStage(newStage: string, existingStage?: string): string {
+  if (!existingStage) return newStage
+  if (newStage === "REJECTED") return "REJECTED"
+  const newOrder = STAGE_ORDER[newStage] ?? 0
+  const existingOrder = STAGE_ORDER[existingStage] ?? 0
+  return newOrder >= existingOrder ? newStage : existingStage
 }
 
 // ============================================================
@@ -345,6 +364,23 @@ CRITICAL — is_recruiting RULES:
 - Set is_recruiting=TRUE only when a REAL HUMAN (recruiter, hiring manager, interviewer) is reaching out or responding to the candidate.
 - Set is_recruiting=FALSE for: auto-confirmation emails ("Thanks for applying", "We received your application", "Application submitted"), marketing blasts, job board notifications (LinkedIn, Indeed, Glassdoor digest emails), and newsletters.
 - The test: Did a specific person at a company write or trigger this email because they want to talk to THIS candidate? If no → is_recruiting=false.
+
+CRITICAL — advances_pipeline RULES:
+- Set advances_pipeline=TRUE only when this email represents FORWARD MOVEMENT in the interview process.
+- Examples of emails that ADVANCE the pipeline:
+  * Scheduling an interview, phone screen, or call
+  * Moving to the next round ("We'd like to move you forward")
+  * Sending a take-home assignment or coding challenge
+  * Extending an offer
+  * Providing feedback and next steps
+  * A recruiter or hiring manager initiating contact for the first time
+- Examples that do NOT advance the pipeline (advances_pipeline=FALSE):
+  * "We received your application" / "Thanks for applying" (these are auto-confirmations, NOT pipeline advancement)
+  * "Your application is being reviewed" (no action, just status)
+  * Generic status updates with no concrete next step
+  * Automated rejection emails with no feedback
+  * Calendar holds or logistics-only emails that don't represent a new stage
+- The test: Does this email create a NEW obligation or opportunity for the candidate to act on? Does it move them to a different stage? If no → advances_pipeline=false.
 
 === SECTION 1: COMPANY DEEP DIVE (companyIntel) ===
 Provide FACTUAL information. If you are not confident, say "Unknown".
@@ -403,17 +439,19 @@ Bad examples (DO NOT use):
 - "Get a good night's sleep" (not interview prep)
 
 === QUESTIONS (the core value — go deep here) ===
-IMPORTANT: Weight the number of questions PER CATEGORY by how important that category is for this specific role, seniority, and interviewer. The most critical categories get 4-5 questions, moderately important categories get 2-3, and minor categories get 1-2. Total should be 15-25 questions across all categories.
+IMPORTANT: Weight the number of questions PER CATEGORY by how important that category is for this specific role, seniority, and interviewer. The most critical categories get 5-7 questions, moderately important categories get 3-4, and minor categories get 2-3. Total should be 20-35 questions across all categories. The higher the stage/seniority, the MORE questions you should generate.
 
-- questions_they_ask: Generate questions grouped into 4-6 categories. Categories must be tailored to the role, seniority, and interviewer.
+For each question, also include a "priority" field (1=highest, 3=lowest) indicating how likely this question is to be asked at this specific stage by this specific interviewer. Priority 1 = almost certainly asked, Priority 2 = commonly asked, Priority 3 = sometimes asked.
+
+- questions_they_ask: Generate questions grouped into 4-8 categories. Categories must be tailored to the role, seniority, and interviewer.
   Examples by role:
   - Senior Engineer + HM interview: "System Design" (5 questions), "Leadership & Influence" (4), "Technical Deep-Dive" (3), "Culture & Collaboration" (2), "Role-Specific" (2)
   - Junior PM + Recruiter screen: "Product Sense" (3), "Motivation & Fit" (4), "Analytical Thinking" (2), "Communication" (2)
   - Staff Designer + VP interview: "Design Leadership" (5), "Strategic Thinking" (4), "Cross-functional Impact" (3), "Portfolio Deep-Dive" (3)
   The heaviest categories should reflect what THIS interviewer at THIS stage will actually spend the most time on. Include the HARD questions — the ones that trip people up, not softballs.
 
-- questions_you_ask: Generate questions grouped into 4-6 categories, also weighted by importance. More questions in categories that will make the biggest impression on THIS interviewer.
-  Examples: "About the Team" (3-4), "Technical Direction" (3-4), "Growth & Impact" (2-3), "Company Strategy" (2), "Role Expectations" (2).
+- questions_you_ask: Generate questions grouped into 4-8 categories, also weighted by importance. More questions in categories that will make the biggest impression on THIS interviewer.
+  Examples: "About the Team" (4-5), "Technical Direction" (4-5), "Growth & Impact" (3-4), "Company Strategy" (2-3), "Role Expectations" (2-3).
   These must signal seniority and genuine curiosity. NOT "What's a typical day like?" — instead "What's the biggest technical bet your team is making right now and what would it look like if it fails?"
 
 === KEY TOPICS (primitives) ===
@@ -422,6 +460,7 @@ IMPORTANT: Weight the number of questions PER CATEGORY by how important that cat
 OUTPUT (JSON ONLY, no markdown wrapping):
 {
   "is_recruiting": boolean,
+  "advances_pipeline": boolean,
   "company": "string",
   "role": "string",
   "stage_bucket": "RECRUITER_SCREEN" | "HM_SCREEN" | "ASSESSMENT" | "LOOP" | "OFFER" | "REJECTED",
@@ -439,8 +478,8 @@ OUTPUT (JSON ONLY, no markdown wrapping):
   "prep": {
     "stageFocus": "One sentence on what to optimize for",
     "primitives": [{ "name": "Topic", "description": "Why it matters here" }],
-    "questions_they_ask": [{ "category": "Meaningful Category", "question": "Question" }, "... 12-15 total"],
-    "questions_you_ask": [{ "category": "Meaningful Category", "question": "Question" }, "... 12-15 total"],
+    "questions_they_ask": [{ "category": "Meaningful Category", "question": "Question", "priority": 1 }, "... 20-35 total"],
+    "questions_you_ask": [{ "category": "Meaningful Category", "question": "Question", "priority": 1 }, "... 20-35 total"],
     "companyIntel": {
       "industry": "string",
       "size": "string",
@@ -522,6 +561,7 @@ Analyze this email. Return JSON only.`
     // Return with defaults
     return {
       is_recruiting: parsed.is_recruiting ?? false,
+      advances_pipeline: parsed.advances_pipeline ?? parsed.is_recruiting ?? false,
       company: parsed.company || "Unknown",
       role: parsed.role || "Unknown",
       stage_bucket: parsed.stage_bucket || "RECRUITER_SCREEN",
@@ -994,6 +1034,30 @@ export async function POST() {
         continue
       }
 
+      // Pipeline advancement check - only process emails that move the pipeline forward
+      if (!analysis.advances_pipeline) {
+        console.log(`[SKIP] LLM: does not advance pipeline for "${subject.slice(0, 40)}" at ${analysis.company}`)
+        stats.skipped++
+        await logEmailProcessing({
+          user_email: userEmail,
+          gmail_thread_id: threadId,
+          gmail_message_id: msg.id,
+          from_email: fromEmail,
+          from_domain: fromDomain,
+          company_guess: analysis.company,
+          subject: subject.slice(0, 200),
+          detected: false,
+          score,
+          strongest_hit: strongest,
+          matched_keywords: hits,
+          llm_called: true,
+          llm_is_recruiting: true,
+          rejection_reason: "does_not_advance_pipeline",
+          action_taken: "skipped_no_advancement",
+        })
+        continue
+      }
+
       stats.detected++
 
       // Create or update pipeline
@@ -1085,14 +1149,19 @@ export async function POST() {
 
         // Try to set predicted_stages separately (OK if column doesn't exist)
         if (analysis.predicted_stages?.length > 0) {
-          await supabase.from("pipelines").update({ predicted_stages: analysis.predicted_stages }).eq("id", pipelineId).then(() => {})
-            .catch(() => console.log("[PIPELINE] predicted_stages column not available, skipping"))
+          try {
+            await supabase.from("pipelines").update({ predicted_stages: analysis.predicted_stages }).eq("id", pipelineId)
+          } catch {
+            console.log("[PIPELINE] predicted_stages column not available, skipping")
+          }
         }
 
         stats.inserted++
       } else {
         // Update existing pipeline — only overwrite prep_json if new content is richer
-        console.log(`[PIPELINE] Updating ${analysis.company} (ID: ${pipelineId})`)
+        // Prevent stage regression: only move forward
+        const existingStage = matchedPipeline?.stage
+        console.log(`[PIPELINE] Updating ${analysis.company} (ID: ${pipelineId}), stage: ${existingStage} → ${finalStage}`)
 
         // Compare prep richness: count non-empty fields in old vs new
         const existingPrep = matchedPipeline?.prep_json || {}
@@ -1120,8 +1189,12 @@ export async function POST() {
 
         console.log(`[PIPELINE] Prep richness: existing=${oldScore}, new=${newScore}, using ${useNewPrep ? "new" : "existing"}`)
 
+        // Resolve stage with regression prevention
+        const resolvedStage = resolveStage(finalStage, existingStage)
+        console.log(`[PIPELINE] Resolved stage: ${resolvedStage} (was ${existingStage}, LLM said ${finalStage})`)
+
         const updatePayload: any = {
-          stage: finalStage,
+          stage: resolvedStage,
           stage_detail: analysis.stage_detail,
           last_email_at: receivedAt,
           last_email_subject: subject,
@@ -1152,8 +1225,11 @@ export async function POST() {
 
         // Try predicted_stages separately
         if (analysis.predicted_stages?.length > 0) {
-          await supabase.from("pipelines").update({ predicted_stages: analysis.predicted_stages }).eq("id", pipelineId)
-            .then(() => {}).catch(() => {})
+          try {
+            await supabase.from("pipelines").update({ predicted_stages: analysis.predicted_stages }).eq("id", pipelineId)
+          } catch {
+            // Column may not exist, that's OK
+          }
         }
 
         stats.updated++

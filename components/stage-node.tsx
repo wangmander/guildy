@@ -15,11 +15,17 @@ interface StageNodeProps {
   isActive: boolean
 }
 
-const stageLabels: Record<Stage, string> = {
+const stageLabels: Partial<Record<Stage, string>> = {
   APPLIED: "Applied",
   RECRUITER_SCREEN: "Recruiter Screen",
   INTERVIEW: "Interview",
   OFFER: "Offer",
+  SCREENING: "Screening",
+  HIRING_MANAGER: "Hiring Manager",
+  PRESENTATION: "Presentation",
+  FULL_LOOP: "Full Loop",
+  OFFER_DISCUSSION: "Offer",
+  REJECTED: "Rejected",
 }
 
 export function StageNode({ stage, status, eta, company, title, onClick, isActive }: StageNodeProps) {

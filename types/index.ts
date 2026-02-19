@@ -1,4 +1,4 @@
-export type Stage = "SCREENING" | "HIRING_MANAGER" | "PRESENTATION" | "FULL_LOOP" | "OFFER_DISCUSSION" | "REJECTED"
+export type Stage = "SCREENING" | "HIRING_MANAGER" | "PRESENTATION" | "FULL_LOOP" | "OFFER_DISCUSSION" | "REJECTED" | "APPLIED" | "RECRUITER_SCREEN" | "INTERVIEW" | "OFFER"
 export type Status = "WAITING" | "SCHEDULED" | "FEEDBACK_PENDING" | "DECLINED" | "NEGOTIATING"
 
 export interface EmailSnippet {
@@ -22,8 +22,11 @@ export interface InterviewPrep {
   spicyOpinion?: string
   primitives?: Array<{ name: string; description: string }>
   proofStories?: Array<{ title: string; detail: string }>
-  questionsTheyMightAsk?: Array<{ category: string; question: string }>
-  questionsYouShouldAsk?: Array<{ category: string; question: string }>
+  questionsTheyMightAsk?: Array<{ category: string; question: string; priority?: number }>
+  questionsYouShouldAsk?: Array<{ category: string; question: string; priority?: number }>
+  // Also accept underscore variants from LLM
+  questions_they_ask?: Array<{ category: string; question: string; priority?: number }>
+  questions_you_ask?: Array<{ category: string; question: string; priority?: number }>
   whatToEmphasize?: string[]
   homeworkNext24h?: string[]
   industry?: string
@@ -37,6 +40,42 @@ export interface InterviewPrep {
   tone?: string
   urgency?: string
   responseLikelihood?: string
+  // Rich sections from LLM
+  companyIntel?: {
+    industry?: string
+    size?: string
+    hqLocation?: string
+    summary?: string
+    recentNews?: string[]
+    product?: string
+    businessModel?: string
+    techStack?: string[]
+    competitors?: string[]
+    culture?: string
+  }
+  interviewStrategy?: {
+    goalForThisStage?: string
+    whatTheyEvaluate?: string[]
+    howToSucceed?: string[]
+    commonMistakes?: string[]
+    answerLength?: string
+  }
+  interviewerIntel?: {
+    name?: string
+    likelyRole?: string
+    seniority?: string
+    whatTheyEvaluate?: string
+    topicsTheyProbe?: string[]
+    howToCalibrateAnswers?: string
+  }
+  stageRoadmap?: Array<{ stage: string; status: string; whatItTests: string }>
+  compensationIntel?: {
+    salaryRange?: string
+    equityInfo?: string
+    negotiationAdvice?: string[]
+    marketContext?: string
+  }
+  prepChecklist?: string[]
 }
 
 export interface NewsItem {

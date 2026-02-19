@@ -62,15 +62,38 @@ function SectionCard({ title, icon, children, className = "" }: { title: string;
   )
 }
 
-// Group questions by category
+// Group questions by category and sort by priority
 function groupByCategory(items: any[]): Record<string, any[]> {
+  if (!Array.isArray(items)) return {}
   const groups: Record<string, any[]> = {}
   for (const item of items) {
+    if (!item) continue
     const cat = safeStr(item?.category, "General")
     if (!groups[cat]) groups[cat] = []
     groups[cat].push(item)
   }
+  // Sort questions within each category by priority (1 = highest)
+  for (const cat of Object.keys(groups)) {
+    try {
+      groups[cat].sort((a: any, b: any) => ((a?.priority ?? 2) - (b?.priority ?? 2)))
+    } catch { /* leave unsorted if sort fails */ }
+  }
   return groups
+}
+
+// Sort category entries so categories with more high-priority questions appear first
+function sortedCategoryEntries(grouped: Record<string, any[]>): [string, any[]][] {
+  if (!grouped || typeof grouped !== 'object') return []
+  try {
+    return Object.entries(grouped).sort(([, a], [, b]) => {
+      if (!Array.isArray(a) || !Array.isArray(b)) return 0
+      const scoreA = a.filter((q: any) => q?.priority === 1).length * 3 + a.filter((q: any) => q?.priority === 2).length * 2 + a.length
+      const scoreB = b.filter((q: any) => q?.priority === 1).length * 3 + b.filter((q: any) => q?.priority === 2).length * 2 + b.length
+      return scoreB - scoreA
+    })
+  } catch {
+    return Object.entries(grouped)
+  }
 }
 
 export function JobDetailPanel({ job, onSaveNotes }: Props) {
@@ -371,11 +394,10 @@ export function JobDetailPanel({ job, onSaveNotes }: Props) {
                 return (
                   <div key={i} className="flex items-start gap-3">
                     <div className="flex flex-col items-center">
-                      <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                        isCurrent ? "bg-indigo-600 text-white ring-4 ring-indigo-100" :
+                      <div className={`h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold ${isCurrent ? "bg-indigo-600 text-white ring-4 ring-indigo-100" :
                         isCompleted ? "bg-emerald-500 text-white" :
-                        "bg-gray-200 text-gray-500"
-                      }`}>
+                          "bg-gray-200 text-gray-500"
+                        }`}>
                         {isCompleted ? "✓" : i + 1}
                       </div>
                       {i < stageRoadmap.length - 1 && (
@@ -400,17 +422,26 @@ export function JobDetailPanel({ job, onSaveNotes }: Props) {
         <SectionCard title="Questions They'll Ask You" icon={<Target className="h-5 w-5 text-red-400" />}>
           {Object.keys(qTheyGrouped).length > 0 ? (
             <div className="space-y-6">
-              {Object.entries(qTheyGrouped).map(([category, questions]) => (
+              {sortedCategoryEntries(qTheyGrouped).map(([category, questions]) => (
                 <div key={category}>
-                  <div className="text-xs font-bold text-red-500/80 uppercase tracking-wider mb-3 pb-1 border-b border-red-100">
+                  <div className="flex items-center gap-2 text-xs font-bold text-red-500/80 uppercase tracking-wider mb-3 pb-1 border-b border-red-100">
                     {category}
+                    <span className="text-[10px] font-normal text-gray-400 normal-case">({Array.isArray(questions) ? questions.length : 0})</span>
                   </div>
                   <div className="space-y-3">
-                    {questions.map((q: any, i: number) => (
-                      <div key={i} className="text-sm text-gray-800 font-medium pl-3 border-l-2 border-red-200">
-                        {q.question}
-                      </div>
-                    ))}
+                    {Array.isArray(questions) && questions.map((q: any, i: number) => {
+                      if (!q) return null
+                      const prio = q?.priority
+                      return (
+                        <div key={i} className={`text-sm text-gray-800 font-medium pl-3 border-l-2 ${prio === 1 ? "border-red-400 bg-red-50/50 rounded-r-lg py-1.5 pr-2" :
+                            prio === 3 ? "border-gray-200" :
+                              "border-red-200"
+                          }`}>
+                          {prio === 1 && <span className="text-[10px] text-red-500 font-bold uppercase mr-1">Likely • </span>}
+                          {safeStr(q?.question, "")}
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               ))}
@@ -424,17 +455,26 @@ export function JobDetailPanel({ job, onSaveNotes }: Props) {
         <SectionCard title="Smart Questions to Ask Them" icon={<ArrowUpRight className="h-5 w-5 text-green-500" />}>
           {Object.keys(qYouGrouped).length > 0 ? (
             <div className="space-y-6">
-              {Object.entries(qYouGrouped).map(([category, questions]) => (
+              {sortedCategoryEntries(qYouGrouped).map(([category, questions]) => (
                 <div key={category}>
-                  <div className="text-xs font-bold text-green-600/70 uppercase tracking-wider mb-3 pb-1 border-b border-green-100">
+                  <div className="flex items-center gap-2 text-xs font-bold text-green-600/70 uppercase tracking-wider mb-3 pb-1 border-b border-green-100">
                     {category}
+                    <span className="text-[10px] font-normal text-gray-400 normal-case">({Array.isArray(questions) ? questions.length : 0})</span>
                   </div>
                   <div className="space-y-3">
-                    {questions.map((q: any, i: number) => (
-                      <div key={i} className="text-sm text-gray-800 font-medium pl-3 border-l-2 border-green-200">
-                        {q.question}
-                      </div>
-                    ))}
+                    {Array.isArray(questions) && questions.map((q: any, i: number) => {
+                      if (!q) return null
+                      const prio = q?.priority
+                      return (
+                        <div key={i} className={`text-sm text-gray-800 font-medium pl-3 border-l-2 ${prio === 1 ? "border-green-400 bg-green-50/50 rounded-r-lg py-1.5 pr-2" :
+                            prio === 3 ? "border-gray-200" :
+                              "border-green-200"
+                          }`}>
+                          {prio === 1 && <span className="text-[10px] text-green-600 font-bold uppercase mr-1">Key • </span>}
+                          {safeStr(q?.question, "")}
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               ))}

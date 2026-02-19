@@ -8,7 +8,7 @@ interface StatusTagProps {
   value: Status
 }
 
-const statusConfig = {
+const statusConfig: Record<string, { label: string; icon: any; className: string }> = {
   WAITING: {
     label: "Waiting",
     icon: AlertCircle,
@@ -29,10 +29,15 @@ const statusConfig = {
     icon: Minus,
     className: "bg-red-100 text-red-800 border-red-200",
   },
+  NEGOTIATING: {
+    label: "Negotiating",
+    icon: AlertCircle,
+    className: "bg-purple-100 text-purple-800 border-purple-200",
+  },
 }
 
 export function StatusTag({ value }: StatusTagProps) {
-  const config = statusConfig[value]
+  const config = statusConfig[value] ?? { label: value, icon: AlertCircle, className: "bg-gray-100 text-gray-800 border-gray-200" }
   const Icon = config.icon
 
   return (
