@@ -422,6 +422,11 @@ export default function PipelinesPage() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false)
+  // Track dismissed pipeline IDs — prevents reappear even if loadPipelines races the DELETE
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
+  // Scroll reveal state for the pipeline list column
+  const [isPipelineScrolling, setIsPipelineScrolling] = useState(false)
+  const pipelineScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Sync status
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'done'>('idle')
@@ -443,6 +448,12 @@ export default function PipelinesPage() {
 
   const syncInFlightRef = useRef(false)
   const mountedRef = useRef(true)
+
+  const handlePipelineScroll = useCallback(() => {
+    setIsPipelineScrolling(true)
+    if (pipelineScrollTimerRef.current) clearTimeout(pipelineScrollTimerRef.current)
+    pipelineScrollTimerRef.current = setTimeout(() => setIsPipelineScrolling(false), 1200)
+  }, [])
 
   const loadPipelines = useCallback(async () => {
     if (!userEmail) return
@@ -478,10 +489,11 @@ export default function PipelinesPage() {
   }, [userEmail])
 
   const deletePipeline = useCallback(async (job: Job) => {
-    setJobs((prev) => prev.filter((j) => j.id !== job.id))
+    // Add to dismissed set immediately — cards filtered out even if loadPipelines races the DELETE
+    setDismissedIds((prev) => new Set([...prev, job.id]))
     setSelectedJob((prev) => {
       if (prev?.id !== job.id) return prev
-      const remaining = jobs.filter((j) => j.id !== job.id)
+      const remaining = jobs.filter((j) => j.id !== job.id && !dismissedIds.has(j.id))
       return remaining[0] ?? null
     })
 
@@ -489,13 +501,15 @@ export default function PipelinesPage() {
       const res = await fetch(`/api/pipelines/${job.id}`, { method: "DELETE" })
       if (!res.ok) {
         console.error("[DELETE] Failed:", await res.text())
-        loadPipelines()
+        // Restore on failure — remove from dismissed set so card reappears
+        setDismissedIds((prev) => { const n = new Set(prev); n.delete(job.id); return n })
       }
+      // On success: leave in dismissedIds — pipeline is gone from DB and won't reappear
     } catch (err) {
       console.error("[DELETE] Network error:", err)
-      loadPipelines()
+      setDismissedIds((prev) => { const n = new Set(prev); n.delete(job.id); return n })
     }
-  }, [jobs, loadPipelines])
+  }, [jobs, dismissedIds])
 
   const syncGmail = useCallback(async (): Promise<boolean> => {
     try {
@@ -755,8 +769,11 @@ export default function PipelinesPage() {
       <div className="flex-1 overflow-hidden bg-gray-100">
         <div className="flex h-full">
           {/* Left column - Pipelines (WIDER) */}
-          <div className="w-full lg:w-[480px] xl:w-[550px] min-w-0 overflow-y-auto p-4 border-r bg-[#FAFAF8]">
-            {jobs.length === 0 ? (
+          <div
+            className={`w-full lg:w-[480px] xl:w-[550px] min-w-0 scroll-hide p-4 border-r bg-[#FAFAF8]${isPipelineScrolling ? " is-scrolling" : ""}`}
+            onScroll={handlePipelineScroll}
+          >
+            {jobs.filter(j => !dismissedIds.has(j.id)).length === 0 ? (
               <div className="rounded-xl border border-dashed bg-white p-6 text-center">
                 <div className="text-gray-600 mb-2 font-medium">No pipelines yet</div>
                 <div className="text-sm text-gray-500">
@@ -767,7 +784,7 @@ export default function PipelinesPage() {
               </div>
             ) : (
               <PipelineCardList
-                jobs={jobs}
+                jobs={jobs.filter(j => !dismissedIds.has(j.id))}
                 selectedJobId={selectedJob?.id}
                 onSelect={(job) => {
                   setSelectedJob(job)

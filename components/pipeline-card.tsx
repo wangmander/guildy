@@ -88,11 +88,11 @@ export function PipelineCard({ job, onClick, onActionClick, onDelete, isSelected
       style={isSelected ? { backgroundColor: "#F8FAFF" } : { backgroundColor: "white" }}
       onClick={onClick}
     >
-      {/* Delete button — visible on card hover */}
+      {/* Delete button — visible on card hover, inside card */}
       {onDelete && (
         <button
           onClick={(e) => { e.stopPropagation(); onDelete(e) }}
-          className="absolute -top-2 -right-2 z-20 opacity-0 group-hover/card:opacity-100 transition-opacity w-6 h-6 rounded-full bg-gray-900 text-white flex items-center justify-center hover:bg-red-600 focus:outline-none shadow-md"
+          className="absolute top-4 right-5 z-20 opacity-0 group-hover/card:opacity-100 transition-opacity w-5 h-5 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center hover:bg-red-50 hover:text-red-400 focus:outline-none"
           aria-label="Remove pipeline"
           title="Remove pipeline"
         >

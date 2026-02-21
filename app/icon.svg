@@ -1,12 +1,16 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="512" height="512" rx="96" fill="#111111"/>
+  <!-- Shield path: flat top, rounded corners, pointed bottom -->
+  <path
+    d="M 80,48 L 432,48 C 444,48 452,56 452,68 L 452,248 C 452,356 360,438 256,480 C 152,438 60,356 60,248 L 60,68 C 60,56 68,48 80,48 Z"
+    fill="#111111"
+  />
   <text
     x="256"
-    y="368"
+    y="328"
     text-anchor="middle"
-    font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif"
-    font-weight="800"
-    font-size="352"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-weight="700"
+    font-size="260"
     fill="white"
   >G</text>
 </svg>
