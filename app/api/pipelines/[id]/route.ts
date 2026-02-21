@@ -49,15 +49,19 @@ export async function DELETE(
       if (row.gmail_thread_id) threadIds.add(row.gmail_thread_id)
     }
 
-    // Insert dismissed thread records (upsert — safe to call twice)
+    // Insert dismissed thread records — non-fatal if table doesn't exist yet
     if (threadIds.size > 0) {
-      const rows = Array.from(threadIds).map((tid) => ({
-        user_email: userEmail,
-        gmail_thread_id: tid,
-      }))
-      await supabase
-        .from("dismissed_threads")
-        .upsert(rows, { onConflict: "user_email,gmail_thread_id" })
+      try {
+        const rows = Array.from(threadIds).map((tid) => ({
+          user_email: userEmail,
+          gmail_thread_id: tid,
+        }))
+        await supabase
+          .from("dismissed_threads")
+          .upsert(rows, { onConflict: "user_email,gmail_thread_id" })
+      } catch (e) {
+        console.warn("[DELETE] dismissed_threads upsert failed (table may not exist yet):", e)
+      }
     }
 
     // Hard delete — cascade removes linked emails + stage_history
