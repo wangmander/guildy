@@ -1,16 +1,15 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Shield: wider body, shorter bottom point -->
   <path
-    d="M 68,36 L 444,36 C 458,36 476,50 476,64 L 476,296 C 476,392 368,450 256,474 C 144,450 36,392 36,296 L 36,64 C 36,50 54,36 68,36 Z"
+    d="M 40,0 L 472,0 C 490,0 512,18 512,40 L 512,280 C 512,390 400,460 256,512 C 112,460 0,390 0,280 L 0,40 C 0,18 22,0 40,0 Z"
     fill="#111111"
   />
   <text
     x="256"
-    y="326"
+    y="355"
     text-anchor="middle"
     font-family="Georgia, 'Times New Roman', serif"
     font-weight="700"
-    font-size="268"
+    font-size="300"
     fill="white"
   >G</text>
 </svg>
