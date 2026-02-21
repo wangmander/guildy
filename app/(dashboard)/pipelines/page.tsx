@@ -444,29 +444,6 @@ export default function PipelinesPage() {
   const syncInFlightRef = useRef(false)
   const mountedRef = useRef(true)
 
-  const deletePipeline = useCallback(async (job: Job) => {
-    // Optimistic removal — remove from state immediately
-    setJobs((prev) => prev.filter((j) => j.id !== job.id))
-    setSelectedJob((prev) => {
-      if (prev?.id !== job.id) return prev
-      // Select next available job, if any
-      const remaining = jobs.filter((j) => j.id !== job.id)
-      return remaining[0] ?? null
-    })
-
-    try {
-      const res = await fetch(`/api/pipelines/${job.id}`, { method: "DELETE" })
-      if (!res.ok) {
-        console.error("[DELETE] Failed:", await res.text())
-        // Re-fetch to restore state if delete failed
-        loadPipelines()
-      }
-    } catch (err) {
-      console.error("[DELETE] Network error:", err)
-      loadPipelines()
-    }
-  }, [jobs, loadPipelines])
-
   const loadPipelines = useCallback(async () => {
     if (!userEmail) return
 
@@ -499,6 +476,26 @@ export default function PipelinesPage() {
       console.error("[PIPELINES] Error fetching pipelines:", err)
     }
   }, [userEmail])
+
+  const deletePipeline = useCallback(async (job: Job) => {
+    setJobs((prev) => prev.filter((j) => j.id !== job.id))
+    setSelectedJob((prev) => {
+      if (prev?.id !== job.id) return prev
+      const remaining = jobs.filter((j) => j.id !== job.id)
+      return remaining[0] ?? null
+    })
+
+    try {
+      const res = await fetch(`/api/pipelines/${job.id}`, { method: "DELETE" })
+      if (!res.ok) {
+        console.error("[DELETE] Failed:", await res.text())
+        loadPipelines()
+      }
+    } catch (err) {
+      console.error("[DELETE] Network error:", err)
+      loadPipelines()
+    }
+  }, [jobs, loadPipelines])
 
   const syncGmail = useCallback(async (): Promise<boolean> => {
     try {
