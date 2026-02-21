@@ -8,6 +8,7 @@ interface PipelineCardListProps {
   jobs: Job[]
   onSelect: (job: Job) => void
   onActionClick?: (job: Job) => void
+  onDelete?: (job: Job) => void
   selectedJobId?: string
 }
 
@@ -31,17 +32,18 @@ function getStageProgress(stage: string): number {
   return stageOrder[stage as keyof typeof stageOrder] || 0
 }
 
-export function PipelineCardList({ jobs, onSelect, onActionClick, selectedJobId }: PipelineCardListProps) {
+export function PipelineCardList({ jobs, onSelect, onActionClick, onDelete, selectedJobId }: PipelineCardListProps) {
   return (
     <div className="flex flex-col min-h-full">
       <div className="space-y-3 flex-1">
         {jobs.map((job) => (
-          <PipelineCard 
-            key={job.id} 
-            job={job} 
-            onClick={() => onSelect(job)} 
+          <PipelineCard
+            key={job.id}
+            job={job}
+            onClick={() => onSelect(job)}
             onActionClick={onActionClick ? () => onActionClick(job) : undefined}
-            isSelected={job.id === selectedJobId} 
+            onDelete={onDelete ? () => onDelete(job) : undefined}
+            isSelected={job.id === selectedJobId}
           />
         ))}
       </div>

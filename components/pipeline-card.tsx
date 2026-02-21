@@ -4,19 +4,20 @@ import type React from "react"
 
 import type { Job } from "@/types"
 import { Card } from "@/components/ui/card"
-import { Calendar, ChevronRight } from "lucide-react"
+import { Calendar, ChevronRight, X } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 
 interface PipelineCardProps {
   job: Job
   onClick: () => void
   onActionClick?: (e: React.MouseEvent) => void
+  onDelete?: (e: React.MouseEvent) => void
   isSelected: boolean
 }
 
 const defaultVisualStages = ["Screening", "Hiring manager", "Presentation", "Full loop", "Offer discussion"]
 
-export function PipelineCard({ job, onClick, onActionClick, isSelected }: PipelineCardProps) {
+export function PipelineCard({ job, onClick, onActionClick, onDelete, isSelected }: PipelineCardProps) {
   // Ensure predicted_stages only contains strings (LLM can return objects)
   const rawStages = job.predicted_stages && job.predicted_stages.length > 0
     ? job.predicted_stages.filter((s): s is string => typeof s === "string" && s.length > 0)
@@ -82,11 +83,23 @@ export function PipelineCard({ job, onClick, onActionClick, isSelected }: Pipeli
 
   return (
     <Card
-      className={`p-3 cursor-pointer transition-all hover:shadow-md border-2 rounded-[3rem] ${isSelected ? "border-blue-500 shadow-md" : "border-transparent hover:border-gray-200"
+      className={`group/card relative p-3 cursor-pointer transition-all hover:shadow-md border-2 rounded-[3rem] ${isSelected ? "border-blue-500 shadow-md" : "border-transparent hover:border-gray-200"
         }`}
       style={isSelected ? { backgroundColor: "#F8FAFF" } : { backgroundColor: "white" }}
       onClick={onClick}
     >
+      {/* Delete button — visible on card hover */}
+      {onDelete && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(e) }}
+          className="absolute -top-2 -right-2 z-20 opacity-0 group-hover/card:opacity-100 transition-opacity w-6 h-6 rounded-full bg-gray-900 text-white flex items-center justify-center hover:bg-red-600 focus:outline-none shadow-md"
+          aria-label="Remove pipeline"
+          title="Remove pipeline"
+        >
+          <X className="w-3 h-3" />
+        </button>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">

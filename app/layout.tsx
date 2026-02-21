@@ -12,9 +12,8 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: "Guildy Dashboard",
-  description: "Track your job applications with pipeline visualization",
-  generator: "v0.app",
+  title: "Guildy",
+  description: "Track every pipeline. Prep every stage. Close the offer.",
 }
 
 export default function RootLayout({
