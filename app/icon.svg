@@ -1,16 +1,16 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Shield path: flat top, rounded corners, pointed bottom -->
+  <!-- Shield: wider body, shorter bottom point -->
   <path
-    d="M 80,48 L 432,48 C 444,48 452,56 452,68 L 452,248 C 452,356 360,438 256,480 C 152,438 60,356 60,248 L 60,68 C 60,56 68,48 80,48 Z"
+    d="M 68,36 L 444,36 C 458,36 476,50 476,64 L 476,296 C 476,392 368,450 256,474 C 144,450 36,392 36,296 L 36,64 C 36,50 54,36 68,36 Z"
     fill="#111111"
   />
   <text
     x="256"
-    y="328"
+    y="326"
     text-anchor="middle"
     font-family="Georgia, 'Times New Roman', serif"
     font-weight="700"
-    font-size="260"
+    font-size="268"
     fill="white"
   >G</text>
 </svg>

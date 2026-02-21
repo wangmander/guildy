@@ -2,11 +2,20 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { supabaseAdmin } from "@/lib/supabaseAdmin"
+import { DEMO_PIPELINES } from "@/lib/demo-pipelines"
+
+// ─── DEMO MODE ────────────────────────────────────────────────
+// Set to true before recording, false when done. No DB is touched.
+const DEMO_MODE = true
+// ─────────────────────────────────────────────────────────────
 
 // Service role client (bypasses RLS)
 const supabase = supabaseAdmin
 
 export async function GET() {
+  if (DEMO_MODE) {
+    return NextResponse.json({ pipelines: DEMO_PIPELINES })
+  }
     try {
         if (!supabase) {
             return NextResponse.json({
