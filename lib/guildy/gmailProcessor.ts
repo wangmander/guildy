@@ -10,7 +10,7 @@ import type {
 } from "./types"
 import { isHardJunk, getRouterDecision } from "./router"
 import { analyzeRecruitingEmailWithLLM } from "./recruitingClassifier"
-import { normalize } from "./normalizers"
+import { companiesMatch } from "./normalizers"
 import { supabaseAdmin } from "@/lib/supabaseAdmin"
 import OpenAI from "openai"
 
@@ -211,7 +211,6 @@ export async function findOrCreatePipeline(
   if (!supabase) return null
 
   const companyName = llm.company_name || "Unknown"
-  const companyNorm = normalize(companyName)
 
   // Load all user pipelines once for matching
   const { data: allPipelines } = await supabase
@@ -227,36 +226,21 @@ export async function findOrCreatePipeline(
     if (byThread) return { id: byThread.id, isNew: false }
   }
 
-  // 2) Exact company name match
-  if (companyNorm && companyNorm !== "unknown") {
-    const exact = (allPipelines || []).find(
-      (p: any) => normalize(p.company) === companyNorm
+  // 2) Company name match — suffix-stripped + Levenshtein dedup
+  //    companiesMatch handles: "Google" == "Google Inc", "OpenAI" == "Open AI", etc.
+  if (companyName && companyName !== "Unknown") {
+    const matched = (allPipelines || []).find(
+      (p: any) => companiesMatch(p.company, companyName)
     )
-    if (exact) {
-      // Attach thread ID if this pipeline doesn't have one yet
-      if (!exact.gmail_thread_id && signal.threadId) {
+    if (matched) {
+      if (!matched.gmail_thread_id && signal.threadId) {
         await supabase
           .from("pipelines")
           .update({ gmail_thread_id: signal.threadId, updated_at: new Date().toISOString() })
-          .eq("id", exact.id)
+          .eq("id", matched.id)
       }
-      return { id: exact.id, isNew: false }
-    }
-
-    // 3) Fuzzy substring company match
-    const fuzzy = (allPipelines || []).find((p: any) => {
-      const pn = normalize(p.company || "")
-      return pn.length >= 3 && (pn.includes(companyNorm) || companyNorm.includes(pn))
-    })
-    if (fuzzy) {
-      if (!fuzzy.gmail_thread_id && signal.threadId) {
-        await supabase
-          .from("pipelines")
-          .update({ gmail_thread_id: signal.threadId, updated_at: new Date().toISOString() })
-          .eq("id", fuzzy.id)
-      }
-      console.log(`[PIPELINE] Fuzzy match: "${companyName}" ≈ "${fuzzy.company}"`)
-      return { id: fuzzy.id, isNew: false }
+      console.log(`[PIPELINE] Company match: "${companyName}" → "${matched.company}" (id=${matched.id})`)
+      return { id: matched.id, isNew: false }
     }
   }
 

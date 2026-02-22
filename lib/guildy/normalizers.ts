@@ -6,6 +6,65 @@ export function normalize(s: string): string {
   return (s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
 }
 
+// Corporate suffixes that don't distinguish companies and should be stripped
+// before name comparison. Word-boundary matched so "Coda" ≠ "co".
+const CORP_SUFFIX_RE =
+  /\b(inc|llc|ltd|corp|co|company|incorporated|limited|plc|gmbh|ag|sa|bv|pvt|technologies|technology|tech|solutions|services|group|holdings|international|global)\b\.?/gi
+
+/** Normalize a company name for deduplication matching.
+ *  Strips corporate suffixes, lowercases, collapses non-alphanumeric to spaces. */
+export function normalizeCompany(raw: string): string {
+  return (raw || "")
+    .toLowerCase()
+    .replace(CORP_SUFFIX_RE, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length
+  const row = Array.from({ length: n + 1 }, (_, i) => i)
+  for (let i = 1; i <= m; i++) {
+    let prev = i
+    for (let j = 1; j <= n; j++) {
+      const val = a[i - 1] === b[j - 1] ? row[j - 1] : 1 + Math.min(row[j - 1], row[j], prev)
+      row[j - 1] = prev
+      prev = val
+    }
+    row[n] = prev
+  }
+  return row[n]
+}
+
+/** Returns true if two company name strings refer to the same company.
+ *  Three tiers:
+ *  1. Exact match after normalizeCompany (handles "Google" == "Google Inc")
+ *  2. Substring — shorter must be ≥ 5 chars to avoid "net" ⊂ "netflix"
+ *  3. Levenshtein ≤ 1 for short names, ≤ 2 for longer (handles "OpenAI" vs "Open AI") */
+export function companiesMatch(a: string, b: string): boolean {
+  if (!a || !b) return false
+  const na = normalizeCompany(a)
+  const nb = normalizeCompany(b)
+  if (!na || !nb || na === "unknown" || nb === "unknown") return false
+
+  // 1. Exact
+  if (na === nb) return true
+
+  // 2. Substring — shorter side must be ≥ 5 chars so "net" doesn't match "netflix"
+  const [shorter, longer] = na.length <= nb.length ? [na, nb] : [nb, na]
+  if (shorter.length >= 5 && longer.includes(shorter)) return true
+
+  // 3. Levenshtein for near-identical spellings
+  const minLen = Math.min(na.length, nb.length)
+  if (minLen >= 4) {
+    const maxEdits = minLen <= 7 ? 1 : 2
+    if (levenshtein(na, nb) <= maxEdits) return true
+  }
+
+  return false
+}
+
 export function containsWholePhrase(haystack: string, phrase: string): boolean {
   const hay = ` ${normalize(haystack)} `
   const needle = ` ${normalize(phrase)} `
