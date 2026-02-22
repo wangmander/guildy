@@ -6,7 +6,7 @@ import { DEMO_PIPELINES } from "@/lib/demo-pipelines"
 
 // ─── DEMO MODE ────────────────────────────────────────────────
 // Set to true before recording, false when done. No DB is touched.
-const DEMO_MODE = true
+const DEMO_MODE = false
 // ─────────────────────────────────────────────────────────────
 
 // Service role client (bypasses RLS)
