@@ -346,59 +346,92 @@ export async function processEmailSignal(
   }
 
   // ─── 0) THREAD INHERITANCE ──────────────────────────────────
-  // Golden rule: once a thread is known recruiting, never stop listening.
+  // Two lookup paths so multi-thread same-company sequences (recruiter on T1,
+  // hiring manager on T2) always attach to the existing pipeline.
+  //
+  // Path A: pipeline.gmail_thread_id matches directly (fastest).
+  // Path B: a previously appended email in the emails table carries this
+  //         thread_id — covers new threads from the same company that were
+  //         already merged via company-name matching.
+  let inheritedPipeline: any = null
+
   if (signal.threadId) {
-    const { data: existingPipeline } = await supabase
+    // Path A — direct thread match on pipelines table
+    const { data: byThread } = await supabase
       .from("pipelines")
       .select("id, company, role, stage, gmail_thread_id")
       .eq("user_email", signal.userEmail)
       .eq("gmail_thread_id", signal.threadId)
       .maybeSingle()
+    inheritedPipeline = byThread
 
-    if (existingPipeline) {
-      console.log(`[INHERIT] thread=${signal.threadId} → pipeline=${existingPipeline.id}`)
+    // Path B — thread appears in emails table (different thread, same pipeline)
+    if (!inheritedPipeline) {
+      const { data: emailRow } = await supabase
+        .from("emails")
+        .select("pipeline_id")
+        .eq("user_email", signal.userEmail)
+        .eq("gmail_thread_id", signal.threadId)
+        .not("pipeline_id", "is", null)
+        .limit(1)
+        .maybeSingle()
 
-      const llm = await analyzeRecruitingEmailWithLLM(
-        signal,
-        {
-          knownThread: true,
-          existingCompanyName: existingPipeline.company,
-          existingJobTitle: existingPipeline.role,
-        },
-        openai
-      )
-
-      if (llm) {
-        // Always append — never stop listening
-        await appendPipelineMessage(existingPipeline.id, signal, llm)
-
-        if (llm.is_recruiting_thread_related && llm.stage_delta !== "none") {
-          await applyStageDelta(existingPipeline.id, signal.userEmail, llm, signal.gmailMessageId)
+      if (emailRow?.pipeline_id) {
+        const { data: byEmail } = await supabase
+          .from("pipelines")
+          .select("id, company, role, stage, gmail_thread_id")
+          .eq("id", emailRow.pipeline_id)
+          .maybeSingle()
+        if (byEmail) {
+          inheritedPipeline = byEmail
+          console.log(`[INHERIT] thread=${signal.threadId} → pipeline=${byEmail.id} (via emails table)`)
         }
       }
+    }
+  }
 
-      await touchPipelineLastEmail(existingPipeline.id, signal)
+  if (inheritedPipeline) {
+    console.log(`[INHERIT] thread=${signal.threadId} → pipeline=${inheritedPipeline.id}`)
 
-      await createDetectionLog({
-        userEmail: signal.userEmail,
-        gmailMessageId: signal.gmailMessageId,
-        threadId: signal.threadId,
-        gate: "THREAD_INHERITANCE",
-        outcome: "accepted_known_thread",
-        llmConfidence: llm?.confidence ?? null,
-        llmModel: "gpt-4o-mini",
-        llmResponse: llm,
-      })
+    const llm = await analyzeRecruitingEmailWithLLM(
+      signal,
+      {
+        knownThread: true,
+        existingCompanyName: inheritedPipeline.company,
+        existingJobTitle: inheritedPipeline.role,
+      },
+      openai
+    )
 
-      return {
-        accepted: true,
-        pipelineId: existingPipeline.id,
-        isNewPipeline: false,
-        action: "thread_inheritance",
-        llmResult: llm,
-        companyName: existingPipeline.company,
-        jobTitle: existingPipeline.role,
+    if (llm) {
+      await appendPipelineMessage(inheritedPipeline.id, signal, llm)
+
+      if (llm.is_recruiting_thread_related && llm.stage_delta !== "none") {
+        await applyStageDelta(inheritedPipeline.id, signal.userEmail, llm, signal.gmailMessageId)
       }
+    }
+
+    await touchPipelineLastEmail(inheritedPipeline.id, signal)
+
+    await createDetectionLog({
+      userEmail: signal.userEmail,
+      gmailMessageId: signal.gmailMessageId,
+      threadId: signal.threadId,
+      gate: "THREAD_INHERITANCE",
+      outcome: "accepted_known_thread",
+      llmConfidence: llm?.confidence ?? null,
+      llmModel: "gpt-4o-mini",
+      llmResponse: llm,
+    })
+
+    return {
+      accepted: true,
+      pipelineId: inheritedPipeline.id,
+      isNewPipeline: false,
+      action: "thread_inheritance",
+      llmResult: llm,
+      companyName: inheritedPipeline.company,
+      jobTitle: inheritedPipeline.role,
     }
   }
 

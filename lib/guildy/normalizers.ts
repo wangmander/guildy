@@ -6,18 +6,25 @@ export function normalize(s: string): string {
   return (s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
 }
 
-// Corporate suffixes that don't distinguish companies and should be stripped
-// before name comparison. Word-boundary matched so "Coda" ≠ "co".
+// Domain TLD extensions commonly used as company branding (e.g. "Perplexity.ai")
+// Strip before anything else so "Company.ai" → "Company" early.
+const DOMAIN_TLD_RE = /\.(ai|io|co|com|net|org|app|tech|dev|xyz|so|gg|me|is)\b/gi
+
+// Corporate suffixes + startup branding words that don't distinguish companies.
+// Word-boundary matched: "Coda" ≠ "co", "OpenAI" ≠ "ai" (no boundary before 'a' in "openai").
+// "ai" and "io" here catch standalone branding like "Runway AI", "Retool IO", etc.
 const CORP_SUFFIX_RE =
-  /\b(inc|llc|ltd|corp|co|company|incorporated|limited|plc|gmbh|ag|sa|bv|pvt|technologies|technology|tech|solutions|services|group|holdings|international|global)\b\.?/gi
+  /\b(inc|llc|ltd|corp|co|company|incorporated|limited|plc|gmbh|ag|sa|bv|pvt|technologies|technology|tech|solutions|services|group|holdings|international|global|ai|io)\b\.?/gi
 
 /** Normalize a company name for deduplication matching.
- *  Strips corporate suffixes, lowercases, collapses non-alphanumeric to spaces. */
+ *  Strips domain TLDs first, then corporate/branding suffixes,
+ *  then collapses everything to plain lowercase alphanumeric tokens. */
 export function normalizeCompany(raw: string): string {
   return (raw || "")
+    .replace(DOMAIN_TLD_RE, " ")   // "Perplexity.ai" → "Perplexity "
+    .replace(CORP_SUFFIX_RE, " ")  // "Google Inc" → "Google ", "Runway AI" → "Runway "
+    .replace(/[^a-zA-Z0-9]+/g, " ")
     .toLowerCase()
-    .replace(CORP_SUFFIX_RE, " ")
-    .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")
     .trim()
 }
@@ -38,10 +45,13 @@ function levenshtein(a: string, b: string): number {
 }
 
 /** Returns true if two company name strings refer to the same company.
- *  Three tiers:
- *  1. Exact match after normalizeCompany (handles "Google" == "Google Inc")
- *  2. Substring — shorter must be ≥ 5 chars to avoid "net" ⊂ "netflix"
- *  3. Levenshtein ≤ 1 for short names, ≤ 2 for longer (handles "OpenAI" vs "Open AI") */
+ *  Three tiers — all comparisons happen on normalizeCompany() output so suffixes,
+ *  TLDs, and branding words ("AI", "IO", "Inc", etc.) are already stripped.
+ *
+ *  1. Exact match  — "Google" == "Google Inc" == "Google Technologies"
+ *  2. Whole-word substring — shorter token must be ≥ 4 chars and must appear as a
+ *     whole word in the longer string (prevents "net" ⊂ "netflix")
+ *  3. Levenshtein ≤ 1 — "OpenAI" vs "Open AI", single-char typos */
 export function companiesMatch(a: string, b: string): boolean {
   if (!a || !b) return false
   const na = normalizeCompany(a)
@@ -51,16 +61,12 @@ export function companiesMatch(a: string, b: string): boolean {
   // 1. Exact
   if (na === nb) return true
 
-  // 2. Substring — shorter side must be ≥ 5 chars so "net" doesn't match "netflix"
+  // 2. Whole-word substring — pad with spaces for boundary check
   const [shorter, longer] = na.length <= nb.length ? [na, nb] : [nb, na]
-  if (shorter.length >= 5 && longer.includes(shorter)) return true
+  if (shorter.length >= 4 && (` ${longer} `).includes(` ${shorter} `)) return true
 
-  // 3. Levenshtein for near-identical spellings
-  const minLen = Math.min(na.length, nb.length)
-  if (minLen >= 4) {
-    const maxEdits = minLen <= 7 ? 1 : 2
-    if (levenshtein(na, nb) <= maxEdits) return true
-  }
+  // 3. Levenshtein ≤ 1 for names ≥ 4 chars (handles spacing variants, minor typos)
+  if (Math.min(na.length, nb.length) >= 4 && levenshtein(na, nb) <= 1) return true
 
   return false
 }
