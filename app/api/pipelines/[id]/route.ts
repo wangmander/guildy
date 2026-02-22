@@ -49,18 +49,19 @@ export async function DELETE(
       if (row.gmail_thread_id) threadIds.add(row.gmail_thread_id)
     }
 
-    // Insert dismissed thread records — non-fatal if table doesn't exist yet
+    // Insert dismissed thread records — required for suppressing re-creation on resync.
+    // If this fails the pipeline delete is aborted so the user can retry.
     if (threadIds.size > 0) {
-      try {
-        const rows = Array.from(threadIds).map((tid) => ({
-          user_email: userEmail,
-          gmail_thread_id: tid,
-        }))
-        await supabase
-          .from("dismissed_threads")
-          .upsert(rows, { onConflict: "user_email,gmail_thread_id" })
-      } catch (e) {
-        console.warn("[DELETE] dismissed_threads upsert failed (table may not exist yet):", e)
+      const rows = Array.from(threadIds).map((tid) => ({
+        user_email: userEmail,
+        gmail_thread_id: tid,
+      }))
+      const { error: dismissErr } = await supabase
+        .from("dismissed_threads")
+        .upsert(rows, { onConflict: "user_email,gmail_thread_id" })
+      if (dismissErr) {
+        console.error("[DELETE] dismissed_threads upsert failed:", dismissErr.message)
+        return NextResponse.json({ error: "DISMISS_FAILED", message: dismissErr.message }, { status: 500 })
       }
     }
 

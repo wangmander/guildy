@@ -384,10 +384,31 @@ export async function POST() {
     stats.scanned = messages.length
     console.log(`[SYNC] ${messages.length} messages to process`)
 
+    // Load all dismissed thread IDs for this user once, check in-memory.
+    // This prevents re-creating pipelines the user explicitly deleted,
+    // even after the cascade-delete wiped the email records.
+    const { data: dismissedRows } = await supabase
+      .from("dismissed_threads")
+      .select("gmail_thread_id")
+      .eq("user_email", userEmail)
+    const dismissedThreadSet = new Set<string>(
+      (dismissedRows ?? []).map((r: any) => r.gmail_thread_id)
+    )
+    console.log(`[SYNC] ${dismissedThreadSet.size} dismissed thread(s) loaded`)
+
     for (const msg of messages) {
       if (!msg.id) continue
 
       const threadId = msg.threadId || ""
+
+      // ── DISMISSED THREAD CHECK ────────────────────────────
+      // Must run before idempotency check — emails are cascade-deleted
+      // when a pipeline is removed, so the emails table can't be relied
+      // on to block re-creation of dismissed pipelines.
+      if (threadId && dismissedThreadSet.has(threadId)) {
+        stats.skipped++
+        continue
+      }
 
       // ── IDEMPOTENCY CHECK ─────────────────────────────────
       // Skip if already processed AND pipeline has rich prep
