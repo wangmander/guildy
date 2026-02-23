@@ -425,7 +425,6 @@ export default function PipelinesPage() {
   // localStorage-backed hidden set — survives refresh, reversible
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set())
   const hiddenIdsRef = useRef<Set<string>>(new Set())
-  const [showHidden, setShowHidden] = useState(false)
   // Scroll reveal state for the pipeline list column
   const [isPipelineScrolling, setIsPipelineScrolling] = useState(false)
   const pipelineScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -791,69 +790,30 @@ export default function PipelinesPage() {
             className={`w-full lg:w-[480px] xl:w-[550px] min-w-0 scroll-hide p-4 border-r bg-[#FAFAF8]${isPipelineScrolling ? " is-scrolling" : ""}`}
             onScroll={handlePipelineScroll}
           >
-            {(() => {
-              const visibleJobs = jobs.filter(j => !hiddenIds.has(j.id))
-              const hiddenJobs = jobs.filter(j => hiddenIds.has(j.id))
-              return (
-                <>
-                  {visibleJobs.length === 0 ? (
-                    <div className="rounded-xl border border-dashed bg-white p-6 text-center">
-                      <div className="text-gray-600 mb-2 font-medium">No pipelines yet</div>
-                      <div className="text-sm text-gray-500">
-                        {syncStatus === 'syncing'
-                          ? "Scanning inbox..."
-                          : hiddenJobs.length > 0
-                            ? `${hiddenJobs.length} hidden below`
-                            : "Connect Gmail to start."}
-                      </div>
-                    </div>
-                  ) : (
-                    <PipelineCardList
-                      jobs={visibleJobs}
-                      selectedJobId={selectedJob?.id}
-                      onSelect={(job) => {
-                        setSelectedJob(job)
-                        setIsMobileSheetOpen(true)
-                      }}
-                      onActionClick={(job) => {
-                        setSelectedJob(job)
-                        setIsMobileSheetOpen(true)
-                      }}
-                      onDelete={hidePipeline}
-                    />
-                  )}
-
-                  {hiddenJobs.length > 0 && (
-                    <div className="mt-4 pt-3 border-t border-dashed border-gray-200">
-                      <button
-                        onClick={() => setShowHidden(v => !v)}
-                        className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-                      >
-                        {hiddenJobs.length} hidden · {showHidden ? "Hide" : "Show"}
-                      </button>
-                      {showHidden && (
-                        <div className="mt-2 space-y-1.5">
-                          {hiddenJobs.map(job => (
-                            <div
-                              key={job.id}
-                              className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 border border-dashed border-gray-200"
-                            >
-                              <span className="text-sm text-gray-400">{job.company.name}</span>
-                              <button
-                                onClick={() => unhidePipeline(job)}
-                                className="text-xs text-gray-500 hover:text-gray-900 transition-colors"
-                              >
-                                Restore
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
-              )
-            })()}
+            {jobs.filter(j => !hiddenIds.has(j.id)).length === 0 && jobs.length === 0 ? (
+              <div className="rounded-xl border border-dashed bg-white p-6 text-center">
+                <div className="text-gray-600 mb-2 font-medium">No pipelines yet</div>
+                <div className="text-sm text-gray-500">
+                  {syncStatus === 'syncing' ? "Scanning inbox..." : "Connect Gmail to start."}
+                </div>
+              </div>
+            ) : (
+              <PipelineCardList
+                jobs={jobs}
+                hiddenIds={hiddenIds}
+                selectedJobId={selectedJob?.id}
+                onSelect={(job) => {
+                  setSelectedJob(job)
+                  setIsMobileSheetOpen(true)
+                }}
+                onActionClick={(job) => {
+                  setSelectedJob(job)
+                  setIsMobileSheetOpen(true)
+                }}
+                onDelete={hidePipeline}
+                onUnhide={unhidePipeline}
+              />
+            )}
           </div>
 
           {/* Right column - Details (WIDER 2/3) */}

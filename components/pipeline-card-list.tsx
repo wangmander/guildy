@@ -6,46 +6,48 @@ import Link from "next/link"
 
 interface PipelineCardListProps {
   jobs: Job[]
+  hiddenIds?: Set<string>
   onSelect: (job: Job) => void
   onActionClick?: (job: Job) => void
   onDelete?: (job: Job) => void
+  onUnhide?: (job: Job) => void
   selectedJobId?: string
 }
 
-function getStageProgress(stage: string): number {
-  const stageOrder = {
-    APPLIED: 1,
-    PHONE_SCREEN: 2,
-    SCREENING: 2,
-    RECRUITER_SCREEN: 2,
-    TECHNICAL: 3,
-    CODING: 3,
-    PORTFOLIO: 3,
-    DESIGN_TEST: 3,
-    SYSTEM_DESIGN: 4,
-    FINAL: 4,
-    INTERVIEW: 4,
-    ONSITE: 5,
-    DECISION: 5,
-    OFFER: 6,
-  }
-  return stageOrder[stage as keyof typeof stageOrder] || 0
-}
-
-export function PipelineCardList({ jobs, onSelect, onActionClick, onDelete, selectedJobId }: PipelineCardListProps) {
+export function PipelineCardList({ jobs, hiddenIds, onSelect, onActionClick, onDelete, onUnhide, selectedJobId }: PipelineCardListProps) {
   return (
     <div className="flex flex-col min-h-full">
       <div className="space-y-3 flex-1">
-        {jobs.map((job) => (
-          <PipelineCard
-            key={job.id}
-            job={job}
-            onClick={() => onSelect(job)}
-            onActionClick={onActionClick ? () => onActionClick(job) : undefined}
-            onDelete={onDelete ? () => onDelete(job) : undefined}
-            isSelected={job.id === selectedJobId}
-          />
-        ))}
+        {jobs.map((job) => {
+          if (hiddenIds?.has(job.id)) {
+            return (
+              <div
+                key={job.id}
+                className="flex items-center justify-between px-4 py-2.5 rounded-2xl bg-gray-50 border border-dashed border-gray-200"
+              >
+                <span className="text-sm text-gray-400">{job.company.name}</span>
+                {onUnhide && (
+                  <button
+                    onClick={() => onUnhide(job)}
+                    className="text-xs text-gray-400 hover:text-gray-800 transition-colors"
+                  >
+                    Restore
+                  </button>
+                )}
+              </div>
+            )
+          }
+          return (
+            <PipelineCard
+              key={job.id}
+              job={job}
+              onClick={() => onSelect(job)}
+              onActionClick={onActionClick ? () => onActionClick(job) : undefined}
+              onDelete={onDelete ? () => onDelete(job) : undefined}
+              isSelected={job.id === selectedJobId}
+            />
+          )
+        })}
       </div>
       
       <div className="border-t border-gray-200 pt-4 mt-6 flex-shrink-0">
