@@ -31,6 +31,17 @@ export async function GET() {
 
         const userEmail = session.user.email
 
+        // Fetch dismissed thread IDs for this user so we can exclude any pipeline
+        // whose thread was dismissed (e.g. duplicate pipelines from same company).
+        const { data: dismissedRows } = await supabase
+            .from("dismissed_threads")
+            .select("gmail_thread_id")
+            .eq("user_email", userEmail)
+
+        const dismissedThreadIds = new Set<string>(
+            (dismissedRows ?? []).map((r: any) => r.gmail_thread_id).filter(Boolean)
+        )
+
         const { data, error } = await supabase
             .from("pipelines")
             .select("*")
@@ -46,8 +57,15 @@ export async function GET() {
             }, { status: 500 })
         }
 
+        // Filter out any pipeline whose primary thread was dismissed.
+        // This is the safety net: if a duplicate pipeline survived deletion
+        // (e.g. different thread, same company), it won't show in the UI.
+        const pipelines = (data ?? []).filter(
+            (p: any) => !p.gmail_thread_id || !dismissedThreadIds.has(p.gmail_thread_id)
+        )
+
         return NextResponse.json({
-            pipelines: data ?? [],
+            pipelines,
         })
 
     } catch (err: any) {

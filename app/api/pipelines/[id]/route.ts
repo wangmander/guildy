@@ -25,7 +25,7 @@ export async function DELETE(
     // Verify ownership
     const { data: pipeline, error: fetchErr } = await supabase
       .from("pipelines")
-      .select("id, gmail_thread_id, user_email")
+      .select("id, company, gmail_thread_id, user_email")
       .eq("id", pipelineId)
       .eq("user_email", userEmail)
       .maybeSingle()
@@ -34,15 +34,28 @@ export async function DELETE(
       return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 })
     }
 
-    // Collect ALL thread IDs linked to this pipeline so we can suppress them all.
-    // A single pipeline can accumulate multiple threads from the same company.
-    const threadIds = new Set<string>()
-    if (pipeline.gmail_thread_id) threadIds.add(pipeline.gmail_thread_id)
+    // Find ALL pipelines for the same company+user (dedup cleanup).
+    // If two threads from the same company created duplicate pipelines,
+    // dismissing one must also kill the others so they don't reappear.
+    const { data: siblingPipelines } = await supabase
+      .from("pipelines")
+      .select("id, gmail_thread_id")
+      .eq("user_email", userEmail)
+      .eq("company", pipeline.company)
 
+    const allPipelineIds = new Set<string>()
+    const threadIds = new Set<string>()
+
+    for (const p of [pipeline, ...(siblingPipelines ?? [])]) {
+      allPipelineIds.add(p.id)
+      if (p.gmail_thread_id) threadIds.add(p.gmail_thread_id)
+    }
+
+    // Collect all thread IDs from emails linked to any of these pipelines
     const { data: linkedEmails } = await supabase
       .from("emails")
       .select("gmail_thread_id")
-      .eq("pipeline_id", pipelineId)
+      .in("pipeline_id", Array.from(allPipelineIds))
       .not("gmail_thread_id", "is", null)
 
     for (const row of linkedEmails ?? []) {
@@ -65,11 +78,11 @@ export async function DELETE(
       }
     }
 
-    // Hard delete — cascade removes linked emails + stage_history
+    // Hard delete all sibling pipelines — cascade removes linked emails + stage_history
     const { error: delErr } = await supabase
       .from("pipelines")
       .delete()
-      .eq("id", pipelineId)
+      .in("id", Array.from(allPipelineIds))
       .eq("user_email", userEmail)
 
     if (delErr) {
@@ -77,8 +90,8 @@ export async function DELETE(
       return NextResponse.json({ error: "DELETE_FAILED", message: delErr.message }, { status: 500 })
     }
 
-    console.log(`[DELETE] Pipeline ${pipelineId} deleted. Suppressed ${threadIds.size} threads.`)
-    return NextResponse.json({ success: true, suppressedThreads: threadIds.size })
+    console.log(`[DELETE] Deleted ${allPipelineIds.size} pipeline(s) for "${pipeline.company}". Suppressed ${threadIds.size} threads.`)
+    return NextResponse.json({ success: true, deletedPipelines: allPipelineIds.size, suppressedThreads: threadIds.size })
 
   } catch (err: any) {
     console.error("[DELETE] Exception:", err)
