@@ -422,8 +422,10 @@ export default function PipelinesPage() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false)
-  // Ref-based dismissed set — synchronous, never reset on failure, filters loadPipelines too
-  const dismissedIdsRef = useRef<Set<string>>(new Set())
+  // localStorage-backed hidden set — survives refresh, reversible
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set())
+  const hiddenIdsRef = useRef<Set<string>>(new Set())
+  const [showHidden, setShowHidden] = useState(false)
   // Scroll reveal state for the pipeline list column
   const [isPipelineScrolling, setIsPipelineScrolling] = useState(false)
   const pipelineScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -455,6 +457,45 @@ export default function PipelinesPage() {
     pipelineScrollTimerRef.current = setTimeout(() => setIsPipelineScrolling(false), 1200)
   }, [])
 
+  // Load hidden IDs from localStorage once user email is known
+  useEffect(() => {
+    if (!userEmail) return
+    try {
+      const stored = localStorage.getItem(`guildy:hidden:${userEmail}`)
+      const ids = new Set<string>(stored ? JSON.parse(stored) : [])
+      hiddenIdsRef.current = ids
+      setHiddenIds(ids)
+    } catch {}
+  }, [userEmail])
+
+  // Persist hidden IDs to localStorage whenever they change
+  useEffect(() => {
+    if (!userEmail) return
+    try {
+      localStorage.setItem(`guildy:hidden:${userEmail}`, JSON.stringify(Array.from(hiddenIds)))
+    } catch {}
+  }, [hiddenIds, userEmail])
+
+  const hidePipeline = useCallback((job: Job) => {
+    const next = new Set(hiddenIdsRef.current)
+    next.add(job.id)
+    hiddenIdsRef.current = next
+    setHiddenIds(new Set(next))
+    // If the hidden job was selected, switch to the first still-visible job
+    setSelectedJob(prev => {
+      if (prev?.id !== job.id) return prev
+      const remaining = jobs.filter(j => j.id !== job.id && !next.has(j.id))
+      return remaining[0] ?? null
+    })
+  }, [jobs])
+
+  const unhidePipeline = useCallback((job: Job) => {
+    const next = new Set(hiddenIdsRef.current)
+    next.delete(job.id)
+    hiddenIdsRef.current = next
+    setHiddenIds(new Set(next))
+  }, [])
+
   const loadPipelines = useCallback(async () => {
     if (!userEmail) return
 
@@ -469,17 +510,17 @@ export default function PipelinesPage() {
 
       if (!mountedRef.current) return
 
-      const mapped = (data ?? []).map(rowToJob).filter(j => !dismissedIdsRef.current.has(j.id))
+      const mapped = (data ?? []).map(rowToJob)
 
       setJobs(mapped)
       setSelectedJob((prev) => {
         if (!mapped.length) return null
-        if (!prev) return mapped[0]
+        const visible = mapped.filter((j: Job) => !hiddenIdsRef.current.has(j.id))
+        if (!prev) return visible[0] ?? mapped[0]
         const stillThere = mapped.find((j: Job) => j.id === prev.id)
-        return stillThere ?? mapped[0]
+        return stillThere ?? visible[0] ?? mapped[0]
       })
 
-      // After first load, mark as not first sync
       if (mapped.length > 0) {
         setIsFirstSync(false)
       }
@@ -487,24 +528,6 @@ export default function PipelinesPage() {
       console.error("[PIPELINES] Error fetching pipelines:", err)
     }
   }, [userEmail])
-
-  const deletePipeline = useCallback(async (job: Job) => {
-    // Write to ref synchronously — this is the source of truth for filtering
-    dismissedIdsRef.current.add(job.id)
-    // Immediate visual removal — no waiting for network
-    setJobs(prev => prev.filter(j => j.id !== job.id))
-    setSelectedJob(prev => {
-      if (prev?.id !== job.id) return prev
-      const remaining = jobs.filter(j => j.id !== job.id)
-      return remaining[0] ?? null
-    })
-
-    // Fire-and-forget delete — card stays gone regardless of API result.
-    // dismissedIdsRef ensures loadPipelines polling can't bring it back.
-    fetch(`/api/pipelines/${job.id}`, { method: "DELETE" })
-      .then(res => { if (!res.ok) res.text().then(t => console.error("[DELETE] Failed:", t)) })
-      .catch(err => console.error("[DELETE] Network error:", err))
-  }, [jobs])
 
   const syncGmail = useCallback(async (): Promise<boolean> => {
     try {
@@ -768,30 +791,69 @@ export default function PipelinesPage() {
             className={`w-full lg:w-[480px] xl:w-[550px] min-w-0 scroll-hide p-4 border-r bg-[#FAFAF8]${isPipelineScrolling ? " is-scrolling" : ""}`}
             onScroll={handlePipelineScroll}
           >
-            {jobs.length === 0 ? (
-              <div className="rounded-xl border border-dashed bg-white p-6 text-center">
-                <div className="text-gray-600 mb-2 font-medium">No pipelines yet</div>
-                <div className="text-sm text-gray-500">
-                  {syncStatus === 'syncing'
-                    ? "Scanning inbox..."
-                    : "Connect Gmail to start."}
-                </div>
-              </div>
-            ) : (
-              <PipelineCardList
-                jobs={jobs}
-                selectedJobId={selectedJob?.id}
-                onSelect={(job) => {
-                  setSelectedJob(job)
-                  setIsMobileSheetOpen(true)
-                }}
-                onActionClick={(job) => {
-                  setSelectedJob(job)
-                  setIsMobileSheetOpen(true)
-                }}
-                onDelete={deletePipeline}
-              />
-            )}
+            {(() => {
+              const visibleJobs = jobs.filter(j => !hiddenIds.has(j.id))
+              const hiddenJobs = jobs.filter(j => hiddenIds.has(j.id))
+              return (
+                <>
+                  {visibleJobs.length === 0 ? (
+                    <div className="rounded-xl border border-dashed bg-white p-6 text-center">
+                      <div className="text-gray-600 mb-2 font-medium">No pipelines yet</div>
+                      <div className="text-sm text-gray-500">
+                        {syncStatus === 'syncing'
+                          ? "Scanning inbox..."
+                          : hiddenJobs.length > 0
+                            ? `${hiddenJobs.length} hidden below`
+                            : "Connect Gmail to start."}
+                      </div>
+                    </div>
+                  ) : (
+                    <PipelineCardList
+                      jobs={visibleJobs}
+                      selectedJobId={selectedJob?.id}
+                      onSelect={(job) => {
+                        setSelectedJob(job)
+                        setIsMobileSheetOpen(true)
+                      }}
+                      onActionClick={(job) => {
+                        setSelectedJob(job)
+                        setIsMobileSheetOpen(true)
+                      }}
+                      onDelete={hidePipeline}
+                    />
+                  )}
+
+                  {hiddenJobs.length > 0 && (
+                    <div className="mt-4 pt-3 border-t border-dashed border-gray-200">
+                      <button
+                        onClick={() => setShowHidden(v => !v)}
+                        className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                      >
+                        {hiddenJobs.length} hidden · {showHidden ? "Hide" : "Show"}
+                      </button>
+                      {showHidden && (
+                        <div className="mt-2 space-y-1.5">
+                          {hiddenJobs.map(job => (
+                            <div
+                              key={job.id}
+                              className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 border border-dashed border-gray-200"
+                            >
+                              <span className="text-sm text-gray-400">{job.company.name}</span>
+                              <button
+                                onClick={() => unhidePipeline(job)}
+                                className="text-xs text-gray-500 hover:text-gray-900 transition-colors"
+                              >
+                                Restore
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )
+            })()}
           </div>
 
           {/* Right column - Details (WIDER 2/3) */}

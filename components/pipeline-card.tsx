@@ -93,8 +93,8 @@ export function PipelineCard({ job, onClick, onActionClick, onDelete, isSelected
         <button
           onClick={(e) => { e.stopPropagation(); onDelete(e) }}
           className="absolute top-4 right-5 z-20 opacity-0 group-hover/card:opacity-100 transition-opacity w-5 h-5 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center hover:bg-red-50 hover:text-red-400 focus:outline-none"
-          aria-label="Remove pipeline"
-          title="Remove pipeline"
+          aria-label="Hide pipeline"
+          title="Hide pipeline"
         >
           <X className="w-3 h-3" />
         </button>
