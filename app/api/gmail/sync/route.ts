@@ -506,12 +506,24 @@ export async function POST() {
       // ── PREP GENERATION DECISION ──────────────────────────
       // Generate rich prep (gpt-4o) when:
       //   • New pipeline (needs initial prep)
-      //   • Stage advanced on a known thread (prep is now stale for new stage)
-      // Skip for: simple thread replies with no stage change
+      //   • Stage advanced (mini classifier detected explicit delta)
+      //   • High-signal reply on existing thread: mini may return stage_delta="none"
+      //     for scheduling/invite/assessment emails even when the stage IS advancing.
+      //     gpt-4o is more accurate — always let it run for these types so the
+      //     pipeline stage doesn't get stuck.
       const stageAdvanced = result.llmResult?.stage_delta !== "none"
+      const HIGH_SIGNAL_TYPES = new Set([
+        "scheduling", "interview_invite", "interview_followup",
+        "assessment", "rejection", "offer",
+      ])
+      const isHighSignalReply =
+        !result.isNewPipeline &&
+        !!result.llmResult?.message_type &&
+        HIGH_SIGNAL_TYPES.has(result.llmResult.message_type)
+
       const shouldGeneratePrep =
         prepCallCount < MAX_PREP_CALLS &&
-        (result.isNewPipeline || stageAdvanced)
+        (result.isNewPipeline || stageAdvanced || isHighSignalReply)
 
       if (shouldGeneratePrep) {
         // Get thread context from existing pipeline emails

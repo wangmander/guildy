@@ -28,9 +28,15 @@ Rules:
 - ATS/vendor emails (Greenhouse, Lever, Ashby, Workday, GoodTime, HireVue, ICIMS, SmartRecruiters, Jobvite, Taleo) count as recruiting-related when content is job-process related.
 - Application confirmation emails ("Thanks for applying", "We received your application") ARE recruiting-related: set is_recruiting_thread_related=true, message_type="application_confirmation", stage_delta="applied".
 - Rejection emails: set is_recruiting_thread_related=true, current_stage="rejected", stage_delta="rejected", message_type="rejection".
-- Short replies ("Tuesday works", "Thanks, confirmed", "See you then") that clearly belong to recruiting: set message_type="thread_reply", stage_delta="none".
-- If known_thread=true in context, treat the email as recruiting unless it is clearly unrelated (e.g. a forwarded newsletter).
-- stage_delta should be "none" if no stage movement. Only set a stage when the email provides clear evidence of that stage.
+- Short CANDIDATE replies ("Tuesday works", "Thanks, confirmed", "See you then", "Sounds great") set message_type="thread_reply", stage_delta="none". These are confirmations FROM the candidate, not stage advances.
+- RECRUITER/COMPANY emails that invite, schedule, or advance the candidate MUST set a stage_delta. Do not return "none" for these:
+  • Any scheduling or interview invite from the company/recruiter → use the most appropriate stage (screen, technical, onsite).
+  • "We'd like to move forward", "advance to the next round/stage", "next steps" → set stage_delta to the most logical next stage.
+  • Coding assessment or take-home invite → stage_delta="technical".
+  • Hiring manager or panel interview invite → stage_delta="screen" (for HM screen) or "onsite" (for panel/loop).
+  • Offer letter or verbal offer → stage_delta="offer".
+- If known_thread=true, treat the email as recruiting unless clearly unrelated (e.g. forwarded newsletter).
+- current_stage reflects the stage this email represents, even if stage_delta="none" (e.g. a candidate reply mid-technical-stage should have current_stage="technical").
 - confidence: 0.9-1.0 for unambiguous signals, 0.6-0.8 for probable, 0.3-0.5 for uncertain.
 - For non-recruiting: set is_recruiting_thread_related=false, message_type="non_recruiting", current_stage="other", stage_delta="none".
 - Return ONLY JSON. No markdown. No commentary.`
