@@ -339,14 +339,6 @@ export async function POST() {
     const session = await getServerSession(authOptions)
     if (!session) return NextResponse.json({ error: "NO_SESSION" }, { status: 401 })
 
-    // If the OAuth refresh token is expired/revoked, tell the user to reconnect
-    if ((session as any).error === "RefreshAccessTokenError") {
-      return NextResponse.json({
-        error: "TOKEN_EXPIRED",
-        hint: "Your Gmail access has expired. Please sign out and reconnect your Google account.",
-      }, { status: 401 })
-    }
-
     const accessToken = (session as any).accessToken
     userEmail = session.user?.email || ""
     if (!accessToken || !userEmail) {
