@@ -271,6 +271,20 @@ export async function findOrCreatePipeline(
     .single()
 
   if (error || !newP) {
+    // 23505 = unique_violation — another email from the same thread beat us to the insert.
+    // Fetch the already-existing pipeline and return it as non-new rather than failing.
+    if (error?.code === "23505") {
+      const { data: existing } = await supabase
+        .from("pipelines")
+        .select("id")
+        .eq("user_email", signal.userEmail)
+        .eq("gmail_thread_id", signal.threadId)
+        .maybeSingle()
+      if (existing) {
+        console.log(`[PIPELINE] Duplicate key resolved — reusing id=${existing.id}`)
+        return { id: existing.id, isNew: false }
+      }
+    }
     const msg = error?.message || "Unknown DB error — insert returned no row"
     console.error("[PIPELINE] Create failed:", msg)
     return { error: msg }
