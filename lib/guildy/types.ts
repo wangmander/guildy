@@ -82,4 +82,6 @@ export interface ProcessResult {
   llmResult: RecruitingAnalysisResult | null
   companyName: string | null
   jobTitle: string | null
+  errorDetail?: string   // actual DB/network error message when action="error"
+  routerReason?: string  // why the router sent/blocked this email
 }

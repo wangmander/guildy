@@ -207,8 +207,8 @@ export async function applyStageDelta(
 export async function findOrCreatePipeline(
   signal: EmailSignal,
   llm: RecruitingAnalysisResult
-): Promise<{ id: string; isNew: boolean } | null> {
-  if (!supabase) return null
+): Promise<{ id: string; isNew: boolean } | { error: string }> {
+  if (!supabase) return { error: "Supabase client not initialised" }
 
   const companyName = llm.company_name || "Unknown"
 
@@ -271,8 +271,9 @@ export async function findOrCreatePipeline(
     .single()
 
   if (error || !newP) {
-    console.error("[PIPELINE] Create failed:", error?.message)
-    return null
+    const msg = error?.message || "Unknown DB error — insert returned no row"
+    console.error("[PIPELINE] Create failed:", msg)
+    return { error: msg }
   }
 
   console.log(`[PIPELINE] Created: "${companyName}" (${uiStage}) id=${newP.id}`)
@@ -308,7 +309,9 @@ export async function processEmailSignal(
 ): Promise<ProcessResult> {
   const rejected = (
     action: ProcessResult["action"],
-    llmResult: RecruitingAnalysisResult | null = null
+    llmResult: RecruitingAnalysisResult | null = null,
+    errorDetail?: string,
+    routerReason?: string
   ): ProcessResult => ({
     accepted: false,
     pipelineId: null,
@@ -317,6 +320,8 @@ export async function processEmailSignal(
     llmResult,
     companyName: null,
     jobTitle: null,
+    errorDetail,
+    routerReason,
   })
 
   if (!supabase) return rejected("error")
@@ -460,7 +465,7 @@ export async function processEmailSignal(
       reason: "router_no_match",
       payload: { subject: signal.subject, from: signal.from, router },
     })
-    return rejected("no_signal")
+    return rejected("no_signal", null, undefined, `score=${router.score}`)
   }
 
   console.log(`[ROUTER] LLM ← reason=${router.reason} score=${router.score}: "${signal.subject.slice(0, 50)}"`)
@@ -493,7 +498,7 @@ export async function processEmailSignal(
       llmModel: "gpt-4o-mini",
       llmResponse: llm,
     })
-    return rejected("llm_rejected", llm)
+    return rejected("llm_rejected", llm, undefined, router.reason)
   }
 
   // ─── 4) RECRUITING — CREATE/ATTACH PIPELINE ────────────────
@@ -502,9 +507,9 @@ export async function processEmailSignal(
 
   const pipelineResult = await findOrCreatePipeline(signal, llm)
 
-  if (!pipelineResult) {
-    console.error("[PIPELINE] Could not create/find pipeline")
-    return rejected("error", llm)
+  if ("error" in pipelineResult) {
+    console.error("[PIPELINE] Could not create/find pipeline:", pipelineResult.error)
+    return rejected("error", llm, pipelineResult.error)
   }
 
   await appendPipelineMessage(pipelineResult.id, signal, llm)

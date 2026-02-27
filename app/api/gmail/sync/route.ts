@@ -462,17 +462,47 @@ export async function POST() {
     console.log(`[SYNC] Fetched ${fetched.size} full message(s)`)
 
     // ── PHASE D: Sequential LLM classification (deadline-guarded) ─────────
-    const OUTCOME_LABELS: Record<string, string> = {
-      thread_inheritance: "Match — known thread",
-      new_recruiting: "Match — new pipeline",
-      updated_existing: "Match — pipeline updated",
-      hard_junk: "Reject — junk filter",
-      no_signal: "Reject — no recruiting signal",
-      llm_rejected: "Reject — not a recruiting email",
-      dismissed: "Skip — previously dismissed",
-      error: "Error",
-      budget_exceeded: "Skip — budget exhausted",
+    // Builds a human-readable reason string from every available signal.
+    function buildReason(result: { action: string; llmResult: any; companyName: string | null; errorDetail?: string; routerReason?: string }): string {
+      const llm = result.llmResult
+      const company = result.companyName || llm?.company_name
+      const summary = typeof llm?.summary === "string" ? llm.summary.slice(0, 80) : null
+      const msgType = llm?.message_type && llm.message_type !== "non_recruiting" ? llm.message_type : null
+      const stage = llm?.stage_delta && llm.stage_delta !== "none" ? llm.stage_delta : null
+      const conf = typeof llm?.confidence === "number" ? `${Math.round(llm.confidence * 100)}%` : null
+
+      switch (result.action) {
+        case "error":
+          return `Error — ${result.errorDetail || "pipeline creation failed (check Vercel logs)"}`
+        case "new_recruiting": {
+          const parts = [company, msgType, stage ? `→${stage}` : null, conf].filter(Boolean)
+          return `New pipeline${parts.length ? ` — ${parts.join(", ")}` : ""}`
+        }
+        case "updated_existing": {
+          const parts = [company, msgType, stage ? `→${stage}` : null, conf].filter(Boolean)
+          return `Updated pipeline${parts.length ? ` — ${parts.join(", ")}` : ""}`
+        }
+        case "thread_inheritance": {
+          const parts = [company, msgType, stage ? `→${stage}` : null].filter(Boolean)
+          return `Known thread${parts.length ? ` — ${parts.join(", ")}` : ""}`
+        }
+        case "llm_rejected":
+          return summary
+            ? `Not recruiting — "${summary}"${result.routerReason ? ` (routed via ${result.routerReason})` : ""}`
+            : `Not a recruiting email${result.routerReason ? ` (routed via ${result.routerReason})` : ""}`
+        case "no_signal":
+          return `No recruiting keywords${result.routerReason ? ` (router score: ${result.routerReason})` : ""}`
+        case "hard_junk":
+          return "Junk/transactional — order, receipt, auth code, or blocked sender"
+        case "dismissed":
+          return "Thread was previously dismissed by you"
+        case "budget_exceeded":
+          return `LLM budget (${MAX_MINI_CALLS} calls/sync) exhausted`
+        default:
+          return result.action
+      }
     }
+
     const HIGH_SIGNAL_TYPES = new Set([
       "scheduling", "interview_invite", "interview_followup", "assessment", "rejection", "offer",
     ])
@@ -512,7 +542,7 @@ export async function POST() {
       const bodyText = bodyPlain || (bodyHtml ? stripHtml(bodyHtml) : "")
 
       if (miniCallCount >= MAX_MINI_CALLS) {
-        details.push({ messageId: msgId, subject, from: fromHeader, outcome: "budget_exceeded", reason: "LLM budget exhausted for this sync", company: null })
+        details.push({ messageId: msgId, subject, from: fromHeader, outcome: "budget_exceeded", reason: `LLM budget (${MAX_MINI_CALLS} calls/sync) exhausted`, company: null })
         stats.skipped++
         continue
       }
@@ -523,12 +553,20 @@ export async function POST() {
       }
 
       miniCallCount++
-      const result = await processEmailSignal(signal, openai)
+      let result
+      try {
+        result = await processEmailSignal(signal, openai)
+      } catch (sigErr: any) {
+        console.error(`[SYNC] processEmailSignal threw for ${msgId}:`, sigErr?.message)
+        details.push({ messageId: msgId, subject, from: fromHeader, outcome: "error", reason: `Unexpected error — ${sigErr?.message || "unknown"}`, company: null })
+        stats.errors++
+        continue
+      }
 
       details.push({
         messageId: msgId, subject, from: fromHeader,
         outcome: result.action,
-        reason: OUTCOME_LABELS[result.action] || result.action,
+        reason: buildReason(result),
         company: result.companyName ?? null,
       })
 
