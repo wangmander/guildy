@@ -16,8 +16,8 @@ const supabase = supabaseAdmin
 const openai = openaiKey ? new OpenAI({ apiKey: openaiKey }) : null
 
 // Budget: gpt-4o-mini is fast/cheap; gpt-4o (prep) is expensive/slow
-const MAX_MINI_CALLS = 80   // classifier calls per sync
-const MAX_PREP_CALLS = 12   // prep generation (gpt-4o) calls per sync
+const MAX_MINI_CALLS = 25   // classifier calls per sync
+const MAX_PREP_CALLS = 3    // prep generation (gpt-4o) calls per sync — fired in parallel after loop
 
 // ============================================================
 // INSTRUMENTATION
@@ -380,7 +380,7 @@ export async function POST() {
         })
         messages = messages.concat(page.data.messages ?? [])
         pageToken = page.data.nextPageToken ?? undefined
-      } while (pageToken && messages.length < 200)
+      } while (pageToken && messages.length < 100)
     } catch (gmailErr: any) {
       console.error("[SYNC] Gmail API error:", gmailErr?.message)
       stats.errors++
@@ -408,47 +408,58 @@ export async function POST() {
     )
     console.log(`[SYNC] ${dismissedThreadSet.size} dismissed thread(s) loaded`)
 
+    // ── BATCH IDEMPOTENCY PRE-LOAD ────────────────────────────
+    // Replace N×2 per-message Supabase queries with 2 bulk fetches.
+    const allMsgIds = messages.map(m => m.id).filter(Boolean) as string[]
+    const { data: processedEmailRows } = await supabase
+      .from("emails")
+      .select("gmail_message_id, pipeline_id")
+      .eq("user_email", userEmail)
+      .in("gmail_message_id", allMsgIds)
+    const processedMsgMap = new Map<string, string | null>(
+      (processedEmailRows || []).map((e: any) => [e.gmail_message_id, e.pipeline_id ?? null])
+    )
+    // Check prep richness for already-seen pipelines in one query
+    const seenPipelineIds = [...new Set(
+      (processedEmailRows || []).map((e: any) => e.pipeline_id).filter(Boolean)
+    )] as string[]
+    const pipelinePrepScores = new Map<string, number>()
+    if (seenPipelineIds.length > 0) {
+      const { data: prepRows } = await supabase
+        .from("pipelines").select("id, prep_json").in("id", seenPipelineIds)
+      for (const pl of (prepRows || [])) {
+        pipelinePrepScores.set(pl.id, prepRichness(pl.prep_json))
+      }
+    }
+    console.log(`[SYNC] ${processedMsgMap.size} already-processed message(s) pre-loaded`)
+
+    // Prep jobs collected during the loop and fired in parallel after
+    type PrepJob = {
+      pipelineId: string; subject: string; snippet: string
+      fromEmail: string; fromName: string; bodyExcerpt: string; receivedAt: string
+    }
+    const prepJobs: PrepJob[] = []
+
     for (const msg of messages) {
       if (!msg.id) continue
 
       const threadId = msg.threadId || ""
 
       // ── DISMISSED THREAD CHECK ────────────────────────────
-      // Must run before idempotency check — emails are cascade-deleted
-      // when a pipeline is removed, so the emails table can't be relied
-      // on to block re-creation of dismissed pipelines.
       if (threadId && dismissedThreadSet.has(threadId)) {
         stats.skipped++
         continue
       }
 
-      // ── IDEMPOTENCY CHECK ─────────────────────────────────
-      // Skip if already processed AND pipeline has rich prep
-      const { data: existingEmail } = await supabase
-        .from("emails")
-        .select("id, pipeline_id")
-        .eq("user_email", userEmail)
-        .eq("gmail_message_id", msg.id)
-        .maybeSingle()
-
-      if (existingEmail) {
-        let needsRefresh = false
-        if (existingEmail.pipeline_id) {
-          const { data: pl } = await supabase
-            .from("pipelines")
-            .select("prep_json, stage")
-            .eq("id", existingEmail.pipeline_id)
-            .maybeSingle()
-          // Re-process only if prep is completely missing
-          if (!pl?.prep_json || prepRichness(pl.prep_json) < 3) {
-            needsRefresh = true
-            console.log(`[SYNC] Re-processing ${msg.id} — empty prep`)
-          }
-        }
-        if (!needsRefresh) {
+      // ── IDEMPOTENCY CHECK (in-memory, no DB query) ────────
+      if (processedMsgMap.has(msg.id)) {
+        const plId = processedMsgMap.get(msg.id) ?? null
+        const richness = plId ? (pipelinePrepScores.get(plId) ?? 0) : 999
+        if (richness >= 3) {
           stats.skipped++
           continue
         }
+        console.log(`[SYNC] Re-processing ${msg.id} — empty prep`)
       }
 
       // ── FETCH FULL MESSAGE ────────────────────────────────
@@ -556,87 +567,8 @@ export async function POST() {
         (result.isNewPipeline || stageAdvanced || isHighSignalReply)
 
       if (shouldGeneratePrep) {
-        // Get thread context from existing pipeline emails
-        let threadEmails: Array<{ subject: string; snippet: string; from: string; date: string }> = []
-        const { data: pEmails } = await supabase
-          .from("emails")
-          .select("subject, snippet, from_email, received_at")
-          .eq("pipeline_id", pipelineId)
-          .order("received_at", { ascending: true })
-          .limit(5)
-
-        threadEmails = (pEmails || [])
-          .filter((e: any) => e.received_at !== receivedAt) // exclude current
-          .map((e: any) => ({
-            subject: e.subject || "",
-            snippet: e.snippet || "",
-            from: e.from_email || "",
-            date: e.received_at || "",
-          }))
-
         prepCallCount++
-        const prep = await generateRichPrep({
-          subject,
-          snippet,
-          fromEmail,
-          fromName,
-          bodyExcerpt: bodyText.slice(0, 4000),
-          threadEmails: threadEmails.length > 0 ? threadEmails : undefined,
-        })
-
-        if (prep) {
-          // Get current pipeline for regression check
-          const { data: currentPipeline } = await supabase
-            .from("pipelines")
-            .select("stage, prep_json, company, role")
-            .eq("id", pipelineId)
-            .maybeSingle()
-
-          const existingStage = currentPipeline?.stage
-          const prepStage = getUiStage(prep.stage_bucket)
-          const resolvedStage = resolveStage(prepStage, existingStage)
-
-          const existingPrepScore = prepRichness(currentPipeline?.prep_json)
-          const newPrepScore = prepRichness(prep.prep)
-          const useNewPrep = newPrepScore >= existingPrepScore
-
-          console.log(`[PREP] stage=${existingStage}→${resolvedStage}, richness ${existingPrepScore}→${newPrepScore} (${useNewPrep ? "update" : "keep"})`)
-
-          const updatePayload: any = {
-            stage: resolvedStage,
-            stage_detail: prep.stage_detail,
-            last_email_at: receivedAt,
-            last_email_subject: subject,
-            last_email_snippet: snippet,
-            last_email_from_name: fromName,
-            last_email_from_email: fromEmail,
-            insights_json: prep.insights,
-            updated_at: new Date().toISOString(),
-          }
-
-          // Update company/role from prep only if currently "Unknown"
-          if ((!currentPipeline?.company || currentPipeline.company === "Unknown") && prep.company !== "Unknown") {
-            updatePayload.company = prep.company
-          }
-          if ((!currentPipeline?.role || currentPipeline.role === "Unknown") && prep.role !== "Unknown") {
-            updatePayload.role = prep.role
-          }
-
-          if (useNewPrep) {
-            updatePayload.prep_json = prep.prep
-            updatePayload.company_intel_json = prep.prep.companyIntel
-          }
-
-          await supabase.from("pipelines").update(updatePayload).eq("id", pipelineId)
-
-          // Set predicted_stages separately (column may or may not exist)
-          if (prep.predicted_stages?.length > 0) {
-            supabase.from("pipelines")
-              .update({ predicted_stages: prep.predicted_stages })
-              .eq("id", pipelineId)
-              .then(() => { /* non-blocking */ }, () => { /* column may not exist */ })
-          }
-        }
+        prepJobs.push({ pipelineId, subject, snippet, fromEmail, fromName, bodyExcerpt: bodyText.slice(0, 4000), receivedAt })
       }
 
       if (result.isNewPipeline) {
@@ -645,6 +577,64 @@ export async function POST() {
         stats.updated++
       }
     } // end for messages
+
+    // ── PARALLEL PREP GENERATION ─────────────────────────────
+    // Fire all prep jobs at once instead of sequentially.
+    // With MAX_PREP_CALLS=3 this saves 2× the latency of the slowest call.
+    if (prepJobs.length > 0) {
+      console.log(`[SYNC] Firing ${prepJobs.length} prep job(s) in parallel`)
+      await Promise.all(prepJobs.map(async (job) => {
+        try {
+          const { data: pEmails } = await supabase
+            .from("emails")
+            .select("subject, snippet, from_email, received_at")
+            .eq("pipeline_id", job.pipelineId)
+            .order("received_at", { ascending: true })
+            .limit(5)
+          const threadEmails = (pEmails || [])
+            .filter((e: any) => e.received_at !== job.receivedAt)
+            .map((e: any) => ({ subject: e.subject || "", snippet: e.snippet || "", from: e.from_email || "", date: e.received_at || "" }))
+
+          const prep = await generateRichPrep({
+            subject: job.subject, snippet: job.snippet,
+            fromEmail: job.fromEmail, fromName: job.fromName,
+            bodyExcerpt: job.bodyExcerpt,
+            threadEmails: threadEmails.length > 0 ? threadEmails : undefined,
+          })
+          if (!prep) return
+
+          const { data: currentPipeline } = await supabase
+            .from("pipelines").select("stage, prep_json, company, role").eq("id", job.pipelineId).maybeSingle()
+
+          const existingStage = currentPipeline?.stage
+          const prepStage = getUiStage(prep.stage_bucket)
+          const resolvedStage = resolveStage(prepStage, existingStage)
+          const existingPrepScore = prepRichness(currentPipeline?.prep_json)
+          const newPrepScore = prepRichness(prep.prep)
+          const useNewPrep = newPrepScore >= existingPrepScore
+          console.log(`[PREP] stage=${existingStage}→${resolvedStage}, richness ${existingPrepScore}→${newPrepScore} (${useNewPrep ? "update" : "keep"})`)
+
+          const updatePayload: any = {
+            stage: resolvedStage, stage_detail: prep.stage_detail,
+            last_email_at: job.receivedAt, last_email_subject: job.subject,
+            last_email_snippet: job.snippet, last_email_from_name: job.fromName,
+            last_email_from_email: job.fromEmail, insights_json: prep.insights,
+            updated_at: new Date().toISOString(),
+          }
+          if ((!currentPipeline?.company || currentPipeline.company === "Unknown") && prep.company !== "Unknown") updatePayload.company = prep.company
+          if ((!currentPipeline?.role || currentPipeline.role === "Unknown") && prep.role !== "Unknown") updatePayload.role = prep.role
+          if (useNewPrep) { updatePayload.prep_json = prep.prep; updatePayload.company_intel_json = prep.prep.companyIntel }
+
+          await supabase.from("pipelines").update(updatePayload).eq("id", job.pipelineId)
+          if (prep.predicted_stages?.length > 0) {
+            supabase.from("pipelines").update({ predicted_stages: prep.predicted_stages }).eq("id", job.pipelineId)
+              .then(() => {}, () => {})
+          }
+        } catch (prepErr: any) {
+          console.error("[PREP] Job failed:", prepErr?.message)
+        }
+      }))
+    }
 
     console.log(`[SYNC] Done. Stats:`, stats)
     console.log(`[SYNC] LLM calls: mini=${miniCallCount} prep=${prepCallCount}`)

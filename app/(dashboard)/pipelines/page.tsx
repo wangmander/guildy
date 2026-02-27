@@ -464,7 +464,10 @@ export default function PipelinesPage() {
       setSyncProgress(25)
       setSyncMessage("Fetching emails...")
 
-      const res = await fetch("/api/gmail/sync", { method: "POST" })
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 90_000)
+      const res = await fetch("/api/gmail/sync", { method: "POST", signal: controller.signal })
+        .finally(() => clearTimeout(timeoutId))
 
       setSyncProgress(60)
       setSyncMessage("Analyzing emails...")
@@ -498,7 +501,11 @@ export default function PipelinesPage() {
       return true
     } catch (err: any) {
       console.error("Sync error:", err)
-      setSyncError(err?.message || "Network error")
+      if (err?.name === "AbortError") {
+        setSyncError("Sync timed out after 90s. Pipelines already found are saved — try again to catch up.")
+      } else {
+        setSyncError(err?.message || "Network error")
+      }
       return false
     }
   }, [])
