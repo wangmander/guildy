@@ -319,6 +319,18 @@ export async function POST() {
   let miniCallCount = 0
   let prepCallCount = 0
 
+  // Per-email decision log — returned to UI so "show details" can display every
+  // email that was fetched and evaluated this sync (dismissed/idempotent skips
+  // are excluded since we never fetch their full content).
+  const details: Array<{
+    messageId: string
+    subject: string
+    from: string
+    outcome: string
+    reason: string
+    company: string | null
+  }> = []
+
   try {
     if (!supabase || !openai) {
       return NextResponse.json({ error: "NOT_CONFIGURED" }, { status: 500 })
@@ -326,6 +338,14 @@ export async function POST() {
 
     const session = await getServerSession(authOptions)
     if (!session) return NextResponse.json({ error: "NO_SESSION" }, { status: 401 })
+
+    // If the OAuth refresh token is expired/revoked, tell the user to reconnect
+    if ((session as any).error === "RefreshAccessTokenError") {
+      return NextResponse.json({
+        error: "TOKEN_EXPIRED",
+        hint: "Your Gmail access has expired. Please sign out and reconnect your Google account.",
+      }, { status: 401 })
+    }
 
     const accessToken = (session as any).accessToken
     userEmail = session.user?.email || ""
@@ -470,6 +490,7 @@ export async function POST() {
       // Mini call budget check
       if (miniCallCount >= MAX_MINI_CALLS) {
         console.log(`[SYNC] Mini budget exhausted (${MAX_MINI_CALLS}), skipping`)
+        details.push({ messageId: msg.id, subject, from: fromHeader, outcome: "budget_exceeded", reason: "LLM budget exhausted for this sync", company: null })
         stats.skipped++
         continue
       }
@@ -491,12 +512,29 @@ export async function POST() {
       miniCallCount++
       const result = await processEmailSignal(signal, openai)
 
+      // Record per-email decision for the "show details" panel
+      const OUTCOME_LABELS: Record<string, string> = {
+        thread_inheritance: "Match — known thread",
+        new_recruiting: "Match — new pipeline",
+        updated_existing: "Match — pipeline updated",
+        hard_junk: "Reject — junk filter",
+        no_signal: "Reject — no recruiting signal",
+        llm_rejected: "Reject — not a recruiting email",
+        dismissed: "Skip — previously dismissed",
+        error: "Error",
+        budget_exceeded: "Skip — budget exhausted",
+      }
+      details.push({
+        messageId: msg.id,
+        subject,
+        from: fromHeader,
+        outcome: result.action,
+        reason: OUTCOME_LABELS[result.action] || result.action,
+        company: result.companyName ?? null,
+      })
+
       if (!result.accepted) {
-        if (result.action !== "hard_junk" && result.action !== "no_signal") {
-          stats.rejected++
-        } else {
-          stats.rejected++
-        }
+        stats.rejected++
         continue
       }
 
@@ -620,7 +658,7 @@ export async function POST() {
     console.log(`[SYNC] LLM calls: mini=${miniCallCount} prep=${prepCallCount}`)
 
     await updateSyncRun(syncRunId, stats, "completed")
-    return NextResponse.json({ success: true, stats })
+    return NextResponse.json({ success: true, stats, details })
 
   } catch (err: any) {
     console.error("[SYNC] Fatal:", err)

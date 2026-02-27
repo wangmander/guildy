@@ -330,90 +330,6 @@ function SyncProgressBar({ progress, message }: { progress: number; message: str
   )
 }
 
-// Debug Logs Component
-function DebugLogsView() {
-  const [logs, setLogs] = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const fetchLogs = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await fetch("/api/debug/logs")
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}))
-        throw new Error(errData.error || `Error ${res.status}: Failed to fetch logs`)
-      }
-      const data = await res.json()
-      setLogs(data.logs || [])
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchLogs()
-  }, [fetchLogs])
-
-  if (loading) return <div className="text-xs text-gray-400 p-2">Loading debug logs...</div>
-  if (error) return <div className="text-xs text-red-500 p-2">Error loading logs: {error}</div>
-  if (logs.length === 0) return <div className="text-xs text-gray-400 p-2">No logs found.</div>
-
-  return (
-    <div className="overflow-x-auto">
-      <div className="flex justify-between items-center mb-2">
-        <h4 className="text-xs font-semibold text-gray-700">Recent Rejections (Debug)</h4>
-        <button onClick={fetchLogs} className="text-[10px] text-blue-600 hover:underline">Refresh</button>
-      </div>
-      <table className="w-full text-left text-[10px]">
-        <thead>
-          <tr className="border-b text-gray-500">
-            <th className="pb-1 font-medium">Time</th>
-            <th className="pb-1 font-medium">Status</th>
-            <th className="pb-1 font-medium">Subject</th>
-            <th className="pb-1 font-medium">Score</th>
-            <th className="pb-1 font-medium">Reason</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y">
-          {logs.map((log) => {
-            let timeStr = "—"
-            try {
-              const d = new Date(log.created_at)
-              if (!isNaN(d.getTime())) timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-            } catch { /* ignore */ }
-            const subject = typeof log.subject === "string" ? log.subject : ""
-            const reason = typeof log.rejection_reason === "string" ? log.rejection_reason : ""
-            return (
-              <tr key={log.id} className="group hover:bg-gray-50">
-                <td className="py-1 pr-2 whitespace-nowrap text-gray-400">{timeStr}</td>
-                <td className="py-1 pr-2">
-                  {log.detected ? (
-                    <span className="text-green-600 font-bold">MATCH</span>
-                  ) : (
-                    <span className="text-red-500 font-bold">REJECT</span>
-                  )}
-                </td>
-                <td className="py-1 pr-2 max-w-[150px] truncate text-gray-700" title={subject}>
-                  {subject}
-                </td>
-                <td className="py-1 pr-2">
-                  {log.score !== undefined ? `${log.score} (Max: ${log.strongest_hit ?? 0})` : "-"}
-                </td>
-                <td className="py-1 text-gray-500 max-w-[200px] truncate" title={reason}>
-                  {reason}
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
-  )
-}
 
 export default function PipelinesPage() {
   const { data: session, status } = useSession()
@@ -446,6 +362,15 @@ export default function PipelinesPage() {
   } | null>(null)
   const [showSyncDetails, setShowSyncDetails] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
+  const [syncDetails, setSyncDetails] = useState<Array<{
+    messageId: string
+    subject: string
+    from: string
+    outcome: string
+    reason: string
+    company: string | null
+  }>>([])
+
 
   const syncInFlightRef = useRef(false)
   const mountedRef = useRef(true)
@@ -544,25 +469,28 @@ export default function PipelinesPage() {
       setSyncProgress(60)
       setSyncMessage("Analyzing emails...")
 
-      const data = await res.json()
+      let data: any
+      try {
+        data = await res.json()
+      } catch {
+        // Vercel returned HTML (timeout, cold start crash, etc.) instead of JSON
+        setSyncError("Server error — sync may have timed out. Check Vercel logs.")
+        return false
+      }
       console.log("Sync result:", data)
 
       if (!res.ok) {
         console.error("Gmail sync failed:", data)
-        setSyncError(data.hint || data.message || "Sync failed")
-        if (data.stats) {
-          setSyncStats(data.stats)
-        }
+        setSyncError(data.hint || data.message || data.error || "Sync failed")
+        if (data.stats) setSyncStats(data.stats)
         return false
       }
 
       setSyncProgress(85)
       setSyncMessage("Updating pipelines...")
 
-      // Store the stats from the sync
-      if (data.stats) {
-        setSyncStats(data.stats)
-      }
+      if (data.stats) setSyncStats(data.stats)
+      if (data.details) setSyncDetails(data.details)
 
       setSyncProgress(100)
       setSyncMessage("Complete!")
@@ -729,9 +657,10 @@ export default function PipelinesPage() {
 
 
 
-          {/* Expandable sync stats panel */}
+          {/* Expandable sync details panel */}
           {showSyncDetails && (
             <div className="mt-3 space-y-3">
+              {/* Stats grid */}
               {syncStats ? (
                 <div className="p-3 bg-gray-50 rounded-lg border">
                   <div className="text-xs font-semibold text-gray-700 mb-2">Last Sync Results</div>
@@ -757,7 +686,7 @@ export default function PipelinesPage() {
                       <div className="text-[10px] text-gray-500">Rejected</div>
                     </div>
                     <div className="bg-white rounded p-2 border">
-                      <div className={`text-lg font-bold ${syncStats.errors > 0 ? 'text-red-600' : 'text-gray-400'}`}>{syncStats.errors}</div>
+                      <div className={`text-lg font-bold ${syncStats.errors > 0 ? "text-red-600" : "text-gray-400"}`}>{syncStats.errors}</div>
                       <div className="text-[10px] text-gray-500">Errors</div>
                     </div>
                   </div>
@@ -773,10 +702,64 @@ export default function PipelinesPage() {
                 </div>
               )}
 
-              {/* Debug Logs Section */}
-              <div className="p-3 bg-gray-50 rounded-lg border mt-2">
-                <DebugLogsView />
-              </div>
+              {/* Per-email breakdown */}
+              {syncDetails.length > 0 ? (
+                <div className="p-3 bg-gray-50 rounded-lg border">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-xs font-semibold text-gray-700">
+                      Emails Evaluated This Sync ({syncDetails.length})
+                    </h4>
+                    <span className="text-[10px] text-gray-400">
+                      {syncStats ? `${syncStats.skipped} already up-to-date (not shown)` : ""}
+                    </span>
+                  </div>
+                  <div className="overflow-x-auto max-h-72 overflow-y-auto">
+                    <table className="w-full text-left text-[11px]">
+                      <thead className="sticky top-0 bg-gray-50">
+                        <tr className="border-b text-gray-500">
+                          <th className="pb-1 pr-2 font-medium w-16">Status</th>
+                          <th className="pb-1 pr-2 font-medium">Subject</th>
+                          <th className="pb-1 pr-2 font-medium hidden sm:table-cell">From</th>
+                          <th className="pb-1 font-medium">Reason</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {syncDetails.map((d) => {
+                          const isMatch = d.outcome === "thread_inheritance" || d.outcome === "new_recruiting" || d.outcome === "updated_existing"
+                          const isSkip = d.outcome === "dismissed" || d.outcome === "budget_exceeded"
+                          return (
+                            <tr key={d.messageId} className="hover:bg-white">
+                              <td className="py-1 pr-2 whitespace-nowrap">
+                                {isMatch ? (
+                                  <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700">MATCH</span>
+                                ) : isSkip ? (
+                                  <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-500">SKIP</span>
+                                ) : (
+                                  <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-50 text-red-600">REJECT</span>
+                                )}
+                              </td>
+                              <td className="py-1 pr-2 max-w-[160px]">
+                                <div className="truncate text-gray-800" title={d.subject}>{d.subject || "(no subject)"}</div>
+                                {d.company && <div className="text-[10px] text-blue-600 truncate">{d.company}</div>}
+                              </td>
+                              <td className="py-1 pr-2 max-w-[140px] truncate text-gray-500 hidden sm:table-cell" title={d.from}>
+                                {d.from}
+                              </td>
+                              <td className="py-1 text-gray-500 max-w-[160px] truncate" title={d.reason}>
+                                {d.reason}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : syncStats && !syncError ? (
+                <div className="p-3 bg-gray-50 rounded-lg border text-[11px] text-gray-500">
+                  All {syncStats.scanned} emails were already up to date — nothing new to evaluate.
+                </div>
+              ) : null}
             </div>
           )}
         </div>
