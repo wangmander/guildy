@@ -16,8 +16,9 @@ const supabase = supabaseAdmin
 const openai = openaiKey ? new OpenAI({ apiKey: openaiKey }) : null
 
 // Budget: gpt-4o-mini is fast/cheap; gpt-4o (prep) is expensive/slow
-const MAX_MINI_CALLS = 25   // classifier calls per sync
+const MAX_MINI_CALLS = 15   // classifier calls per sync
 const MAX_PREP_CALLS = 3    // prep generation (gpt-4o) calls per sync — fired in parallel after loop
+const SYNC_DEADLINE_MS = 70_000 // hard stop at 70s so Vercel never hits 120s
 
 // ============================================================
 // INSTRUMENTATION
@@ -396,201 +397,169 @@ export async function POST() {
     stats.scanned = messages.length
     console.log(`[SYNC] ${messages.length} messages to process`)
 
-    // Load all dismissed thread IDs for this user once, check in-memory.
-    // This prevents re-creating pipelines the user explicitly deleted,
-    // even after the cascade-delete wiped the email records.
+    // ── PHASE A: Pre-load dismissed + idempotency data (2 bulk queries) ──
     const { data: dismissedRows } = await supabase
-      .from("dismissed_threads")
-      .select("gmail_thread_id")
-      .eq("user_email", userEmail)
+      .from("dismissed_threads").select("gmail_thread_id").eq("user_email", userEmail)
     const dismissedThreadSet = new Set<string>(
       (dismissedRows ?? []).map((r: any) => r.gmail_thread_id)
     )
-    console.log(`[SYNC] ${dismissedThreadSet.size} dismissed thread(s) loaded`)
 
-    // ── BATCH IDEMPOTENCY PRE-LOAD ────────────────────────────
-    // Replace N×2 per-message Supabase queries with 2 bulk fetches.
     const allMsgIds = messages.map(m => m.id).filter(Boolean) as string[]
-    const { data: processedEmailRows } = await supabase
-      .from("emails")
-      .select("gmail_message_id, pipeline_id")
-      .eq("user_email", userEmail)
-      .in("gmail_message_id", allMsgIds)
-    const processedMsgMap = new Map<string, string | null>(
-      (processedEmailRows || []).map((e: any) => [e.gmail_message_id, e.pipeline_id ?? null])
-    )
-    // Check prep richness for already-seen pipelines in one query
-    const seenPipelineIds = [...new Set(
-      (processedEmailRows || []).map((e: any) => e.pipeline_id).filter(Boolean)
-    )] as string[]
+    const processedMsgMap = new Map<string, string | null>()
     const pipelinePrepScores = new Map<string, number>()
-    if (seenPipelineIds.length > 0) {
-      const { data: prepRows } = await supabase
-        .from("pipelines").select("id, prep_json").in("id", seenPipelineIds)
-      for (const pl of (prepRows || [])) {
-        pipelinePrepScores.set(pl.id, prepRichness(pl.prep_json))
+    if (allMsgIds.length > 0) {
+      const { data: processedEmailRows } = await supabase
+        .from("emails").select("gmail_message_id, pipeline_id")
+        .eq("user_email", userEmail).in("gmail_message_id", allMsgIds)
+      for (const e of (processedEmailRows || [])) {
+        processedMsgMap.set(e.gmail_message_id, e.pipeline_id ?? null)
+      }
+      const seenPipelineIds = [...new Set(
+        (processedEmailRows || []).map((e: any) => e.pipeline_id).filter(Boolean)
+      )] as string[]
+      if (seenPipelineIds.length > 0) {
+        const { data: prepRows } = await supabase
+          .from("pipelines").select("id, prep_json").in("id", seenPipelineIds)
+        for (const pl of (prepRows || [])) pipelinePrepScores.set(pl.id, prepRichness(pl.prep_json))
       }
     }
-    console.log(`[SYNC] ${processedMsgMap.size} already-processed message(s) pre-loaded`)
+    console.log(`[SYNC] dismissed=${dismissedThreadSet.size} already-processed=${processedMsgMap.size}`)
 
-    // Prep jobs collected during the loop and fired in parallel after
+    // ── PHASE B: Pre-filter — decide which messages actually need fetching ──
+    type MsgMeta = { id: string; threadId: string }
+    const toFetch: MsgMeta[] = []
+    for (const msg of messages) {
+      if (!msg.id) continue
+      const threadId = msg.threadId || ""
+      if (threadId && dismissedThreadSet.has(threadId)) { stats.skipped++; continue }
+      if (processedMsgMap.has(msg.id)) {
+        const plId = processedMsgMap.get(msg.id) ?? null
+        const richness = plId ? (pipelinePrepScores.get(plId) ?? 0) : 999
+        if (richness >= 3) { stats.skipped++; continue }
+        console.log(`[SYNC] Will re-process ${msg.id} — empty prep`)
+      }
+      toFetch.push({ id: msg.id, threadId })
+    }
+    console.log(`[SYNC] ${toFetch.length} messages need full fetch (${stats.skipped} skipped)`)
+
+    // ── PHASE C: Parallel Gmail fetch (10 at a time) ──────────────────────
+    // Sequential fetches cost ~0.4s × N. Parallel batches collapse that to
+    // ~0.4s × ceil(N/10). For 50 messages: 20s → 2s.
+    const FETCH_BATCH = 10
+    const fetched = new Map<string, any>() // msgId -> full message data
+    for (let i = 0; i < toFetch.length; i += FETCH_BATCH) {
+      const batch = toFetch.slice(i, i + FETCH_BATCH)
+      await Promise.all(batch.map(async ({ id }) => {
+        try {
+          const f = await gmail.users.messages.get({ userId: "me", id, format: "full" })
+          fetched.set(id, f.data)
+        } catch (err: any) {
+          console.error(`[SYNC] Fetch failed for ${id}:`, err?.message)
+          stats.errors++
+        }
+      }))
+    }
+    console.log(`[SYNC] Fetched ${fetched.size} full message(s)`)
+
+    // ── PHASE D: Sequential LLM classification (deadline-guarded) ─────────
+    const OUTCOME_LABELS: Record<string, string> = {
+      thread_inheritance: "Match — known thread",
+      new_recruiting: "Match — new pipeline",
+      updated_existing: "Match — pipeline updated",
+      hard_junk: "Reject — junk filter",
+      no_signal: "Reject — no recruiting signal",
+      llm_rejected: "Reject — not a recruiting email",
+      dismissed: "Skip — previously dismissed",
+      error: "Error",
+      budget_exceeded: "Skip — budget exhausted",
+    }
+    const HIGH_SIGNAL_TYPES = new Set([
+      "scheduling", "interview_invite", "interview_followup", "assessment", "rejection", "offer",
+    ])
     type PrepJob = {
       pipelineId: string; subject: string; snippet: string
       fromEmail: string; fromName: string; bodyExcerpt: string; receivedAt: string
     }
     const prepJobs: PrepJob[] = []
+    const syncStart = Date.now()
 
-    for (const msg of messages) {
-      if (!msg.id) continue
-
-      const threadId = msg.threadId || ""
-
-      // ── DISMISSED THREAD CHECK ────────────────────────────
-      if (threadId && dismissedThreadSet.has(threadId)) {
-        stats.skipped++
-        continue
+    for (const { id: msgId, threadId } of toFetch) {
+      // Hard deadline so Vercel never hits 120s
+      if (Date.now() - syncStart > SYNC_DEADLINE_MS) {
+        console.log(`[SYNC] ${SYNC_DEADLINE_MS / 1000}s deadline reached, stopping early`)
+        break
       }
 
-      // ── IDEMPOTENCY CHECK (in-memory, no DB query) ────────
-      if (processedMsgMap.has(msg.id)) {
-        const plId = processedMsgMap.get(msg.id) ?? null
-        const richness = plId ? (pipelinePrepScores.get(plId) ?? 0) : 999
-        if (richness >= 3) {
-          stats.skipped++
-          continue
-        }
-        console.log(`[SYNC] Re-processing ${msg.id} — empty prep`)
-      }
+      const full = fetched.get(msgId)
+      if (!full) continue
 
-      // ── FETCH FULL MESSAGE ────────────────────────────────
-      let full: any
-      try {
-        full = await gmail.users.messages.get({ userId: "me", id: msg.id, format: "full" })
-      } catch (err: any) {
-        console.error(`[SYNC] Fetch failed for ${msg.id}:`, err?.message)
-        stats.errors++
-        continue
-      }
-
-      const headers = full.data.payload?.headers ?? []
+      const headers = full.payload?.headers ?? []
       const subject = headers.find((h: any) => h.name === "Subject")?.value || "(no subject)"
       const fromHeader = headers.find((h: any) => h.name === "From")?.value || ""
       const dateHeader = headers.find((h: any) => h.name === "Date")?.value || ""
-      const snippet = full.data.snippet || ""
+      const snippet = full.snippet || ""
 
       const fromMatch = fromHeader.match(/^(.+?)\s*<(.+?)>$/)
       const fromName = fromMatch ? fromMatch[1].replace(/"/g, "").trim() : fromHeader
       const fromEmail = fromMatch ? fromMatch[2].trim() : fromHeader
 
-      const internalMs = full.data.internalDate ? Number(full.data.internalDate) : NaN
+      const internalMs = full.internalDate ? Number(full.internalDate) : NaN
       const receivedAt = Number.isFinite(internalMs)
         ? new Date(internalMs).toISOString()
         : new Date(dateHeader || Date.now()).toISOString()
 
-      const { text: bodyPlain, html: bodyHtml } = extractBodyFromPayload(full.data.payload)
+      const { text: bodyPlain, html: bodyHtml } = extractBodyFromPayload(full.payload)
       const bodyText = bodyPlain || (bodyHtml ? stripHtml(bodyHtml) : "")
 
-      // Mini call budget check
       if (miniCallCount >= MAX_MINI_CALLS) {
-        console.log(`[SYNC] Mini budget exhausted (${MAX_MINI_CALLS}), skipping`)
-        details.push({ messageId: msg.id, subject, from: fromHeader, outcome: "budget_exceeded", reason: "LLM budget exhausted for this sync", company: null })
+        details.push({ messageId: msgId, subject, from: fromHeader, outcome: "budget_exceeded", reason: "LLM budget exhausted for this sync", company: null })
         stats.skipped++
         continue
       }
 
-      // ── BUILD SIGNAL + PROCESS ────────────────────────────
       const signal: EmailSignal = {
-        userEmail,
-        gmailMessageId: msg.id,
-        threadId,
-        subject,
-        from: fromHeader,
-        fromName,
-        fromEmail,
-        snippet,
-        bodyText,
-        receivedAt,
+        userEmail, gmailMessageId: msgId, threadId, subject,
+        from: fromHeader, fromName, fromEmail, snippet, bodyText, receivedAt,
       }
 
       miniCallCount++
       const result = await processEmailSignal(signal, openai)
 
-      // Record per-email decision for the "show details" panel
-      const OUTCOME_LABELS: Record<string, string> = {
-        thread_inheritance: "Match — known thread",
-        new_recruiting: "Match — new pipeline",
-        updated_existing: "Match — pipeline updated",
-        hard_junk: "Reject — junk filter",
-        no_signal: "Reject — no recruiting signal",
-        llm_rejected: "Reject — not a recruiting email",
-        dismissed: "Skip — previously dismissed",
-        error: "Error",
-        budget_exceeded: "Skip — budget exhausted",
-      }
       details.push({
-        messageId: msg.id,
-        subject,
-        from: fromHeader,
+        messageId: msgId, subject, from: fromHeader,
         outcome: result.action,
         reason: OUTCOME_LABELS[result.action] || result.action,
         company: result.companyName ?? null,
       })
 
-      if (!result.accepted) {
-        stats.rejected++
-        continue
-      }
+      if (!result.accepted) { stats.rejected++; continue }
 
       stats.detected++
       const pipelineId = result.pipelineId!
 
-      // ── PREP GENERATION DECISION ──────────────────────────
-      // Generate rich prep (gpt-4o) when:
-      //   • New pipeline (needs initial prep)
-      //   • Stage advanced (mini classifier detected explicit delta)
-      //   • High-signal reply on existing thread: mini may return stage_delta="none"
-      //     for scheduling/invite/assessment emails even when the stage IS advancing.
-      //     gpt-4o is more accurate — always let it run for these types so the
-      //     pipeline stage doesn't get stuck.
       const stageAdvanced = result.llmResult?.stage_delta !== "none"
-      const HIGH_SIGNAL_TYPES = new Set([
-        "scheduling", "interview_invite", "interview_followup",
-        "assessment", "rejection", "offer",
-      ])
       const isHighSignalReply =
-        !result.isNewPipeline &&
-        !!result.llmResult?.message_type &&
+        !result.isNewPipeline && !!result.llmResult?.message_type &&
         HIGH_SIGNAL_TYPES.has(result.llmResult.message_type)
 
-      const shouldGeneratePrep =
-        prepCallCount < MAX_PREP_CALLS &&
-        (result.isNewPipeline || stageAdvanced || isHighSignalReply)
-
-      if (shouldGeneratePrep) {
+      if (prepCallCount < MAX_PREP_CALLS && (result.isNewPipeline || stageAdvanced || isHighSignalReply)) {
         prepCallCount++
         prepJobs.push({ pipelineId, subject, snippet, fromEmail, fromName, bodyExcerpt: bodyText.slice(0, 4000), receivedAt })
       }
 
-      if (result.isNewPipeline) {
-        stats.inserted++
-      } else {
-        stats.updated++
-      }
-    } // end for messages
+      if (result.isNewPipeline) stats.inserted++
+      else stats.updated++
+    }
 
-    // ── PARALLEL PREP GENERATION ─────────────────────────────
-    // Fire all prep jobs at once instead of sequentially.
-    // With MAX_PREP_CALLS=3 this saves 2× the latency of the slowest call.
+    // ── PHASE E: Parallel prep generation ────────────────────────────────
+    // All prep jobs fire concurrently — N jobs cost max(job_latencies) not sum.
     if (prepJobs.length > 0) {
       console.log(`[SYNC] Firing ${prepJobs.length} prep job(s) in parallel`)
       await Promise.all(prepJobs.map(async (job) => {
         try {
           const { data: pEmails } = await supabase
-            .from("emails")
-            .select("subject, snippet, from_email, received_at")
-            .eq("pipeline_id", job.pipelineId)
-            .order("received_at", { ascending: true })
-            .limit(5)
+            .from("emails").select("subject, snippet, from_email, received_at")
+            .eq("pipeline_id", job.pipelineId).order("received_at", { ascending: true }).limit(5)
           const threadEmails = (pEmails || [])
             .filter((e: any) => e.received_at !== job.receivedAt)
             .map((e: any) => ({ subject: e.subject || "", snippet: e.snippet || "", from: e.from_email || "", date: e.received_at || "" }))
@@ -603,32 +572,28 @@ export async function POST() {
           })
           if (!prep) return
 
-          const { data: currentPipeline } = await supabase
+          const { data: cur } = await supabase
             .from("pipelines").select("stage, prep_json, company, role").eq("id", job.pipelineId).maybeSingle()
 
-          const existingStage = currentPipeline?.stage
-          const prepStage = getUiStage(prep.stage_bucket)
-          const resolvedStage = resolveStage(prepStage, existingStage)
-          const existingPrepScore = prepRichness(currentPipeline?.prep_json)
-          const newPrepScore = prepRichness(prep.prep)
-          const useNewPrep = newPrepScore >= existingPrepScore
-          console.log(`[PREP] stage=${existingStage}→${resolvedStage}, richness ${existingPrepScore}→${newPrepScore} (${useNewPrep ? "update" : "keep"})`)
+          const resolvedStage = resolveStage(getUiStage(prep.stage_bucket), cur?.stage)
+          const useNewPrep = prepRichness(prep.prep) >= prepRichness(cur?.prep_json)
+          console.log(`[PREP] ${cur?.stage}→${resolvedStage} richness=${prepRichness(prep.prep)} (${useNewPrep ? "update" : "keep"})`)
 
-          const updatePayload: any = {
+          const upd: any = {
             stage: resolvedStage, stage_detail: prep.stage_detail,
             last_email_at: job.receivedAt, last_email_subject: job.subject,
             last_email_snippet: job.snippet, last_email_from_name: job.fromName,
             last_email_from_email: job.fromEmail, insights_json: prep.insights,
             updated_at: new Date().toISOString(),
           }
-          if ((!currentPipeline?.company || currentPipeline.company === "Unknown") && prep.company !== "Unknown") updatePayload.company = prep.company
-          if ((!currentPipeline?.role || currentPipeline.role === "Unknown") && prep.role !== "Unknown") updatePayload.role = prep.role
-          if (useNewPrep) { updatePayload.prep_json = prep.prep; updatePayload.company_intel_json = prep.prep.companyIntel }
+          if ((!cur?.company || cur.company === "Unknown") && prep.company !== "Unknown") upd.company = prep.company
+          if ((!cur?.role || cur.role === "Unknown") && prep.role !== "Unknown") upd.role = prep.role
+          if (useNewPrep) { upd.prep_json = prep.prep; upd.company_intel_json = prep.prep.companyIntel }
 
-          await supabase.from("pipelines").update(updatePayload).eq("id", job.pipelineId)
+          await supabase.from("pipelines").update(upd).eq("id", job.pipelineId)
           if (prep.predicted_stages?.length > 0) {
-            supabase.from("pipelines").update({ predicted_stages: prep.predicted_stages }).eq("id", job.pipelineId)
-              .then(() => {}, () => {})
+            supabase.from("pipelines").update({ predicted_stages: prep.predicted_stages })
+              .eq("id", job.pipelineId).then(() => {}, () => {})
           }
         } catch (prepErr: any) {
           console.error("[PREP] Job failed:", prepErr?.message)
