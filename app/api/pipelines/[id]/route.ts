@@ -25,7 +25,7 @@ export async function DELETE(
     // Verify ownership
     const { data: pipeline, error: fetchErr } = await supabase
       .from("pipelines")
-      .select("id, company, gmail_thread_id, user_email")
+      .select("id, company, user_email")
       .eq("id", pipelineId)
       .eq("user_email", userEmail)
       .maybeSingle()
@@ -39,33 +39,39 @@ export async function DELETE(
     // dismissing one must also kill the others so they don't reappear.
     const { data: siblingPipelines } = await supabase
       .from("pipelines")
-      .select("id, gmail_thread_id")
+      .select("id")
       .eq("user_email", userEmail)
       .eq("company", pipeline.company)
 
     const allPipelineIds = new Set<string>()
-    const threadIds = new Set<string>()
-
     for (const p of [pipeline, ...(siblingPipelines ?? [])]) {
       allPipelineIds.add(p.id)
-      if (p.gmail_thread_id) threadIds.add(p.gmail_thread_id)
     }
 
-    // Collect all thread IDs from emails linked to any of these pipelines
-    const { data: linkedEmails } = await supabase
+    const allPipelineIdArr = Array.from(allPipelineIds)
+
+    // Collect thread IDs from pipeline_threads table (V3 source of truth)
+    const { data: ptThreads } = await supabase
+      .from("pipeline_threads")
+      .select("gmail_thread_id")
+      .in("pipeline_id", allPipelineIdArr)
+
+    // Also collect from emails table (catches any threads not yet in pipeline_threads)
+    const { data: emailThreads } = await supabase
       .from("emails")
       .select("gmail_thread_id")
-      .in("pipeline_id", Array.from(allPipelineIds))
+      .in("pipeline_id", allPipelineIdArr)
       .not("gmail_thread_id", "is", null)
 
-    for (const row of linkedEmails ?? []) {
-      if (row.gmail_thread_id) threadIds.add(row.gmail_thread_id)
-    }
+    const allThreadIds = new Set<string>([
+      ...(ptThreads || []).map((t: any) => t.gmail_thread_id).filter(Boolean),
+      ...(emailThreads || []).map((t: any) => t.gmail_thread_id).filter(Boolean),
+    ])
 
-    // Insert dismissed thread records — required for suppressing re-creation on resync.
-    // If this fails the pipeline delete is aborted so the user can retry.
-    if (threadIds.size > 0) {
-      const rows = Array.from(threadIds).map((tid) => ({
+    // Insert dismissed thread records — suppresses re-creation on resync.
+    // If this fails, abort so the user can retry.
+    if (allThreadIds.size > 0) {
+      const rows = Array.from(allThreadIds).map((tid) => ({
         user_email: userEmail,
         gmail_thread_id: tid,
       }))
@@ -78,11 +84,12 @@ export async function DELETE(
       }
     }
 
-    // Hard delete all sibling pipelines — cascade removes linked emails + stage_history
+    // Hard delete all sibling pipelines — CASCADE removes:
+    // emails, stage_history, pipeline_threads (via FK ON DELETE CASCADE)
     const { error: delErr } = await supabase
       .from("pipelines")
       .delete()
-      .in("id", Array.from(allPipelineIds))
+      .in("id", allPipelineIdArr)
       .eq("user_email", userEmail)
 
     if (delErr) {
@@ -90,8 +97,12 @@ export async function DELETE(
       return NextResponse.json({ error: "DELETE_FAILED", message: delErr.message }, { status: 500 })
     }
 
-    console.log(`[DELETE] Deleted ${allPipelineIds.size} pipeline(s) for "${pipeline.company}". Suppressed ${threadIds.size} threads.`)
-    return NextResponse.json({ success: true, deletedPipelines: allPipelineIds.size, suppressedThreads: threadIds.size })
+    console.log(`[DELETE] Deleted ${allPipelineIds.size} pipeline(s) for "${pipeline.company}". Suppressed ${allThreadIds.size} threads.`)
+    return NextResponse.json({
+      success: true,
+      deletedPipelines: allPipelineIds.size,
+      suppressedThreads: allThreadIds.size,
+    })
 
   } catch (err: any) {
     console.error("[DELETE] Exception:", err)

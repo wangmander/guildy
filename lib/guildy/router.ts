@@ -1,15 +1,24 @@
 // ============================================================
-// Guildy Gmail Detection V2 — Hard Junk Sieve + Warm Lead Router
+// Guildy Gmail Detection V3 — Hard Junk Sieve + Warm Lead Router
+// Router uses subject + snippet ONLY — never body text.
 // ============================================================
 
-import type { EmailSignal, RouterDecision } from "./types"
+import type { RouterDecision } from "./types"
 import { normalize, containsWholePhrase } from "./normalizers"
 
 // ============================================================
+// BLOCKED SENDERS
+// ============================================================
+const BLOCKED_SENDERS = ["mailer-daemon", "postmaster@"]
+
+export function isBlockedSender(from: string): boolean {
+  const f = (from || "").toLowerCase()
+  return BLOCKED_SENDERS.some((p) => f.includes(p))
+}
+
+// ============================================================
 // HARD JUNK SIEVE
-// Rules:
-//  - Only checks subject + snippet + sender (never body — footers cause false rejects)
-//  - Minimal list: only unambiguously non-recruiting
+// Subject + snippet only — never body (footers cause false rejects)
 // ============================================================
 const HARD_JUNK_PHRASES = [
   // Shipping / orders
@@ -22,7 +31,7 @@ const HARD_JUNK_PHRASES = [
   "payment received",
   "payment failed",
   "your receipt",
-  // Auth / security — never recruiting
+  // Auth / security
   "verification code",
   "verify your email address",
   "reset your password",
@@ -37,20 +46,13 @@ const HARD_JUNK_PHRASES = [
   "school newsletter",
 ]
 
-const BLOCKED_SENDERS = ["mailer-daemon", "postmaster@"]
-
-export function isHardJunk(signal: EmailSignal): boolean {
-  const from = (signal.from || "").toLowerCase()
-  const subject = (signal.subject || "").toLowerCase()
-  const snippet = (signal.snippet || "").toLowerCase()
-  const hay = `${subject} ${snippet}`
-
-  if (BLOCKED_SENDERS.some((p) => from.includes(p))) return true
+export function isHardJunk(subject: string, snippet: string): boolean {
+  const hay = normalize(`${subject} ${snippet}`)
   return HARD_JUNK_PHRASES.some((p) => hay.includes(p))
 }
 
 // ============================================================
-// ATS DOMAIN CHECK
+// ATS DOMAINS — always route to LLM
 // ============================================================
 const ATS_DOMAINS = [
   "greenhouse.io",
@@ -75,113 +77,98 @@ const ATS_DOMAINS = [
   "recruitingbypaychex.com",
 ]
 
-export function isATSDomain(fromEmail: string): boolean {
-  const from = (fromEmail || "").toLowerCase()
-  return ATS_DOMAINS.some((d) => from.includes(d))
-}
-
-// ============================================================
-// JOBISH SUBJECT CHECK
-// ============================================================
-const JOBISH_SUBJECT_PATTERNS = [
-  "interview",
-  "application",
-  "candidate",
-  "recruiter",
-  "hiring",
-  "next steps",
-  "phone screen",
-  "onsite",
-  "offer",
-  "position",
-  "role",
-]
-
-export function looksJobishSubject(subject: string): boolean {
-  const s = normalize(subject || "")
-  return JOBISH_SUBJECT_PATTERNS.some((p) => s.includes(normalize(p)))
-}
-
-// ============================================================
-// WARM LEAD SCORE
-// Low bar intentional — router only gates LLM, not final decision
-// ============================================================
-const WARM_LEAD_PHRASES = [
-  "interview",
-  "recruiter",
-  "recruiting",
-  "hiring manager",
-  "talent acquisition",
-  "application",
-  "candidate",
-  "phone screen",
-  "screening call",
-  "onsite",
-  "final round",
-  "next steps",
-  "schedule",
-  "availability",
-  "calendly",
-  "goodtime",
-  "greenhouse",
-  "lever",
-  "ashby",
-  "workday",
-  "hirevue",
-  "icims",
-  "smartrecruiters",
-  "role",
-  "position",
-  "opportunity",
-  "job",
-  "resume",
-  "cv",
-  "your profile",
-  "your background",
-  "your experience",
-  "came across",
-  "come across",
-  "reaching out",
-  "quick chat",
-  "brief chat",
-  "offer letter",
-  "take home",
-  "coding challenge",
-  "technical assessment",
-  "rejection",
-  "unfortunately",
-  "not moving forward",
-  "moving forward",
-]
-
-export function calculateWarmLeadScore(text: string): number {
-  let score = 0
-  for (const p of WARM_LEAD_PHRASES) {
-    if (containsWholePhrase(text, p)) score++
-  }
-  return score
-}
-
 // ============================================================
 // ROUTER DECISION
-// Broad net: prefer LLM calls over missed recruiting emails
+// Uses subject + snippet only — never body text.
+// Threshold ≥ 2 to reduce false positives from generic professional emails.
 // ============================================================
-export function getRouterDecision(signal: EmailSignal): RouterDecision {
-  const text = normalize(`${signal.subject}\n${signal.snippet}\n${signal.bodyText}`)
-  const isATS = isATSDomain(signal.fromEmail)
-  const isJobishSubject = looksJobishSubject(signal.subject || "")
-  const score = calculateWarmLeadScore(text)
+export function getRouterDecision(
+  signal: Pick<{ subject: string; snippet: string; fromEmail: string }, "subject" | "snippet" | "fromEmail">
+): RouterDecision {
+  const fromEmail = (signal.fromEmail || "").toLowerCase()
+  const subject = normalize(signal.subject || "")
+  const text = normalize(`${signal.subject || ""} ${signal.snippet || ""}`)
 
-  // Route if ANY signal fires — intentionally broad
-  const routeToLLM = isATS || isJobishSubject || score >= 1
+  // 1. ATS domain → hard route (no score needed)
+  const isATS = ATS_DOMAINS.some((d) => fromEmail.includes(d))
+  if (isATS) {
+    return { routeToLLM: true, reason: "ats_domain", score: 10, isATS: true, isJobishSubject: false }
+  }
 
-  const reason: RouterDecision["reason"] = isATS
-    ? "ats_domain"
-    : isJobishSubject
-    ? "jobish_subject"
-    : score >= 1
-    ? "warm_lead_score"
-    : "no_signal"
+  // 2. High-signal subject → hard route
+  const HARD_ROUTE_SUBJECT = [
+    "interview",
+    "application received",
+    "application confirmation",
+    "next steps",
+    "phone screen",
+    "hiring manager",
+    "onsite",
+    "final round",
+    "offer letter",
+    "take home",
+    "technical assessment",
+    "coding challenge",
+    "rejection",
+    "not moving forward",
+    "we have decided",
+    "unfortunately",
+  ]
+  const isJobishSubject = HARD_ROUTE_SUBJECT.some((p) => containsWholePhrase(subject, p))
+  if (isJobishSubject) {
+    return { routeToLLM: true, reason: "jobish_subject", score: 10, isATS: false, isJobishSubject: true }
+  }
 
-  return { routeToLLM, reason, score, isATS, isJobishSubject }
+  // 3. Weighted soft scoring — subject + snippet ONLY
+  // NOTE: Permanently removed generic phrases that fire on all professional email:
+  //   role, position, opportunity, job, schedule, availability, reaching out,
+  //   quick chat, brief chat, your profile, your background, your experience,
+  //   came across, come across, cv, resume
+  const WEIGHTED_PHRASES: [string, number][] = [
+    // +2: unambiguous recruiting signals
+    ["interview", 2],
+    ["phone screen", 2],
+    ["onsite", 2],
+    ["final round", 2],
+    ["offer", 2],
+    ["rejection", 2],
+    ["technical assessment", 2],
+    ["take home", 2],
+    ["hiring manager", 2],
+    ["coding challenge", 2],
+
+    // +1: strong but need corroboration
+    ["recruiter", 1],
+    ["recruiting", 1],
+    ["talent acquisition", 1],
+    ["application", 1],
+    ["candidate", 1],
+    ["calendly", 1],
+    ["goodtime", 1],
+    ["greenhouse", 1],
+    ["lever", 1],
+    ["ashby", 1],
+    ["workday", 1],
+    ["hirevue", 1],
+    ["icims", 1],
+    ["smartrecruiters", 1],
+    ["screening call", 1],
+    ["moving forward", 1],
+    ["offer letter", 1],
+    ["not moving forward", 1],
+  ]
+
+  let score = 0
+  for (const [phrase, weight] of WEIGHTED_PHRASES) {
+    if (containsWholePhrase(text, phrase)) score += weight
+  }
+
+  const routeToLLM = score >= 2
+  return {
+    routeToLLM,
+    reason: routeToLLM ? "warm_lead_score" : "no_signal",
+    score,
+    isATS: false,
+    isJobishSubject: false,
+  }
 }

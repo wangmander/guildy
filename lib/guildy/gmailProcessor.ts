@@ -1,35 +1,38 @@
 // ============================================================
-// Guildy Gmail Detection V2 — Core Signal Processor
+// Guildy Gmail Detection V3 — Core Signal Processor
 // Thread-first, LLM-classified, append-only, idempotent
+// Uses preloaded SyncMaps — no per-message DB lookups for thread/company matching
 // ============================================================
 
 import type {
   EmailSignal,
   RecruitingAnalysisResult,
   ProcessResult,
+  SyncMaps,
+  PipelineRef,
 } from "./types"
-import { isHardJunk, getRouterDecision } from "./router"
+import { getRouterDecision, isHardJunk, isBlockedSender } from "./router"
 import { analyzeRecruitingEmailWithLLM } from "./recruitingClassifier"
-import { companiesMatch } from "./normalizers"
-import { supabaseAdmin } from "@/lib/supabaseAdmin"
+import { companiesMatch, normalizeCompany, containsWholePhrase, normalize } from "./normalizers"
 import OpenAI from "openai"
 
-const supabase = supabaseAdmin
-
-// UI stage mapping from GuildyStage/StageDelta values
-const STAGE_DELTA_TO_UI: Record<string, string> = {
-  applied: "SCREENING",
-  screen: "SCREENING",
+// ============================================================
+// STAGE MAPPING — single source of truth (V3)
+// Delete duplicates from sync/route.ts
+// ============================================================
+export const STAGE_DELTA_TO_UI: Record<string, string> = {
+  applied:   "SCREENING",
+  screen:    "SCREENING",
+  hm_screen: "HIRING_MANAGER",
   technical: "PRESENTATION",
-  onsite: "FULL_LOOP",
-  offer: "OFFER_DISCUSSION",
-  rejected: "REJECTED",
+  onsite:    "FULL_LOOP",
+  offer:     "OFFER_DISCUSSION",
+  rejected:  "REJECTED",
   withdrawn: "SCREENING",
-  other: "SCREENING",
+  other:     "SCREENING",
 }
 
-// Stage order for regression prevention (higher = more advanced)
-const STAGE_ORDER: Record<string, number> = {
+export const STAGE_ORDER: Record<string, number> = {
   SCREENING: 0,
   HIRING_MANAGER: 1,
   PRESENTATION: 2,
@@ -39,23 +42,118 @@ const STAGE_ORDER: Record<string, number> = {
 }
 
 // ============================================================
+// PREP RICHNESS SCORE
+// Used in buildSyncMaps and in sync route for useNewPrep decision
+// ============================================================
+export function prepRichnessScore(p: any): number {
+  if (!p) return 0
+  let s = 0
+  if (p.questionsTheyMightAsk?.length) s += 3
+  if (p.questionsYouShouldAsk?.length) s += 3
+  if (p.primitives?.length) s += 2
+  if (p.companyIntel?.summary) s += 2
+  if (p.companyIntel?.product) s += 1
+  if (p.companyIntel?.competitors?.length) s += 1
+  if (p.interviewStrategy?.goalForThisStage) s += 2
+  if (p.interviewStrategy?.howToSucceed?.length) s += 2
+  if (p.interviewerIntel?.name) s += 1
+  if (p.stageRoadmap?.length) s += 1
+  if (p.prepChecklist?.length) s += 1
+  if (p.compensationIntel?.salaryRange) s += 1
+  return s
+}
+
+// ============================================================
+// BUILD SYNC MAPS — called once per sync in Phase A
+// ============================================================
+export async function buildSyncMaps(userEmail: string, supabase: any): Promise<SyncMaps> {
+  // 1. Dismissed threads
+  const { data: dismissed } = await supabase
+    .from("dismissed_threads")
+    .select("gmail_thread_id")
+    .eq("user_email", userEmail)
+  const dismissedThreads = new Set<string>((dismissed || []).map((d: any) => d.gmail_thread_id as string))
+
+  // 2. Processed messages (positive decisions — email row exists)
+  const { data: emails } = await supabase
+    .from("emails")
+    .select("gmail_message_id, pipeline_id")
+    .eq("user_email", userEmail)
+  const processedMessages = new Map<string, string | null>(
+    (emails || []).map((e: any) => [e.gmail_message_id as string, (e.pipeline_id ?? null) as string | null])
+  )
+
+  // 3. Ghosted messages (negative decisions — ghost_log row exists)
+  const { data: ghosts } = await supabase
+    .from("ghost_logs")
+    .select("gmail_message_id")
+    .eq("user_email", userEmail)
+  const ghostedMessages = new Set<string>((ghosts || []).map((g: any) => g.gmail_message_id as string))
+
+  // 4. Pipeline threads
+  const { data: threads } = await supabase
+    .from("pipeline_threads")
+    .select("gmail_thread_id, pipeline_id")
+    .eq("user_email", userEmail)
+  const pipelineThreads = new Map<string, string>(
+    (threads || []).map((t: any) => [t.gmail_thread_id as string, t.pipeline_id as string])
+  )
+
+  // 5. All pipelines
+  const { data: pipelines } = await supabase
+    .from("pipelines")
+    .select("id, company, role, stage, prep_json")
+    .eq("user_email", userEmail)
+
+  const pipelinesById = new Map<string, PipelineRef>()
+  const pipelinesByCompany = new Map<string, PipelineRef[]>()
+  const pipelineRichness = new Map<string, number>()
+
+  for (const p of (pipelines || [])) {
+    const ref: PipelineRef = { id: p.id, company: p.company, role: p.role, stage: p.stage }
+    pipelinesById.set(p.id, ref)
+
+    if (p.company) {
+      const norm = normalizeCompany(p.company)
+      if (norm && norm !== "unknown") {
+        const list = pipelinesByCompany.get(norm) || []
+        list.push(ref)
+        pipelinesByCompany.set(norm, list)
+      }
+    }
+
+    if (p.prep_json) {
+      pipelineRichness.set(p.id, prepRichnessScore(p.prep_json))
+    }
+  }
+
+  return {
+    dismissedThreads,
+    processedMessages,
+    ghostedMessages,
+    pipelineThreads,
+    pipelinesByCompany,
+    pipelinesById,
+    pipelineRichness,
+  }
+}
+
+// ============================================================
 // GHOST LOG — internal debug only, never shown to users
 // ============================================================
-async function createGhostLog(params: {
-  userEmail: string
-  gmailMessageId: string
-  threadId?: string
-  reason: "hard_junk_reject" | "router_no_match" | "llm_non_recruiting" | "dismissed_thread"
-  payload: any
-}) {
-  if (!supabase) return
+async function ghostLog(
+  signal: EmailSignal,
+  reason: string,
+  supabase: any,
+  payload?: any
+) {
   try {
     await supabase.from("ghost_logs").insert({
-      user_email: params.userEmail,
-      gmail_message_id: params.gmailMessageId,
-      thread_id: params.threadId ?? null,
-      reason: params.reason,
-      payload: params.payload,
+      user_email: signal.userEmail,
+      gmail_message_id: signal.gmailMessageId,
+      thread_id: signal.threadId ?? null,
+      reason,
+      payload: payload ?? { subject: signal.subject, from: signal.from },
     })
   } catch (err) {
     console.error("[GHOST_LOG] Insert failed:", err)
@@ -63,61 +161,23 @@ async function createGhostLog(params: {
 }
 
 // ============================================================
-// DETECTION LOG — observable audit trail
+// APPEND PIPELINE MESSAGE — idempotent via upsert
+// NOTE: Does NOT write gmail_id — legacy column, deprecated
 // ============================================================
-async function createDetectionLog(params: {
-  userEmail: string
-  gmailMessageId: string
-  threadId: string
-  gate: "THREAD_INHERITANCE" | "LLM_CLASSIFIED"
-  outcome: string
-  routerReason?: string | null
-  routerScore?: number | null
-  llmConfidence?: number | null
-  llmModel?: string
-  llmResponse?: any
-}) {
-  if (!supabase) return
-  try {
-    await supabase.from("email_processing_log").insert({
-      user_email: params.userEmail,
-      gmail_thread_id: params.threadId,
-      gmail_message_id: params.gmailMessageId,
-      gate: params.gate,
-      outcome: params.outcome,
-      router_reason: params.routerReason ?? null,
-      router_score: params.routerScore ?? null,
-      llm_called: true,
-      llm_confidence: params.llmConfidence ?? null,
-      llm_model: params.llmModel ?? null,
-      llm_response: params.llmResponse ?? null,
-      detected: params.outcome.startsWith("accepted"),
-      action_taken: params.outcome,
-      rejection_reason: params.outcome.startsWith("rejected") ? params.outcome : null,
-    })
-  } catch (err) {
-    console.error("[DETECTION_LOG] Insert failed:", err)
-  }
-}
-
-// ============================================================
-// APPEND MESSAGE TO PIPELINE (idempotent via upsert)
-// ============================================================
-export async function appendPipelineMessage(
-  pipelineId: string,
+async function appendPipelineMessage(
   signal: EmailSignal,
-  llm: RecruitingAnalysisResult
+  pipelineId: string,
+  supabase: any,
+  llmResult?: RecruitingAnalysisResult
 ) {
-  if (!supabase) return
-  await supabase
+  const { error } = await supabase
     .from("emails")
     .upsert(
       {
-        user_email: signal.userEmail,
         pipeline_id: pipelineId,
-        gmail_id: signal.gmailMessageId,
-        gmail_thread_id: signal.threadId,
+        user_email: signal.userEmail,
         gmail_message_id: signal.gmailMessageId,
+        gmail_thread_id: signal.threadId,
         subject: signal.subject,
         snippet: signal.snippet,
         from_name: signal.fromName,
@@ -125,32 +185,96 @@ export async function appendPipelineMessage(
         body_text: signal.bodyText,
         received_at: signal.receivedAt,
         is_recruiting: true,
-        message_type: llm.message_type,
-        llm_confidence: llm.confidence,
-        llm_summary: llm.summary,
+        message_type: llmResult?.message_type ?? null,
+        llm_confidence: llmResult?.confidence ?? null,
+        llm_summary: llmResult?.summary ?? null,
       },
       { onConflict: "gmail_message_id" }
     )
-    .then(({ error }) => {
-      if (error) console.error("[APPEND_MSG] Failed:", error.message)
-    })
+  if (error) console.error("[APPEND_MSG] Failed:", error.message)
 }
 
 // ============================================================
-// APPLY STAGE DELTA — regression-safe stage advancement
+// APPEND ORPHAN EMAIL — persists recruiting email with pipeline_id=null
+// Enables retroactive linking when a future email on the same thread
+// provides a real company name
 // ============================================================
-export async function applyStageDelta(
-  pipelineId: string,
-  userEmail: string,
-  llm: RecruitingAnalysisResult,
-  gmailMessageId: string
+async function appendOrphanEmail(
+  signal: EmailSignal,
+  supabase: any,
+  llmResult: RecruitingAnalysisResult
 ) {
-  if (!supabase || llm.stage_delta === "none") return
+  const { error } = await supabase
+    .from("emails")
+    .upsert(
+      {
+        pipeline_id: null,
+        user_email: signal.userEmail,
+        gmail_message_id: signal.gmailMessageId,
+        gmail_thread_id: signal.threadId,
+        subject: signal.subject,
+        snippet: signal.snippet,
+        from_name: signal.fromName,
+        from_email: signal.fromEmail,
+        body_text: signal.bodyText,
+        received_at: signal.receivedAt,
+        is_recruiting: true,
+        message_type: llmResult.message_type,
+        llm_confidence: llmResult.confidence,
+        llm_summary: llmResult.summary,
+      },
+      { onConflict: "gmail_message_id" }
+    )
+  if (error) console.error("[ORPHAN_EMAIL] Failed:", error.message)
+}
 
-  const newUiStage = STAGE_DELTA_TO_UI[llm.stage_delta]
-  if (!newUiStage) return
+// ============================================================
+// LINK THREAD — associate Gmail thread with pipeline in pipeline_threads
+// ============================================================
+async function linkThread(
+  userEmail: string,
+  threadId: string,
+  pipelineId: string,
+  supabase: any
+) {
+  const { error } = await supabase
+    .from("pipeline_threads")
+    .upsert(
+      { user_email: userEmail, gmail_thread_id: threadId, pipeline_id: pipelineId },
+      { onConflict: "user_email,gmail_thread_id" }
+    )
+  if (error) console.error("[LINK_THREAD] Failed:", error.message)
+}
 
-  // Fetch current stage to check for regression
+// ============================================================
+// TOUCH PIPELINE LAST-EMAIL METADATA
+// ============================================================
+async function touchPipelineLastEmail(pipelineId: string, signal: EmailSignal, supabase: any) {
+  await supabase
+    .from("pipelines")
+    .update({
+      last_email_at: signal.receivedAt,
+      last_email_subject: signal.subject,
+      last_email_snippet: signal.snippet,
+      last_email_from_email: signal.fromEmail,
+      last_email_from_name: signal.fromName,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", pipelineId)
+}
+
+// ============================================================
+// APPLY STAGE DELTA — regression-safe, returns whether stage advanced
+// ============================================================
+async function applyStageDelta(
+  pipelineId: string,
+  stageDelta: string,
+  summary: string,
+  supabase: any
+): Promise<boolean> {
+  const newUiStage = STAGE_DELTA_TO_UI[stageDelta]
+  if (!newUiStage) return false
+
   const { data: pipeline } = await supabase
     .from("pipelines")
     .select("stage")
@@ -161,16 +285,13 @@ export async function applyStageDelta(
   const currentOrder = STAGE_ORDER[currentStage] ?? 0
   const newOrder = STAGE_ORDER[newUiStage] ?? 0
 
-  // Only REJECTED can override any stage; otherwise block regression
+  // Block regression unless moving to REJECTED
   if (newUiStage !== "REJECTED" && newOrder < currentOrder) {
     console.log(`[STAGE] Regression blocked: ${currentStage} → ${newUiStage}`)
-    return
+    return false
   }
 
-  if (newUiStage === currentStage) {
-    console.log(`[STAGE] No change: already at ${currentStage}`)
-    return
-  }
+  if (newUiStage === currentStage) return false
 
   console.log(`[STAGE] ${currentStage} → ${newUiStage} for pipeline ${pipelineId}`)
 
@@ -178,382 +299,418 @@ export async function applyStageDelta(
     .from("pipelines")
     .update({
       stage: newUiStage,
-      stage_detail: llm.summary || "",
+      stage_detail: summary || "",
       updated_at: new Date().toISOString(),
     })
     .eq("id", pipelineId)
 
-  // Append stage history row
   await supabase
     .from("stage_history")
     .insert({
-      user_email: userEmail,
       pipeline_id: pipelineId,
       from_stage: currentStage,
       to_stage: newUiStage,
-      reason: `LLM inferred from message ${gmailMessageId}`,
-      gmail_message_id: gmailMessageId,
-      llm_confidence: llm.confidence,
+      reason: summary || "Stage advanced by V3 processor",
     })
-    .then(({ error }) => {
+    .then(({ error }: any) => {
       if (error) console.error("[STAGE_HISTORY] Failed:", error.message)
     })
+
+  return true
 }
 
 // ============================================================
-// FIND OR CREATE PIPELINE
-// Priority: thread ID → company name exact → company name fuzzy → create new
+// INHERITED THREAD STAGE HEURISTIC
+// For emails on known threads — no LLM call.
+// Critical: checks sender direction — user's own replies never advance stage.
 // ============================================================
-export async function findOrCreatePipeline(
+function containsAny(text: string, phrases: string[]): boolean {
+  return phrases.some((p) => containsWholePhrase(text, p))
+}
+
+function inferStageFromSubject(
+  signal: Pick<EmailSignal, "subject" | "snippet" | "fromEmail" | "userEmail">
+): string {
+  // User's own emails never advance stage
+  if (signal.fromEmail.toLowerCase() === signal.userEmail.toLowerCase()) return "none"
+
+  const text = normalize(`${signal.subject || ""} ${signal.snippet || ""}`)
+
+  if (containsAny(text, [
+    "offer letter", "verbal offer", "compensation package",
+    "equity package", "congratulations", "pleased to offer",
+  ])) return "offer"
+
+  if (containsAny(text, [
+    "unfortunately", "not moving forward",
+    "decided to move forward with other",
+    "regret to inform", "not selected", "position has been filled",
+  ])) return "rejected"
+
+  if (containsAny(text, [
+    "onsite", "panel interview", "final round",
+    "virtual onsite", "full loop", "super day",
+  ])) return "onsite"
+
+  if (containsAny(text, [
+    "hiring manager", "meet with the manager",
+    "manager interview", "meet the team lead",
+  ])) return "hm_screen"
+
+  if (containsAny(text, [
+    "take home", "technical assessment", "coding challenge",
+    "assignment", "technical interview", "system design",
+  ])) return "technical"
+
+  if (containsAny(text, [
+    "phone screen", "recruiter screen", "screening call",
+    "initial call", "intro call",
+  ])) return "screen"
+
+  return "none"
+}
+
+// ============================================================
+// COMPANY QUALITY GUARD
+// ============================================================
+const GARBAGE_COMPANY_NAMES = new Set([
+  "unknown", "n/a", "na", "none", "tbd",
+  "hr", "hr team", "hr department",
+  "talent", "talent team", "talent acquisition",
+  "recruiting", "recruiting team",
+  "hiring", "hiring team",
+  "people", "people team", "people ops",
+  "greenhouse", "lever", "ashby", "workday",
+  "goodtime", "hirevue", "icims", "smartrecruiters",
+  "jobvite", "taleo",
+])
+
+function isGarbageCompany(name: string | null | undefined): boolean {
+  if (!name) return true
+  const normalized = normalizeCompany(name)
+  if (normalized.length < 3) return true
+  return GARBAGE_COMPANY_NAMES.has(normalized)
+}
+
+// ============================================================
+// UPDATE IN-MEMORY MAPS AFTER PIPELINE ATTACH
+// Handles new pipelines, existing attaches, AND company upgrades.
+// Without handling upgrades, null→"Stripe" stays stale and causes batch duplicates.
+// ============================================================
+function updateMapsAfterPipelineAttach(
+  pipeline: PipelineRef,
   signal: EmailSignal,
-  llm: RecruitingAnalysisResult
-): Promise<{ id: string; isNew: boolean } | { error: string }> {
-  if (!supabase) return { error: "Supabase client not initialised" }
+  maps: SyncMaps,
+  previousCompany?: string | null
+) {
+  maps.pipelinesById.set(pipeline.id, pipeline)
+  maps.pipelineThreads.set(signal.threadId, pipeline.id)
+  maps.processedMessages.set(signal.gmailMessageId, pipeline.id)
 
-  const companyName = llm.company_name || "Unknown"
+  const prev = normalizeCompany(previousCompany || "")
+  const next = normalizeCompany(pipeline.company || "")
 
-  // Load all user pipelines once for matching
-  const { data: allPipelines } = await supabase
-    .from("pipelines")
-    .select("id, company, gmail_thread_id")
-    .eq("user_email", signal.userEmail)
-
-  // 1) Exact thread ID match
-  if (signal.threadId) {
-    const byThread = (allPipelines || []).find(
-      (p: any) => p.gmail_thread_id === signal.threadId
-    )
-    if (byThread) return { id: byThread.id, isNew: false }
+  // Remove from old company bucket if company changed
+  if (prev && prev !== "unknown" && prev !== next) {
+    const prevList = maps.pipelinesByCompany.get(prev) || []
+    maps.pipelinesByCompany.set(prev, prevList.filter((p) => p.id !== pipeline.id))
   }
 
-  // 2) Company name match — suffix-stripped + Levenshtein dedup
-  //    companiesMatch handles: "Google" == "Google Inc", "OpenAI" == "Open AI", etc.
-  if (companyName && companyName !== "Unknown") {
-    const matched = (allPipelines || []).find(
-      (p: any) => companiesMatch(p.company, companyName)
-    )
-    if (matched) {
-      if (!matched.gmail_thread_id && signal.threadId) {
-        await supabase
-          .from("pipelines")
-          .update({ gmail_thread_id: signal.threadId, updated_at: new Date().toISOString() })
-          .eq("id", matched.id)
+  // Add to new company bucket
+  if (next && next !== "unknown") {
+    const nextList = maps.pipelinesByCompany.get(next) || []
+    if (!nextList.some((p) => p.id === pipeline.id)) {
+      maps.pipelinesByCompany.set(next, [...nextList, pipeline])
+    }
+  }
+}
+
+// ============================================================
+// FIND OR CREATE PIPELINE — using preloaded maps (no full-table scan)
+// ============================================================
+async function findOrCreatePipeline(
+  signal: EmailSignal,
+  llmResult: RecruitingAnalysisResult,
+  opts: { maps: SyncMaps; supabase: any }
+): Promise<{ pipeline: PipelineRef; isNew: boolean }> {
+  // 1. Thread match via maps
+  const threadPipelineId = opts.maps.pipelineThreads.get(signal.threadId)
+  if (threadPipelineId) {
+    const existing = opts.maps.pipelinesById.get(threadPipelineId)
+    if (existing) return { pipeline: existing, isNew: false }
+  }
+
+  // 2. Company match via maps (fuzzy companiesMatch)
+  if (llmResult.company_name && !isGarbageCompany(llmResult.company_name)) {
+    for (const [, pipelineRefs] of opts.maps.pipelinesByCompany) {
+      if (pipelineRefs.length > 0 && companiesMatch(llmResult.company_name, pipelineRefs[0].company || "")) {
+        return { pipeline: pipelineRefs[0], isNew: false }
       }
-      console.log(`[PIPELINE] Company match: "${companyName}" → "${matched.company}" (id=${matched.id})`)
-      return { id: matched.id, isNew: false }
     }
   }
 
-  // 4) Create new pipeline
-  const uiStage =
-    llm.stage_delta !== "none"
-      ? STAGE_DELTA_TO_UI[llm.stage_delta] ?? "SCREENING"
-      : STAGE_DELTA_TO_UI[llm.current_stage] ?? "SCREENING"
+  // 3. Create new pipeline
+  const stage =
+    STAGE_DELTA_TO_UI[llmResult.stage_delta] ??
+    STAGE_DELTA_TO_UI[llmResult.current_stage] ??
+    "SCREENING"
 
-  const { data: newP, error } = await supabase
+  const { data, error } = await opts.supabase
     .from("pipelines")
     .insert({
       user_email: signal.userEmail,
-      company: companyName,
-      role: llm.job_title ?? "Unknown",
-      stage: uiStage,
-      stage_detail: llm.summary || "",
-      status: "WAITING",
-      gmail_thread_id: signal.threadId || null,
+      company: llmResult.company_name,
+      role: llmResult.job_title,
+      stage,
+      stage_detail: llmResult.summary,
       last_email_at: signal.receivedAt,
       last_email_subject: signal.subject,
       last_email_snippet: signal.snippet,
       last_email_from_email: signal.fromEmail,
       last_email_from_name: signal.fromName,
-      updated_at: new Date().toISOString(),
     })
-    .select("id")
+    .select("id, company, role, stage")
     .single()
 
-  if (error || !newP) {
-    // 23505 = unique_violation — another email from the same thread beat us to the insert.
-    // Fetch the already-existing pipeline and return it as non-new rather than failing.
-    if (error?.code === "23505") {
-      const { data: existing } = await supabase
-        .from("pipelines")
-        .select("id")
-        .eq("user_email", signal.userEmail)
-        .eq("gmail_thread_id", signal.threadId)
-        .maybeSingle()
-      if (existing) {
-        console.log(`[PIPELINE] Duplicate key resolved — reusing id=${existing.id}`)
-        return { id: existing.id, isNew: false }
-      }
-    }
-    const msg = error?.message || "Unknown DB error — insert returned no row"
-    console.error("[PIPELINE] Create failed:", msg)
-    return { error: msg }
+  // Race condition recovery
+  if (error?.code === "23505") {
+    const { data: existing } = await opts.supabase
+      .from("pipelines")
+      .select("id, company, role, stage")
+      .eq("user_email", signal.userEmail)
+      .eq("company", llmResult.company_name)
+      .single()
+    if (existing) return { pipeline: existing as PipelineRef, isNew: false }
   }
 
-  console.log(`[PIPELINE] Created: "${companyName}" (${uiStage}) id=${newP.id}`)
-  return { id: newP.id, isNew: true }
+  if (error) throw new Error(error.message)
+  console.log(`[PIPELINE] Created: "${llmResult.company_name}" (${stage}) id=${data.id}`)
+  return { pipeline: data as PipelineRef, isNew: true }
 }
 
 // ============================================================
-// UPDATE PIPELINE LAST-EMAIL METADATA
-// ============================================================
-async function touchPipelineLastEmail(pipelineId: string, signal: EmailSignal) {
-  if (!supabase) return
-  await supabase
-    .from("pipelines")
-    .update({
-      last_email_at: signal.receivedAt,
-      last_email_subject: signal.subject,
-      last_email_snippet: signal.snippet,
-      last_email_from_email: signal.fromEmail,
-      last_email_from_name: signal.fromName,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", pipelineId)
-}
-
-// ============================================================
-// MAIN SIGNAL PROCESSOR
-// Returns ProcessResult telling the caller whether to run
-// expensive prep generation (gpt-4o).
+// MAIN SIGNAL PROCESSOR — V3 six-layer flow
 // ============================================================
 export async function processEmailSignal(
   signal: EmailSignal,
-  openai: OpenAI
+  opts: {
+    miniCallsRemaining: number
+    maps: SyncMaps
+    openai: OpenAI
+    supabase: any
+  }
 ): Promise<ProcessResult> {
-  const rejected = (
-    action: ProcessResult["action"],
-    llmResult: RecruitingAnalysisResult | null = null,
-    errorDetail?: string,
-    routerReason?: string
-  ): ProcessResult => ({
+  const defaults: ProcessResult = {
     accepted: false,
     pipelineId: null,
     isNewPipeline: false,
-    action,
-    llmResult,
+    llmResult: null,
+    llmCalled: false,
+    miniCallsUsed: 0,
+    stageAdvanced: false,
     companyName: null,
     jobTitle: null,
-    errorDetail,
-    routerReason,
-  })
-
-  if (!supabase) return rejected("error")
-
-  // ─── PRE-CHECK: DISMISSED THREAD ───────────────────────────
-  // If the user explicitly deleted this pipeline conversation,
-  // never re-process it. A NEW thread from the same company has a
-  // different threadId and will pass through normally.
-  if (signal.threadId) {
-    const { data: dismissed } = await supabase
-      .from("dismissed_threads")
-      .select("id")
-      .eq("user_email", signal.userEmail)
-      .eq("gmail_thread_id", signal.threadId)
-      .maybeSingle()
-
-    if (dismissed) {
-      await createGhostLog({
-        userEmail: signal.userEmail,
-        gmailMessageId: signal.gmailMessageId,
-        threadId: signal.threadId,
-        reason: "dismissed_thread",
-        payload: { subject: signal.subject, from: signal.from },
-      })
-      return rejected("dismissed")
-    }
+    action: "error",
   }
 
-  // ─── 0) THREAD INHERITANCE ──────────────────────────────────
-  // Two lookup paths so multi-thread same-company sequences (recruiter on T1,
-  // hiring manager on T2) always attach to the existing pipeline.
-  //
-  // Path A: pipeline.gmail_thread_id matches directly (fastest).
-  // Path B: a previously appended email in the emails table carries this
-  //         thread_id — covers new threads from the same company that were
-  //         already merged via company-name matching.
-  let inheritedPipeline: any = null
+  // ═══════════════════════════════════════════
+  // Layer A: Hard Reject (deterministic, no DB writes except ghost_log)
+  // ═══════════════════════════════════════════
 
-  if (signal.threadId) {
-    // Path A — direct thread match on pipelines table
-    const { data: byThread } = await supabase
-      .from("pipelines")
-      .select("id, company, role, stage, gmail_thread_id")
-      .eq("user_email", signal.userEmail)
-      .eq("gmail_thread_id", signal.threadId)
-      .maybeSingle()
-    inheritedPipeline = byThread
-
-    // Path B — thread appears in emails table (different thread, same pipeline)
-    if (!inheritedPipeline) {
-      const { data: emailRow } = await supabase
-        .from("emails")
-        .select("pipeline_id")
-        .eq("user_email", signal.userEmail)
-        .eq("gmail_thread_id", signal.threadId)
-        .not("pipeline_id", "is", null)
-        .limit(1)
-        .maybeSingle()
-
-      if (emailRow?.pipeline_id) {
-        const { data: byEmail } = await supabase
-          .from("pipelines")
-          .select("id, company, role, stage, gmail_thread_id")
-          .eq("id", emailRow.pipeline_id)
-          .maybeSingle()
-        if (byEmail) {
-          inheritedPipeline = byEmail
-          console.log(`[INHERIT] thread=${signal.threadId} → pipeline=${byEmail.id} (via emails table)`)
-        }
-      }
-    }
+  // A1: Dismissed thread
+  if (opts.maps.dismissedThreads.has(signal.threadId)) {
+    await ghostLog(signal, "dismissed_thread", opts.supabase)
+    return { ...defaults, action: "dismissed" }
   }
 
-  if (inheritedPipeline) {
-    console.log(`[INHERIT] thread=${signal.threadId} → pipeline=${inheritedPipeline.id}`)
-
-    const llm = await analyzeRecruitingEmailWithLLM(
-      signal,
-      {
-        knownThread: true,
-        existingCompanyName: inheritedPipeline.company,
-        existingJobTitle: inheritedPipeline.role,
-      },
-      openai
-    )
-
-    if (llm) {
-      await appendPipelineMessage(inheritedPipeline.id, signal, llm)
-
-      if (llm.is_recruiting_thread_related && llm.stage_delta !== "none") {
-        await applyStageDelta(inheritedPipeline.id, signal.userEmail, llm, signal.gmailMessageId)
-      }
-    }
-
-    await touchPipelineLastEmail(inheritedPipeline.id, signal)
-
-    await createDetectionLog({
-      userEmail: signal.userEmail,
-      gmailMessageId: signal.gmailMessageId,
-      threadId: signal.threadId,
-      gate: "THREAD_INHERITANCE",
-      outcome: "accepted_known_thread",
-      llmConfidence: llm?.confidence ?? null,
-      llmModel: "gpt-4o-mini",
-      llmResponse: llm,
-    })
-
+  // A2: Already processed (positive decision — email row already in DB)
+  if (opts.maps.processedMessages.has(signal.gmailMessageId)) {
     return {
-      accepted: true,
-      pipelineId: inheritedPipeline.id,
-      isNewPipeline: false,
-      action: "thread_inheritance",
-      llmResult: llm,
-      companyName: inheritedPipeline.company,
-      jobTitle: inheritedPipeline.role,
+      ...defaults,
+      action: "already_processed",
+      pipelineId: opts.maps.processedMessages.get(signal.gmailMessageId) || null,
     }
   }
 
-  // ─── 1) HARD JUNK SIEVE ────────────────────────────────────
-  if (isHardJunk(signal)) {
-    console.log(`[JUNK] "${signal.subject.slice(0, 50)}"`)
-    await createGhostLog({
-      userEmail: signal.userEmail,
-      gmailMessageId: signal.gmailMessageId,
-      threadId: signal.threadId,
-      reason: "hard_junk_reject",
-      payload: { subject: signal.subject, from: signal.from, snippet: signal.snippet },
-    })
-    return rejected("hard_junk")
+  // A3: Previously rejected (negative decision — ghost_log exists)
+  if (opts.maps.ghostedMessages.has(signal.gmailMessageId)) {
+    return { ...defaults, action: "previously_rejected" }
   }
 
-  // ─── 2) WARM-LEAD ROUTER ───────────────────────────────────
-  const router = getRouterDecision(signal)
-
-  if (!router.routeToLLM) {
-    console.log(`[ROUTER] No signal (score=${router.score}): "${signal.subject.slice(0, 50)}"`)
-    await createGhostLog({
-      userEmail: signal.userEmail,
-      gmailMessageId: signal.gmailMessageId,
-      threadId: signal.threadId,
-      reason: "router_no_match",
-      payload: { subject: signal.subject, from: signal.from, router },
-    })
-    return rejected("no_signal", null, undefined, `score=${router.score}`)
+  // A4: Blocked sender
+  if (isBlockedSender(signal.from)) {
+    await ghostLog(signal, "hard_junk_reject", opts.supabase)
+    opts.maps.ghostedMessages.add(signal.gmailMessageId)
+    return { ...defaults, action: "hard_junk" }
   }
 
-  console.log(`[ROUTER] LLM ← reason=${router.reason} score=${router.score}: "${signal.subject.slice(0, 50)}"`)
-
-  // ─── 3) LLM CLASSIFICATION ─────────────────────────────────
-  const llm = await analyzeRecruitingEmailWithLLM(
-    signal,
-    { knownThread: false },
-    openai
-  )
-
-  if (!llm || !llm.is_recruiting_thread_related) {
-    console.log(`[LLM] Non-recruiting: "${signal.subject.slice(0, 50)}"`)
-    await createGhostLog({
-      userEmail: signal.userEmail,
-      gmailMessageId: signal.gmailMessageId,
-      threadId: signal.threadId,
-      reason: "llm_non_recruiting",
-      payload: { subject: signal.subject, from: signal.from, router, llm },
-    })
-    await createDetectionLog({
-      userEmail: signal.userEmail,
-      gmailMessageId: signal.gmailMessageId,
-      threadId: signal.threadId || "",
-      gate: "LLM_CLASSIFIED",
-      outcome: "rejected_non_recruiting",
-      routerReason: router.reason,
-      routerScore: router.score,
-      llmConfidence: llm?.confidence ?? null,
-      llmModel: "gpt-4o-mini",
-      llmResponse: llm,
-    })
-    return rejected("llm_rejected", llm, undefined, router.reason)
+  // A5: Hard junk phrases (subject + snippet only — never body)
+  if (isHardJunk(signal.subject, signal.snippet)) {
+    await ghostLog(signal, "hard_junk_reject", opts.supabase)
+    opts.maps.ghostedMessages.add(signal.gmailMessageId)
+    return { ...defaults, action: "hard_junk" }
   }
 
-  // ─── 4) RECRUITING — CREATE/ATTACH PIPELINE ────────────────
-  // No advances_pipeline gate. is_recruiting_thread_related=true is enough.
-  console.log(`[LLM] Recruiting! company="${llm.company_name}" stage=${llm.current_stage} delta=${llm.stage_delta}`)
+  // ═══════════════════════════════════════════
+  // Layer B: Thread Inheritance (maps lookup, no LLM)
+  // ═══════════════════════════════════════════
 
-  const pipelineResult = await findOrCreatePipeline(signal, llm)
+  const inheritedPipelineId = opts.maps.pipelineThreads.get(signal.threadId)
+  if (inheritedPipelineId) {
+    const pipeline = opts.maps.pipelinesById.get(inheritedPipelineId)
+    if (pipeline) {
+      console.log(`[INHERIT] thread=${signal.threadId} → pipeline=${inheritedPipelineId}`)
 
-  if ("error" in pipelineResult) {
-    console.error("[PIPELINE] Could not create/find pipeline:", pipelineResult.error)
-    return rejected("error", llm, pipelineResult.error)
+      await appendPipelineMessage(signal, inheritedPipelineId, opts.supabase)
+
+      // Lightweight stage heuristic — checks sender direction
+      const stageDelta = inferStageFromSubject(signal)
+      let stageAdvanced = false
+      if (stageDelta !== "none") {
+        stageAdvanced = await applyStageDelta(inheritedPipelineId, stageDelta, "", opts.supabase)
+      }
+
+      await touchPipelineLastEmail(inheritedPipelineId, signal, opts.supabase)
+      opts.maps.processedMessages.set(signal.gmailMessageId, inheritedPipelineId)
+
+      return {
+        ...defaults,
+        accepted: true,
+        action: "thread_inheritance",
+        pipelineId: inheritedPipelineId,
+        stageAdvanced,
+        companyName: pipeline.company,
+        jobTitle: pipeline.role,
+      }
+    }
   }
 
-  await appendPipelineMessage(pipelineResult.id, signal, llm)
+  // ═══════════════════════════════════════════
+  // Layer C: Router (deterministic, subject+snippet only)
+  // ═══════════════════════════════════════════
 
-  if (llm.stage_delta !== "none") {
-    await applyStageDelta(pipelineResult.id, signal.userEmail, llm, signal.gmailMessageId)
-  }
-
-  await touchPipelineLastEmail(pipelineResult.id, signal)
-
-  await createDetectionLog({
-    userEmail: signal.userEmail,
-    gmailMessageId: signal.gmailMessageId,
-    threadId: signal.threadId || "",
-    gate: "LLM_CLASSIFIED",
-    outcome: "accepted_new_or_attached",
-    routerReason: router.reason,
-    routerScore: router.score,
-    llmConfidence: llm.confidence,
-    llmModel: "gpt-4o-mini",
-    llmResponse: llm,
+  const routerDecision = getRouterDecision({
+    subject: signal.subject,
+    snippet: signal.snippet,
+    fromEmail: signal.fromEmail,
   })
+
+  if (!routerDecision.routeToLLM) {
+    await ghostLog(signal, "router_no_match", opts.supabase, { router: routerDecision })
+    opts.maps.ghostedMessages.add(signal.gmailMessageId)
+    return { ...defaults, action: "no_signal", routerReason: routerDecision.reason }
+  }
+
+  // ═══════════════════════════════════════════
+  // Layer D: Classifier (GPT-4o-mini, budget-gated)
+  // Budget enforcement lives here — not in the sync outer loop
+  // ═══════════════════════════════════════════
+
+  if (opts.miniCallsRemaining <= 0) {
+    return { ...defaults, action: "budget_exceeded" }
+  }
+
+  let llmResult: RecruitingAnalysisResult
+  try {
+    llmResult = await analyzeRecruitingEmailWithLLM(signal, { knownThread: false }, opts.openai)
+  } catch (err: any) {
+    console.error("[CLASSIFIER] Error:", err.message)
+    await ghostLog(signal, "classifier_error", opts.supabase, { error: err.message })
+    return { ...defaults, action: "error", llmCalled: true, miniCallsUsed: 1, errorDetail: err.message }
+  }
+
+  if (!llmResult.is_recruiting_thread_related) {
+    console.log(`[LLM] Non-recruiting: "${signal.subject.slice(0, 50)}"`)
+    await ghostLog(signal, "llm_non_recruiting", opts.supabase, { llm: llmResult })
+    opts.maps.ghostedMessages.add(signal.gmailMessageId)
+    return { ...defaults, action: "llm_rejected", llmCalled: true, miniCallsUsed: 1, llmResult }
+  }
+
+  console.log(`[LLM] Recruiting! company="${llmResult.company_name}" stage=${llmResult.current_stage} delta=${llmResult.stage_delta}`)
+
+  // ═══════════════════════════════════════════
+  // Layer E: Pipeline Attach/Create
+  // ═══════════════════════════════════════════
+
+  // E1: Company quality guard
+  if (isGarbageCompany(llmResult.company_name)) {
+    // Check if thread is already linked in maps (no per-message DB call)
+    const existingPipelineId = opts.maps.pipelineThreads.get(signal.threadId)
+    if (existingPipelineId) {
+      // Thread linked to pipeline but missed Layer B — handle gracefully
+      const existingPipeline = opts.maps.pipelinesById.get(existingPipelineId)
+      await appendPipelineMessage(signal, existingPipelineId, opts.supabase, llmResult)
+      await touchPipelineLastEmail(existingPipelineId, signal, opts.supabase)
+      opts.maps.processedMessages.set(signal.gmailMessageId, existingPipelineId)
+      return {
+        ...defaults,
+        accepted: true,
+        action: "updated_existing",
+        llmCalled: true,
+        miniCallsUsed: 1,
+        pipelineId: existingPipelineId,
+        companyName: existingPipeline?.company ?? null,
+        jobTitle: llmResult.job_title,
+        llmResult,
+        isNewPipeline: false,
+      }
+    }
+
+    // No pipeline match + garbage company → persist orphan email for retroactive linking
+    await appendOrphanEmail(signal, opts.supabase, llmResult)
+    await ghostLog(signal, "low_confidence_company", opts.supabase, { llm: llmResult })
+    opts.maps.processedMessages.set(signal.gmailMessageId, null)
+    return { ...defaults, action: "low_confidence_company", llmCalled: true, miniCallsUsed: 1, llmResult }
+  }
+
+  // E2: Find or create pipeline (using preloaded maps, NOT full-table scan)
+  let pipeline: PipelineRef
+  let isNew: boolean
+  try {
+    const result = await findOrCreatePipeline(signal, llmResult, opts)
+    pipeline = result.pipeline
+    isNew = result.isNew
+  } catch (err: any) {
+    console.error("[PIPELINE] Create/find failed:", err.message)
+    return { ...defaults, action: "error", llmCalled: true, miniCallsUsed: 1, errorDetail: err.message }
+  }
+
+  // E3: Link thread → pipeline_threads
+  await linkThread(signal.userEmail, signal.threadId, pipeline.id, opts.supabase)
+
+  // E4: Mutate in-memory maps immediately (prevents batch duplicates)
+  const previousCompany = isNew ? null : opts.maps.pipelinesById.get(pipeline.id)?.company
+  updateMapsAfterPipelineAttach(pipeline, signal, opts.maps, previousCompany)
+
+  // ═══ Post-attach operations ═══
+
+  await appendPipelineMessage(signal, pipeline.id, opts.supabase, llmResult)
+
+  let stageAdvanced = false
+  if (llmResult.stage_delta !== "none") {
+    stageAdvanced = await applyStageDelta(pipeline.id, llmResult.stage_delta, llmResult.summary, opts.supabase)
+  }
+
+  await touchPipelineLastEmail(pipeline.id, signal, opts.supabase)
+
+  // Retroactive orphan linking: attach any prior unlinked emails on this thread
+  await opts.supabase
+    .from("emails")
+    .update({ pipeline_id: pipeline.id })
+    .eq("gmail_thread_id", signal.threadId)
+    .eq("user_email", signal.userEmail)
+    .is("pipeline_id", null)
 
   return {
     accepted: true,
-    pipelineId: pipelineResult.id,
-    isNewPipeline: pipelineResult.isNew,
-    action: pipelineResult.isNew ? "new_recruiting" : "updated_existing",
-    llmResult: llm,
-    companyName: llm.company_name,
-    jobTitle: llm.job_title,
+    action: isNew ? "new_recruiting" : "updated_existing",
+    llmCalled: true,
+    miniCallsUsed: 1,
+    pipelineId: pipeline.id,
+    isNewPipeline: isNew,
+    stageAdvanced,
+    companyName: llmResult.company_name,
+    jobTitle: llmResult.job_title,
+    llmResult,
   }
 }

@@ -1,10 +1,11 @@
 // ============================================================
-// Guildy Gmail Detection V2 — Domain Types
+// Guildy Gmail Detection V3 — Domain Types
 // ============================================================
 
 export type GuildyStage =
   | "applied"
   | "screen"
+  | "hm_screen"
   | "technical"
   | "onsite"
   | "offer"
@@ -16,6 +17,7 @@ export type StageDelta =
   | "none"
   | "applied"
   | "screen"
+  | "hm_screen"
   | "technical"
   | "onsite"
   | "offer"
@@ -78,10 +80,36 @@ export interface ProcessResult {
     | "no_signal"
     | "llm_rejected"
     | "dismissed"
+    | "budget_exceeded"
+    | "already_processed"
+    | "previously_rejected"
+    | "low_confidence_company"
     | "error"
   llmResult: RecruitingAnalysisResult | null
+  llmCalled: boolean
+  miniCallsUsed: number   // 0 or 1
+  stageAdvanced: boolean
   companyName: string | null
   jobTitle: string | null
-  errorDetail?: string   // actual DB/network error message when action="error"
-  routerReason?: string  // why the router sent/blocked this email
+  errorDetail?: string
+  routerReason?: string
+}
+
+// Pipeline reference stored in preloaded maps
+export interface PipelineRef {
+  id: string
+  company: string | null
+  role: string | null
+  stage: string
+}
+
+// Preloaded maps — built once per sync, passed into every processEmailSignal call
+export interface SyncMaps {
+  processedMessages: Map<string, string | null>    // msgId → pipelineId (null = orphan)
+  ghostedMessages: Set<string>                      // gmail_message_ids from ghost_logs
+  pipelineThreads: Map<string, string>              // threadId → pipelineId
+  pipelinesByCompany: Map<string, PipelineRef[]>    // normalizedCompany → pipeline refs
+  pipelinesById: Map<string, PipelineRef>           // pipelineId → data
+  pipelineRichness: Map<string, number>             // pipelineId → prep richness score
+  dismissedThreads: Set<string>                     // gmail_thread_ids
 }
