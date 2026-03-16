@@ -505,6 +505,43 @@ export async function POST() {
     stats.scanned = allMessages.length
     console.log(`[SYNC] ${allMessages.length} messages from Gmail`)
 
+    // ── Phase B2: Trash scan for known pipeline threads ───────────────────
+    // Users trash rejection emails before sync — without this, pipelines stay
+    // stuck at active stages forever.
+    // Zero LLM cost: matched emails hit thread inheritance and use the
+    // deterministic stage heuristic (inferStageFromSubject).
+    if (maps.pipelineThreads.size > 0) {
+      const trashQuery = isFirstSync
+        ? "in:trash newer_than:6m"
+        : afterUnix
+        ? `in:trash after:${afterUnix}`
+        : "in:trash newer_than:6m"
+
+      const trashMessages: MsgRef[] = []
+      let trashPageToken: string | undefined
+      try {
+        do {
+          const batch = await gmail.users.messages.list({
+            userId: "me", q: trashQuery, maxResults: 100, pageToken: trashPageToken,
+          })
+          for (const m of (batch.data.messages || [])) {
+            if (m.id) trashMessages.push({ id: m.id, threadId: m.threadId || "" })
+          }
+          trashPageToken = batch.data.nextPageToken ?? undefined
+        } while (trashPageToken && trashMessages.length < 200)
+
+        // Only keep messages whose threadId belongs to a known pipeline
+        const trashHits = trashMessages.filter(msg => maps.pipelineThreads.has(msg.threadId))
+        if (trashHits.length > 0) {
+          console.log(`[SYNC] Trash scan: ${trashMessages.length} trash messages, ${trashHits.length} hits on known pipelines`)
+          allMessages.push(...trashHits)
+          stats.scanned += trashHits.length
+        }
+      } catch (trashErr: any) {
+        console.warn("[SYNC] Trash scan failed (non-fatal):", trashErr?.message)
+      }
+    }
+
     // ── Phase D: Pre-filter — skip already-known messages ─────────────────
     const toFetch: MsgRef[] = []
     for (const msg of allMessages) {
