@@ -663,6 +663,28 @@ export async function processEmailSignal(
     return { ...defaults, action: "low_confidence_company", llmCalled: true, miniCallsUsed: 1, llmResult }
   }
 
+  // E1.5: Block application_confirmation emails from creating NEW pipelines.
+  // Auto-ACKs ("We received your application") are noise until a recruiter
+  // actually engages. They can still append to an EXISTING pipeline (thread or
+  // company match below), but must not spawn a new one.
+  if (llmResult.message_type === "application_confirmation") {
+    const hasExistingThread = opts.maps.pipelineThreads.has(signal.threadId)
+    let hasExistingCompany = false
+    if (!hasExistingThread && llmResult.company_name && !isGarbageCompany(llmResult.company_name)) {
+      for (const [, refs] of opts.maps.pipelinesByCompany) {
+        if (refs.length > 0 && companiesMatch(llmResult.company_name, refs[0].company || "")) {
+          hasExistingCompany = true
+          break
+        }
+      }
+    }
+    if (!hasExistingThread && !hasExistingCompany) {
+      await ghostLog(signal, "auto_ack_no_pipeline", opts.supabase, { llm: llmResult })
+      opts.maps.ghostedMessages.add(signal.gmailMessageId)
+      return { ...defaults, action: "llm_rejected", llmCalled: true, miniCallsUsed: 1, llmResult }
+    }
+  }
+
   // E2: Find or create pipeline (using preloaded maps, NOT full-table scan)
   let pipeline: PipelineRef
   let isNew: boolean
