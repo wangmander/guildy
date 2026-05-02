@@ -99,7 +99,6 @@ export function AddJobModal({ open, onOpenChange }: Props) {
         body: JSON.stringify(body),
       })
       const data: ExtractResponse = await res.json()
-      console.log("[extract] response", data)
 
       if (data.ok && data.fields) {
         const populatedAny = Boolean(
