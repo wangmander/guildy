@@ -1,6 +1,6 @@
 {
   "project": "guildy",
-  "current_phase": "phase-1-schema-auth-stripe",
+  "current_phase": "phase-2-home-shell",
   "phases": [
     {
       "id": "phase-0-audit",
@@ -11,14 +11,22 @@
       "completed_at": "2026-05-02T03:49:40Z"
     },
     {
-      "id": "phase-1-schema-auth-stripe",
-      "name": "Schema, auth reset, Stripe skeleton",
+      "id": "phase-1-schema-auth",
+      "name": "Schema + auth reset (Stripe deferred)",
+      "status": "complete",
+      "progress": 1.0,
+      "started_at": "2026-05-02T07:00:00Z",
+      "completed_at": "2026-05-02T07:45:00Z"
+    },
+    {
+      "id": "phase-2-home-shell",
+      "name": "Home shell (Kanban + passive table + search)",
       "status": "not_started",
       "progress": 0,
       "started_at": null,
       "completed_at": null
     }
   ],
-  "current_quest": "SQL-dump V1 Supabase schema/data as safety backup, then drop V1 tables and apply the V2 schema (user_profiles, jobs, stage_events, job_context, prep_versions, stage_labels, subscriptions) before touching auth or Stripe.",
-  "last_updated": "2026-05-02T03:49:40Z"
+  "current_quest": "Build /app Home shell: 7-stage Kanban with default labels, passive table with 4 columns (Company, Role Title, Date Added, TC), search input (functionality stubbed). Mobile responsive: Kanban horizontal scrolls, passive table compresses.",
+  "last_updated": "2026-05-02T07:45:00Z"
 }

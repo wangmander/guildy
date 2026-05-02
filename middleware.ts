@@ -1,14 +1,12 @@
-import { withAuth } from "next-auth/middleware"
+import type { NextRequest } from "next/server"
+import { updateSession } from "@/lib/supabase/middleware"
 
-export default withAuth(
-  function middleware() { },
-  {
-    callbacks: {
-      authorized: ({ token }) => !!token,
-    },
-  }
-)
+export async function middleware(request: NextRequest) {
+  return updateSession(request)
+}
 
 export const config = {
-  matcher: ["/((?!api/auth|_next|favicon.ico|login|about|privacy|terms|security).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|icon.svg|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
 }

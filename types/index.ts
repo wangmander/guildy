@@ -1,113 +1,87 @@
-export type Stage = "SCREENING" | "HIRING_MANAGER" | "PRESENTATION" | "FULL_LOOP" | "OFFER_DISCUSSION" | "REJECTED" | "APPLIED" | "RECRUITER_SCREEN" | "INTERVIEW" | "OFFER"
-export type Status = "WAITING" | "SCHEDULED" | "FEEDBACK_PENDING" | "DECLINED" | "NEGOTIATING"
+// Guildy V2 types. Hand-written to match supabase/migrations/20260502000002_v2_schema.sql.
+// Replace with `supabase gen types typescript` output once the CLI is wired up.
 
-export interface EmailSnippet {
-  fromName: string
-  fromEmail: string
-  subject: string
-  receivedAt: string
-  snippet: string
-}
+export type Tier = "free" | "deep"
 
-export interface ScheduledMeeting {
-  date: string
-  type: string
-  meetingLink: string
-  duration: number
-}
+export type JobState = "passive" | "active"
 
-export interface InterviewPrep {
-  stageFocus?: string
-  narrative?: string
-  spicyOpinion?: string
-  primitives?: Array<{ name: string; description: string }>
-  proofStories?: Array<{ title: string; detail: string }>
-  questionsTheyMightAsk?: Array<{ category: string; question: string; priority?: number }>
-  questionsYouShouldAsk?: Array<{ category: string; question: string; priority?: number }>
-  // Also accept underscore variants from LLM
-  questions_they_ask?: Array<{ category: string; question: string; priority?: number }>
-  questions_you_ask?: Array<{ category: string; question: string; priority?: number }>
-  whatToEmphasize?: string[]
-  homeworkNext24h?: string[]
-  industry?: string
-  size?: string
-  hqLocation?: string
-  companyIntelSummary?: string
-  summary?: string
-  recentNews?: string[]
-  insights?: any
-  nextAction?: string
-  tone?: string
-  urgency?: string
-  responseLikelihood?: string
-  // Rich sections from LLM
-  companyIntel?: {
-    industry?: string
-    size?: string
-    hqLocation?: string
-    summary?: string
-    recentNews?: string[]
-    product?: string
-    businessModel?: string
-    techStack?: string[]
-    competitors?: string[]
-    culture?: string
-  }
-  interviewStrategy?: {
-    goalForThisStage?: string
-    whatTheyEvaluate?: string[]
-    howToSucceed?: string[]
-    commonMistakes?: string[]
-    answerLength?: string
-  }
-  interviewerIntel?: {
-    name?: string
-    likelyRole?: string
-    seniority?: string
-    whatTheyEvaluate?: string
-    topicsTheyProbe?: string[]
-    howToCalibrateAnswers?: string
-  }
-  stageRoadmap?: Array<{ stage: string; status: string; whatItTests: string }>
-  compensationIntel?: {
-    salaryRange?: string
-    equityInfo?: string
-    negotiationAdvice?: string[]
-    marketContext?: string
-  }
-  prepChecklist?: string[]
-}
+export type StageKey =
+  | "applied"
+  | "screen"
+  | "hiring_manager"
+  | "interview_loop"
+  | "final"
+  | "offer"
+  | "closed"
 
-export interface NewsItem {
-  title: string
-  url: string
-  date?: string
+export type PrepStatus = "none" | "quick_generated" | "deep_generated"
+
+export type PrepTier = "quick" | "deep"
+
+export type JobContextType = "jd" | "latest_message" | "interviewer" | "note" | "other"
+
+export interface UserProfile {
+  id: string
+  email: string
+  resume_url: string | null
+  resume_text: string | null
+  background_text: string | null
+  tier: Tier
+  created_at: string
+  updated_at: string
 }
 
 export interface Job {
   id: string
-  title: string
-  company: {
-    name: string
-    logoUrl?: string
-    glassdoorRating?: number
-  }
-  location?: string
-  industry?: string
-  jobType?: "PM" | "Design" | "Eng" | "Data" | "Other"
-  tags?: string[]
-  stage: Stage
-  status: Status
-  nextEtaText?: string
-  appliedAt?: string
-  postingUrl?: string
-  lastEmail?: EmailSnippet
-  notes?: string
-  scheduledMeeting?: ScheduledMeeting
-  interviewPrep?: InterviewPrep
-  recentNews?: NewsItem[]
-  stageDetail?: string
-  insights?: any
-  companyIntel?: any
-  predicted_stages?: string[]
+  user_id: string
+  company_name: string
+  role_title: string
+  tc: string | null
+  source_url: string | null
+  jd_text: string | null
+  state: JobState
+  stage: StageKey
+  prep_status: PrepStatus
+  latest_message: string | null
+  created_at: string
+  updated_at: string
+  activated_at: string | null
+}
+
+export interface StageEvent {
+  id: string
+  job_id: string
+  user_id: string
+  from_stage: StageKey | null
+  to_stage: StageKey
+  note: string | null
+  created_at: string
+}
+
+export interface JobContext {
+  id: string
+  job_id: string
+  user_id: string
+  type: JobContextType
+  content: string
+  metadata: Record<string, unknown> | null
+  created_at: string
+}
+
+export interface PrepVersion {
+  id: string
+  job_id: string
+  user_id: string
+  tier: PrepTier
+  model_used: string
+  context_hash: string | null
+  output: Record<string, unknown>
+  created_at: string
+}
+
+export interface StageLabel {
+  id: string
+  user_id: string
+  stage_key: StageKey
+  custom_label: string
 }

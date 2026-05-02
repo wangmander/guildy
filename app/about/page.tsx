@@ -6,11 +6,11 @@ export default function AboutPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-8">
         <Link
-          href="/pipelines"
+          href="/"
           className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to dashboard
+          Back to home
         </Link>
 
         <div className="bg-white rounded-lg shadow-sm p-8">

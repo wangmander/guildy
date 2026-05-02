@@ -3,8 +3,6 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 
-import AuthSessionProvider from "@/components/SessionProvider"
-
 const inter = Inter({
   subsets: ["latin"],
   display: "swap",
@@ -26,11 +24,7 @@ export default function RootLayout({
       lang="en"
       className={`${inter.variable} antialiased h-screen overflow-hidden`}
     >
-      <body className="bg-gray-50 h-screen overflow-hidden">
-        <AuthSessionProvider>
-          {children}
-        </AuthSessionProvider>
-      </body>
+      <body className="bg-gray-50 h-screen overflow-hidden">{children}</body>
     </html>
   )
 }
