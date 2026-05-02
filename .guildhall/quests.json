@@ -1,0 +1,24 @@
+{
+  "project": "guildy",
+  "current_phase": "phase-1-schema-auth-stripe",
+  "phases": [
+    {
+      "id": "phase-0-audit",
+      "name": "Audit and kill",
+      "status": "complete",
+      "progress": 1.0,
+      "started_at": "2026-05-02T03:49:40Z",
+      "completed_at": "2026-05-02T03:49:40Z"
+    },
+    {
+      "id": "phase-1-schema-auth-stripe",
+      "name": "Schema, auth reset, Stripe skeleton",
+      "status": "not_started",
+      "progress": 0,
+      "started_at": null,
+      "completed_at": null
+    }
+  ],
+  "current_quest": "SQL-dump V1 Supabase schema/data as safety backup, then drop V1 tables and apply the V2 schema (user_profiles, jobs, stage_events, job_context, prep_versions, stage_labels, subscriptions) before touching auth or Stripe.",
+  "last_updated": "2026-05-02T03:49:40Z"
+}
