@@ -83,3 +83,65 @@ export async function createJobAction(
   revalidatePath("/app")
   return { ok: true, id: data.id }
 }
+
+const activateJobSchema = z.object({
+  job_id: z.string().uuid("Invalid job id"),
+  latest_message: z
+    .string()
+    .trim()
+    .max(20000)
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : null)),
+})
+
+export type ActivateJobInput = z.input<typeof activateJobSchema>
+export type ActivateJobResult =
+  | { ok: true }
+  | { ok: false; error: string }
+
+export async function activateJobAction(
+  input: ActivateJobInput
+): Promise<ActivateJobResult> {
+  const parsed = activateJobSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input",
+    }
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    return { ok: false, error: "Not signed in" }
+  }
+
+  const update: {
+    state: "active"
+    stage: "screen"
+    activated_at: string
+    latest_message?: string
+  } = {
+    state: "active",
+    stage: "screen",
+    activated_at: new Date().toISOString(),
+  }
+  if (parsed.data.latest_message) {
+    update.latest_message = parsed.data.latest_message
+  }
+
+  const { error } = await supabase
+    .from("jobs")
+    .update(update)
+    .eq("id", parsed.data.job_id)
+    .eq("user_id", user.id)
+
+  if (error) {
+    return { ok: false, error: error.message }
+  }
+
+  revalidatePath("/app")
+  return { ok: true }
+}

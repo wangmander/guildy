@@ -1,3 +1,5 @@
+"use client"
+
 import { GripVertical } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -9,9 +11,10 @@ type Props = {
   role: string
   meta?: string
   variant: CardVariant
+  onActivate?: () => void
 }
 
-export function JobCard({ company, role, meta, variant }: Props) {
+export function JobCard({ company, role, meta, variant, onActivate }: Props) {
   const isInactive = variant === "inactive"
   return (
     <div
@@ -49,6 +52,15 @@ export function JobCard({ company, role, meta, variant }: Props) {
           )}
         </div>
       </div>
+      {onActivate && (
+        <button
+          type="button"
+          onClick={onActivate}
+          className="mt-2 inline-flex h-7 w-full items-center justify-center rounded-md border border-[#482C4C]/20 bg-white text-xs font-medium text-[#482C4C] transition-colors hover:bg-[#482C4C]/5"
+        >
+          They Responded
+        </button>
+      )}
     </div>
   )
 }

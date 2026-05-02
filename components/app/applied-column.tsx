@@ -5,6 +5,7 @@ import { Plus } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
+import { ActivationModal } from "./activation-modal"
 import { AddJobModal } from "./add-job-modal"
 import { EmptyCard } from "./empty-card"
 import { JobCard } from "./job-card"
@@ -18,6 +19,7 @@ type Props = {
 
 export function AppliedColumn({ label, jobs }: Props) {
   const [open, setOpen] = useState(false)
+  const [activatingJob, setActivatingJob] = useState<JobRow | null>(null)
   const count = jobs.length
   const ghostCount = count === 0 ? 2 : 0
 
@@ -49,6 +51,7 @@ export function AppliedColumn({ label, jobs }: Props) {
             role={job.role_title}
             meta={job.tc ?? undefined}
             variant="inactive"
+            onActivate={() => setActivatingJob(job)}
           />
         ))}
         {Array.from({ length: ghostCount }).map((_, i) => (
@@ -57,6 +60,15 @@ export function AppliedColumn({ label, jobs }: Props) {
       </div>
 
       <AddJobModal open={open} onOpenChange={setOpen} />
+      <ActivationModal
+        open={activatingJob !== null}
+        onOpenChange={(next) => {
+          if (!next) setActivatingJob(null)
+        }}
+        jobId={activatingJob?.id ?? null}
+        company={activatingJob?.company_name ?? null}
+        role={activatingJob?.role_title ?? null}
+      />
     </div>
   )
 }
