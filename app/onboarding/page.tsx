@@ -26,8 +26,8 @@ export default async function OnboardingPage() {
             Add your background
           </h1>
           <p className="text-lg text-[#1C1E21] leading-relaxed">
-            Guildy uses your resume on every prep generation. Upload a PDF or paste the text. You
-            can update it later in settings.
+            Guildy uses your background on every prep generation. Paste your resume text, LinkedIn
+            About + Experience, or a short summary. You can update it later in settings.
           </p>
         </div>
 

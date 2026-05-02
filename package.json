@@ -12,7 +12,6 @@
     "@supabase/supabase-js": "^2.45.0",
     "@supabase/ssr": "^0.5.2",
     "openai": "^4.0.0",
-    "unpdf": "^0.12.1",
 
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "1.2.2",
