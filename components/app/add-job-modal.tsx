@@ -88,28 +88,29 @@ export function AddJobModal({ open, onOpenChange }: Props) {
         body: JSON.stringify(body),
       })
       const data: ExtractResponse = await res.json()
+      console.log("[extract] response", data)
 
       if (data.ok && data.fields) {
         if (data.fields.company_name) setCompany(data.fields.company_name)
         if (data.fields.role_title) setRole(data.fields.role_title)
         if (data.fields.tc) setTc(data.fields.tc)
-        if (data.jd_text && kind === "url") {
-          setJdText(data.jd_text)
-          jdRef.current = data.jd_text
+        if (data.jd_text) {
+          if (kind === "url") {
+            setJdText(data.jd_text)
+            jdRef.current = data.jd_text
+          }
+          setJdCollapsed(true)
+        } else if (kind === "jd") {
+          setJdCollapsed(true)
         }
-        if (kind === "jd") setJdCollapsed(true)
-        setTab("manual")
-        setNotice(`Pre-filled from ${kind === "url" ? "URL" : "JD"}. Review before saving.`)
         return
       }
 
       if (kind === "url" && data.reason === "fetch_failed") {
-        setTab("manual")
         setNotice("Couldn't read this URL. Fill in the fields manually below — your URL is saved.")
         return
       }
 
-      setTab("manual")
       setNotice(
         "Couldn't extract details. Fill in the fields manually below — what you pasted is saved."
       )
@@ -118,7 +119,6 @@ export function AddJobModal({ open, onOpenChange }: Props) {
         jdRef.current = data.jd_text
       }
     } catch {
-      setTab("manual")
       setNotice("Extraction failed. Fill in the fields manually below — what you entered is saved.")
     } finally {
       setExtracting(null)
