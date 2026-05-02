@@ -25,6 +25,7 @@ type Props = {
 type ExtractResponse = {
   ok: boolean
   reason?: "fetch_failed" | "extract_failed"
+  error?: string
   fields?: { company_name: string | null; role_title: string | null; tc: string | null }
   jd_text?: string
 }
@@ -48,6 +49,7 @@ export function AddJobModal({ open, onOpenChange }: Props) {
   const lastExtractedRef = useRef<{ url: string; jd: string }>({ url: "", jd: "" })
   const urlRef = useRef("")
   const jdRef = useRef("")
+  const extractedFieldsActiveRef = useRef(false)
 
   function reset() {
     setTab("manual")
@@ -63,10 +65,19 @@ export function AddJobModal({ open, onOpenChange }: Props) {
     lastExtractedRef.current = { url: "", jd: "" }
     urlRef.current = ""
     jdRef.current = ""
+    extractedFieldsActiveRef.current = false
     if (debounceRef.current) {
       clearTimeout(debounceRef.current)
       debounceRef.current = null
     }
+  }
+
+  function clearExtractedFieldsIfStale() {
+    if (!extractedFieldsActiveRef.current) return
+    setCompany("")
+    setRole("")
+    setTc("")
+    extractedFieldsActiveRef.current = false
   }
 
   function handleOpenChange(next: boolean) {
@@ -91,9 +102,13 @@ export function AddJobModal({ open, onOpenChange }: Props) {
       console.log("[extract] response", data)
 
       if (data.ok && data.fields) {
+        const populatedAny = Boolean(
+          data.fields.company_name || data.fields.role_title || data.fields.tc
+        )
         if (data.fields.company_name) setCompany(data.fields.company_name)
         if (data.fields.role_title) setRole(data.fields.role_title)
         if (data.fields.tc) setTc(data.fields.tc)
+        if (populatedAny) extractedFieldsActiveRef.current = true
         if (data.jd_text) {
           if (kind === "url") {
             setJdText(data.jd_text)
@@ -107,10 +122,12 @@ export function AddJobModal({ open, onOpenChange }: Props) {
       }
 
       if (kind === "url" && data.reason === "fetch_failed") {
+        clearExtractedFieldsIfStale()
         setNotice("Couldn't read this URL. Fill in the fields manually below — your URL is saved.")
         return
       }
 
+      clearExtractedFieldsIfStale()
       setNotice(
         "Couldn't extract details. Fill in the fields manually below — what you pasted is saved."
       )
@@ -119,6 +136,7 @@ export function AddJobModal({ open, onOpenChange }: Props) {
         jdRef.current = data.jd_text
       }
     } catch {
+      clearExtractedFieldsIfStale()
       setNotice("Extraction failed. Fill in the fields manually below — what you entered is saved.")
     } finally {
       setExtracting(null)
@@ -291,7 +309,10 @@ export function AddJobModal({ open, onOpenChange }: Props) {
                   <Input
                     id="company"
                     value={company}
-                    onChange={(e) => setCompany(e.target.value)}
+                    onChange={(e) => {
+                      setCompany(e.target.value)
+                      extractedFieldsActiveRef.current = false
+                    }}
                     placeholder="Acme"
                     required
                   />
@@ -301,7 +322,10 @@ export function AddJobModal({ open, onOpenChange }: Props) {
                   <Input
                     id="role"
                     value={role}
-                    onChange={(e) => setRole(e.target.value)}
+                    onChange={(e) => {
+                      setRole(e.target.value)
+                      extractedFieldsActiveRef.current = false
+                    }}
                     placeholder="Senior Product Designer"
                     required
                   />
@@ -312,7 +336,10 @@ export function AddJobModal({ open, onOpenChange }: Props) {
                 <Input
                   id="tc"
                   value={tc}
-                  onChange={(e) => setTc(e.target.value)}
+                  onChange={(e) => {
+                    setTc(e.target.value)
+                    extractedFieldsActiveRef.current = false
+                  }}
                   placeholder="$180k-$220k + equity"
                 />
               </div>

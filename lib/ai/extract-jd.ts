@@ -21,9 +21,13 @@ Rules:
 - Return raw JSON only, no commentary, no markdown fences.`
 
 export async function extractJobFields(rawText: string): Promise<ExtractedJob> {
-  const trimmed = rawText.slice(0, 12000)
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY is missing from environment")
+  }
 
+  const trimmed = rawText.slice(0, 12000)
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+
   const completion = await client.chat.completions.create({
     model: "gpt-4o-mini",
     temperature: 0,
@@ -34,12 +38,30 @@ export async function extractJobFields(rawText: string): Promise<ExtractedJob> {
     ],
   })
 
-  const content = completion.choices[0]?.message?.content ?? "{}"
-  const parsed = JSON.parse(content)
+  const content = completion.choices[0]?.message?.content
+  if (!content) {
+    throw new Error("OpenAI returned empty content")
+  }
+
+  let raw: unknown
+  try {
+    raw = JSON.parse(content)
+  } catch {
+    throw new Error(`OpenAI returned non-JSON: ${content.slice(0, 200)}`)
+  }
+
+  if (typeof raw !== "object" || raw === null) {
+    throw new Error(`OpenAI returned non-object JSON: ${content.slice(0, 200)}`)
+  }
+
+  const obj = raw as Record<string, unknown>
+  const coerce = (v: unknown): string | null =>
+    typeof v === "string" && v.trim().length > 0 ? v.trim() : null
+
   return extractedJobSchema.parse({
-    company_name: parsed.company_name ?? null,
-    role_title: parsed.role_title ?? null,
-    tc: parsed.tc ?? null,
+    company_name: coerce(obj.company_name),
+    role_title: coerce(obj.role_title),
+    tc: coerce(obj.tc),
   })
 }
 
