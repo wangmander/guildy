@@ -1,6 +1,6 @@
 {
   "project": "guildy",
-  "current_phase": "phase-2-home-shell",
+  "current_phase": "phase-3-job-crud",
   "phases": [
     {
       "id": "phase-0-audit",
@@ -21,12 +21,20 @@
     {
       "id": "phase-2-home-shell",
       "name": "Home shell (Kanban + passive table + search)",
+      "status": "complete",
+      "progress": 1.0,
+      "started_at": "2026-05-02T08:00:00Z",
+      "completed_at": "2026-05-02T08:30:00Z"
+    },
+    {
+      "id": "phase-3-job-crud",
+      "name": "Job CRUD + activation + stage movement",
       "status": "not_started",
       "progress": 0,
       "started_at": null,
       "completed_at": null
     }
   ],
-  "current_quest": "Build /app Home shell: 7-stage Kanban with default labels, passive table with 4 columns (Company, Role Title, Date Added, TC), search input (functionality stubbed). Mobile responsive: Kanban horizontal scrolls, passive table compresses.",
-  "last_updated": "2026-05-02T07:45:00Z"
+  "current_quest": "Wire job CRUD: Add Job modal (3 intake methods), passive table populated from /api/jobs, 'They Responded' activation flow, drag/drop + arrow stage movement on active Kanban, stage label inline editing, search across passive + active by company/role/context.",
+  "last_updated": "2026-05-02T08:30:00Z"
 }

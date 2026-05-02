@@ -20,11 +20,8 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html
-      lang="en"
-      className={`${inter.variable} antialiased h-screen overflow-hidden`}
-    >
-      <body className="bg-gray-50 h-screen overflow-hidden">{children}</body>
+    <html lang="en" className={`${inter.variable} antialiased`}>
+      <body className="min-h-screen bg-gray-50">{children}</body>
     </html>
   )
 }
