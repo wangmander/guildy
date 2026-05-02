@@ -29,12 +29,19 @@
     {
       "id": "phase-3-job-crud",
       "name": "Job CRUD + activation + stage movement",
-      "status": "not_started",
-      "progress": 0,
-      "started_at": null,
-      "completed_at": null
+      "status": "in_progress",
+      "progress": 0.2,
+      "started_at": "2026-05-02T09:00:00Z",
+      "completed_at": null,
+      "subphases": [
+        { "id": "3a-add-job", "status": "complete", "completed_at": "2026-05-02T09:30:00Z" },
+        { "id": "3b-activation", "status": "not_started" },
+        { "id": "3c-stage-movement", "status": "not_started" },
+        { "id": "3d-search", "status": "not_started" },
+        { "id": "3e-stage-labels", "status": "not_started" }
+      ]
     }
   ],
-  "current_quest": "Wire job CRUD: Add Job modal (3 intake methods), passive table populated from /api/jobs, 'They Responded' activation flow, drag/drop + arrow stage movement on active Kanban, stage label inline editing, search across passive + active by company/role/context.",
-  "last_updated": "2026-05-02T08:30:00Z"
+  "current_quest": "Phase 3a complete: Add Job modal with 3 intake methods (URL/JD/Manual) and passive job creation. Next: 3b 'They Responded' activation flow.",
+  "last_updated": "2026-05-02T09:30:00Z"
 }

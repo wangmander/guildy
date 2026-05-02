@@ -1,20 +1,23 @@
+"use client"
+
+import { useState } from "react"
+import { Plus } from "lucide-react"
+
 import { cn } from "@/lib/utils"
 
-import type { CardVariant } from "@/lib/stages"
-
-import type { JobRow } from "./board"
+import { AddJobModal } from "./add-job-modal"
 import { EmptyCard } from "./empty-card"
 import { JobCard } from "./job-card"
+
+import type { JobRow } from "./board"
 
 type Props = {
   label: string
   jobs: JobRow[]
-  variant: CardVariant
-  hint?: string
 }
 
-export function BoardColumn({ label, jobs, variant, hint }: Props) {
-  const isInactive = variant === "inactive"
+export function AppliedColumn({ label, jobs }: Props) {
+  const [open, setOpen] = useState(false)
   const count = jobs.length
   const ghostCount = count === 0 ? 2 : 0
 
@@ -25,36 +28,35 @@ export function BoardColumn({ label, jobs, variant, hint }: Props) {
       )}
     >
       <div className="mb-3 flex items-center justify-between">
-        <h3
-          className={cn(
-            "text-sm font-semibold",
-            isInactive ? "text-gray-400" : "text-[#482C4C]"
-          )}
-        >
-          {label}
-        </h3>
+        <h3 className="text-sm font-semibold text-gray-400">{label}</h3>
         <span className="text-xs text-gray-400">{count}</span>
       </div>
 
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mb-3 inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-[#482C4C] px-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
+      >
+        <Plus className="size-4" />
+        Add Job
+      </button>
+
       <div className="flex max-h-[calc(100dvh-200px)] flex-col gap-2 overflow-y-auto pr-1">
-        {hint && count === 0 && (
-          <p className="px-1 pb-1 text-[11px] leading-snug text-gray-400">
-            {hint}
-          </p>
-        )}
         {jobs.map((job) => (
           <JobCard
             key={job.id}
             company={job.company_name}
             role={job.role_title}
             meta={job.tc ?? undefined}
-            variant={variant}
+            variant="inactive"
           />
         ))}
         {Array.from({ length: ghostCount }).map((_, i) => (
-          <EmptyCard key={`ghost-${i}`} variant={variant} />
+          <EmptyCard key={`ghost-${i}`} variant="inactive" />
         ))}
       </div>
+
+      <AddJobModal open={open} onOpenChange={setOpen} />
     </div>
   )
 }
