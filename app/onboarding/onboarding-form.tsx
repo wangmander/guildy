@@ -42,50 +42,46 @@ export function OnboardingForm({ initialText }: { initialText: string }) {
   const canContinue = (hasText || hasSavedText) && !pending
 
   return (
-    <>
-      <div className="space-y-8">
-        <div className="bg-white border border-[#E5E7EB] rounded-2xl p-6 space-y-4">
-          <div>
-            <h2 className="text-xl font-semibold text-[#482C4C]">Paste resume or background</h2>
-          </div>
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            rows={14}
-            placeholder="Paste resume text or a structured summary of your background..."
-            className="w-full p-4 rounded-xl border border-[#E5E7EB] text-sm text-gray-900 focus:outline-none focus:border-[#482C4C] focus:ring-2 focus:ring-[#482C4C]/20 font-mono"
-            disabled={pending}
-          />
-          <p className="text-sm text-gray-500">More detail improves prep.</p>
+    <div className="space-y-8">
+      <div className="bg-white border border-[#E5E7EB] rounded-2xl p-6 space-y-4">
+        <div>
+          <h2 className="text-xl font-semibold text-[#482C4C]">Paste resume or background</h2>
         </div>
-
-        {status && (
-          <div
-            className={
-              status.tone === "error"
-                ? "text-sm text-red-700"
-                : status.tone === "success"
-                ? "text-sm text-green-700"
-                : "text-sm text-gray-600"
-            }
-          >
-            {status.text}
-          </div>
-        )}
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={14}
+          placeholder="Paste resume text or a structured summary of your background..."
+          className="w-full p-4 rounded-xl border border-[#E5E7EB] text-sm text-gray-900 focus:outline-none focus:border-[#482C4C] focus:ring-2 focus:ring-[#482C4C]/20 font-mono"
+          disabled={pending}
+        />
+        <p className="text-sm text-gray-500">More detail improves prep.</p>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-[#E5E7EB] px-4 py-4 z-10">
-        <div className="w-full max-w-[720px] mx-auto flex justify-end">
-          <button
-            type="button"
-            onClick={handleContinue}
-            disabled={!canContinue}
-            className="px-8 py-3 rounded-full bg-[#482C4C] text-white font-medium text-base hover:bg-[#3a2440] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {pending ? "Saving..." : "Continue to Guildy"}
-          </button>
+      {status && (
+        <div
+          className={
+            status.tone === "error"
+              ? "text-sm text-red-700"
+              : status.tone === "success"
+              ? "text-sm text-green-700"
+              : "text-sm text-gray-600"
+          }
+        >
+          {status.text}
         </div>
+      )}
+
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={handleContinue}
+          disabled={!canContinue}
+          className="px-8 py-3 rounded-full bg-[#482C4C] text-white font-medium text-base hover:bg-[#3a2440] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {pending ? "Saving..." : "Continue to Guildy"}
+        </button>
       </div>
-    </>
+    </div>
   )
 }
