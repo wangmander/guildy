@@ -8,7 +8,7 @@ import {
   completeOnboardingAction,
 } from "./actions"
 
-const MIN_RESUME_CHARS = 200
+const MIN_RESUME_CHARS = 800
 
 export function OnboardingForm({ initialText }: { initialText: string }) {
   const router = useRouter()

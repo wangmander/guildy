@@ -4,7 +4,7 @@ import { redirect } from "next/navigation"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { extractResumeText } from "@/lib/resume/extract"
 
-const MIN_RESUME_CHARS = 200
+const MIN_RESUME_CHARS = 800
 
 type ActionResult = {
   ok: boolean
