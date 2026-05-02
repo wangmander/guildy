@@ -8,20 +8,16 @@ import {
   completeOnboardingAction,
 } from "./actions"
 
-const MIN_RESUME_CHARS = 800
+const PDF_FALLBACK_COPY =
+  "PDF couldn't be read. This is common for designer-exported PDFs. Paste your resume text below, or copy your LinkedIn About + Experience."
 
 export function OnboardingForm({ initialText }: { initialText: string }) {
   const router = useRouter()
   const [text, setText] = useState(initialText)
   const [savedText, setSavedText] = useState(initialText)
-  const [message, setMessage] = useState<string | null>(null)
-  const [tone, setTone] = useState<"info" | "error" | "success">("info")
+  const [pdfNotice, setPdfNotice] = useState<string | null>(null)
+  const [saveStatus, setSaveStatus] = useState<{ tone: "info" | "success" | "error"; text: string } | null>(null)
   const [pending, startTransition] = useTransition()
-
-  function announce(next: string, nextTone: typeof tone = "info") {
-    setMessage(next)
-    setTone(nextTone)
-  }
 
   async function handleUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
@@ -30,33 +26,43 @@ export function OnboardingForm({ initialText }: { initialText: string }) {
     const fd = new FormData()
     fd.append("resume", file)
 
-    announce("Reading PDF...", "info")
+    setPdfNotice(null)
+    setSaveStatus({ tone: "info", text: "Reading PDF..." })
+
     startTransition(async () => {
       const result = await uploadResumeAction(fd)
+
       if (result.extractedText) {
         setText(result.extractedText)
       }
+
       if (result.ok) {
         if (result.extractedText) setSavedText(result.extractedText)
-        announce("Resume saved.", "success")
+        setSaveStatus({ tone: "success", text: "Resume saved." })
+        setPdfNotice(null)
+      } else if (result.reason === "pdf_unreadable") {
+        setPdfNotice(PDF_FALLBACK_COPY)
+        setSaveStatus(null)
       } else {
-        announce(result.message ?? "Upload failed.", "error")
+        setSaveStatus({ tone: "error", text: result.message ?? "Upload failed." })
       }
+
       event.target.value = ""
     })
   }
 
   function handleSaveText() {
+    if (text.trim().length === 0) return
     const fd = new FormData()
     fd.append("resume_text", text)
-    announce("Saving...", "info")
+    setSaveStatus({ tone: "info", text: "Saving..." })
     startTransition(async () => {
       const result = await saveResumeTextAction(fd)
       if (result.ok) {
         setSavedText(text)
-        announce("Resume text saved.", "success")
+        setSaveStatus({ tone: "success", text: "Saved." })
       } else {
-        announce(result.message ?? "Save failed.", "error")
+        setSaveStatus({ tone: "error", text: result.message ?? "Save failed." })
       }
     })
   }
@@ -65,15 +71,18 @@ export function OnboardingForm({ initialText }: { initialText: string }) {
     startTransition(async () => {
       const result = await completeOnboardingAction()
       if (result && !result.ok) {
-        announce(result.message, "error")
+        setSaveStatus({ tone: "error", text: result.message })
         return
       }
       router.refresh()
     })
   }
 
-  const canContinue = savedText.trim().length >= MIN_RESUME_CHARS && !pending
-  const charCount = text.trim().length
+  const trimmedText = text.trim()
+  const hasText = trimmedText.length > 0
+  const canSaveText = hasText && text !== savedText && !pending
+  const canContinue = savedText.trim().length > 0 && !pending
+  const showPdfNotice = pdfNotice !== null && !hasText
 
   return (
     <div className="space-y-8">
@@ -81,8 +90,8 @@ export function OnboardingForm({ initialText }: { initialText: string }) {
         <div>
           <h2 className="text-xl font-semibold text-[#482C4C]">Upload PDF</h2>
           <p className="text-sm text-gray-600 mt-1">
-            We extract the text and save it to your profile. Scanned image PDFs may not extract
-            cleanly; paste the text below if so.
+            We extract the text and save it to your profile. Designer-exported and scanned PDFs may
+            not extract cleanly; paste the text below if so.
           </p>
         </div>
         <input
@@ -92,13 +101,25 @@ export function OnboardingForm({ initialText }: { initialText: string }) {
           disabled={pending}
           className="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-medium file:bg-[#482C4C] file:text-white hover:file:bg-[#3a2440] disabled:opacity-60"
         />
+        {pdfNotice && (
+          <div
+            className={
+              showPdfNotice
+                ? "text-sm bg-amber-50 border border-amber-200 text-amber-900 rounded-lg p-3"
+                : "text-xs text-gray-400"
+            }
+          >
+            {pdfNotice}
+          </div>
+        )}
       </div>
 
       <div className="bg-white border border-[#E5E7EB] rounded-2xl p-6 space-y-4">
         <div>
-          <h2 className="text-xl font-semibold text-[#482C4C]">Or paste resume / background</h2>
+          <h2 className="text-xl font-semibold text-[#482C4C]">Paste resume or background</h2>
           <p className="text-sm text-gray-600 mt-1">
-            At least {MIN_RESUME_CHARS} characters. Edit anytime in settings.
+            Paste your resume text, LinkedIn About + Experience, or a short background summary. You
+            can edit this later.
           </p>
         </div>
         <textarea
@@ -109,18 +130,12 @@ export function OnboardingForm({ initialText }: { initialText: string }) {
           className="w-full p-4 rounded-xl border border-[#E5E7EB] text-sm text-gray-900 focus:outline-none focus:border-[#482C4C] focus:ring-2 focus:ring-[#482C4C]/20 font-mono"
           disabled={pending}
         />
-        <div className="flex items-center justify-between text-sm">
-          <span
-            className={
-              charCount >= MIN_RESUME_CHARS ? "text-green-700" : "text-gray-500"
-            }
-          >
-            {charCount} / {MIN_RESUME_CHARS} characters
-          </span>
+        <div className="flex items-center justify-between gap-3 text-sm">
+          <span className="text-gray-500">More detail improves prep.</span>
           <button
             type="button"
             onClick={handleSaveText}
-            disabled={pending || text === savedText || text.trim().length < MIN_RESUME_CHARS}
+            disabled={!canSaveText}
             className="px-5 py-2 rounded-full bg-[#482C4C] text-white font-medium text-sm hover:bg-[#3a2440] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           >
             Save text
@@ -128,17 +143,17 @@ export function OnboardingForm({ initialText }: { initialText: string }) {
         </div>
       </div>
 
-      {message && (
+      {saveStatus && (
         <div
           className={
-            tone === "error"
+            saveStatus.tone === "error"
               ? "text-sm text-red-700"
-              : tone === "success"
+              : saveStatus.tone === "success"
               ? "text-sm text-green-700"
               : "text-sm text-gray-600"
           }
         >
-          {message}
+          {saveStatus.text}
         </div>
       )}
 

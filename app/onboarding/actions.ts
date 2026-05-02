@@ -4,12 +4,11 @@ import { redirect } from "next/navigation"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import { extractResumeText } from "@/lib/resume/extract"
 
-const MIN_RESUME_CHARS = 800
-
 type ActionResult = {
   ok: boolean
   message?: string
   extractedText?: string
+  reason?: "pdf_unreadable" | "auth" | "input" | "storage" | "db"
 }
 
 export async function uploadResumeAction(formData: FormData): Promise<ActionResult> {
@@ -20,36 +19,23 @@ export async function uploadResumeAction(formData: FormData): Promise<ActionResu
   } = await supabase.auth.getUser()
 
   if (!user) {
-    return { ok: false, message: "Not signed in." }
+    return { ok: false, reason: "auth", message: "Not signed in." }
   }
 
   const file = formData.get("resume")
   if (!(file instanceof File) || file.size === 0) {
-    return { ok: false, message: "No file received." }
+    return { ok: false, reason: "input", message: "No file received." }
   }
 
   if (file.type !== "application/pdf") {
-    return { ok: false, message: "Resume must be a PDF." }
+    return { ok: false, reason: "input", message: "Resume must be a PDF." }
   }
 
   const buffer = await file.arrayBuffer()
   const extracted = await extractResumeText(buffer)
 
   if (!extracted.ok) {
-    const message =
-      extracted.reason === "empty"
-        ? "No text found in this PDF. Paste your resume below instead."
-        : "We couldn't read this PDF. Paste your resume below instead."
-    return { ok: false, message }
-  }
-
-  if (extracted.text.length < MIN_RESUME_CHARS) {
-    return {
-      ok: false,
-      extractedText: extracted.text,
-      message:
-        "Extracted text looks short. Edit or paste a fuller version below before continuing.",
-    }
+    return { ok: false, reason: "pdf_unreadable" }
   }
 
   const path = `${user.id}/resume-${Date.now()}.pdf`
@@ -58,7 +44,7 @@ export async function uploadResumeAction(formData: FormData): Promise<ActionResu
     .upload(path, buffer, { contentType: "application/pdf", upsert: false })
 
   if (uploadError) {
-    return { ok: false, message: `Upload failed: ${uploadError.message}` }
+    return { ok: false, reason: "storage", message: `Upload failed: ${uploadError.message}` }
   }
 
   const { error: updateError } = await supabase
@@ -70,7 +56,7 @@ export async function uploadResumeAction(formData: FormData): Promise<ActionResu
     .eq("id", user.id)
 
   if (updateError) {
-    return { ok: false, message: `Save failed: ${updateError.message}` }
+    return { ok: false, reason: "db", message: `Save failed: ${updateError.message}` }
   }
 
   return { ok: true, extractedText: extracted.text }
@@ -84,15 +70,12 @@ export async function saveResumeTextAction(formData: FormData): Promise<ActionRe
   } = await supabase.auth.getUser()
 
   if (!user) {
-    return { ok: false, message: "Not signed in." }
+    return { ok: false, reason: "auth", message: "Not signed in." }
   }
 
   const text = String(formData.get("resume_text") ?? "").trim()
-  if (text.length < MIN_RESUME_CHARS) {
-    return {
-      ok: false,
-      message: `Resume needs at least ${MIN_RESUME_CHARS} characters. We use this for every prep generation.`,
-    }
+  if (text.length === 0) {
+    return { ok: false, reason: "input", message: "Add some text before saving." }
   }
 
   const { error } = await supabase
@@ -101,7 +84,7 @@ export async function saveResumeTextAction(formData: FormData): Promise<ActionRe
     .eq("id", user.id)
 
   if (error) {
-    return { ok: false, message: `Save failed: ${error.message}` }
+    return { ok: false, reason: "db", message: `Save failed: ${error.message}` }
   }
 
   return { ok: true }
@@ -122,10 +105,10 @@ export async function completeOnboardingAction() {
     .maybeSingle()
 
   const hasResume =
-    typeof profile?.resume_text === "string" && profile.resume_text.trim().length >= MIN_RESUME_CHARS
+    typeof profile?.resume_text === "string" && profile.resume_text.trim().length > 0
 
   if (!hasResume) {
-    return { ok: false as const, message: "Add your resume before continuing." }
+    return { ok: false as const, message: "Add your resume or background before continuing." }
   }
 
   redirect("/app")
