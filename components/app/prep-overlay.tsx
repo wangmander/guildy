@@ -37,8 +37,8 @@ type Props = {
 }
 
 type PrepState =
-  | { status: "idle" }
   | { status: "loading-cache" }
+  | { status: "empty" }
   | { status: "generating" }
   | { status: "ready"; prep: PrepOutput }
   | { status: "error"; message: string }
@@ -50,7 +50,9 @@ export function PrepOverlay({
   interviewerName,
   onClose,
 }: Props) {
-  const [prepState, setPrepState] = useState<PrepState>({ status: "idle" })
+  const [prepState, setPrepState] = useState<PrepState>({
+    status: "loading-cache",
+  })
   const [, startTransition] = useTransition()
 
   useEffect(() => {
@@ -81,7 +83,7 @@ export function PrepOverlay({
       if (res.prep) {
         setPrepState({ status: "ready", prep: res.prep })
       } else {
-        setPrepState({ status: "idle" })
+        setPrepState({ status: "empty" })
       }
     })
     return () => {

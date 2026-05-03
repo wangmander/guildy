@@ -77,7 +77,7 @@ function CanvasBody({
   if (prepState.status === "error") {
     return <ErrorState message={prepState.message} onRetry={onGenerate} />
   }
-  if (prepState.status === "idle") {
+  if (prepState.status === "empty") {
     return <EmptyState hasResume={hasResume} onGenerate={onGenerate} />
   }
   return <PrepView prep={prepState.prep} onRegenerate={onGenerate} />
