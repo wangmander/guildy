@@ -66,3 +66,48 @@ export function stageToColumn(stage: StageKey): UiColumnKey | null {
       return null
   }
 }
+
+// Active columns left→right. Applied is excluded — it is the passive zone and
+// is not a valid arrow/drag target.
+const ACTIVE_COLUMNS: readonly UiColumnKey[] = [
+  "screen",
+  "hiring_manager",
+  "full_loop",
+  "offer",
+] as const
+
+export function isActiveColumn(col: UiColumnKey): boolean {
+  return (ACTIVE_COLUMNS as readonly UiColumnKey[]).includes(col)
+}
+
+export function leftOfColumn(col: UiColumnKey): UiColumnKey | null {
+  const i = ACTIVE_COLUMNS.indexOf(col)
+  if (i <= 0) return null
+  return ACTIVE_COLUMNS[i - 1]
+}
+
+export function rightOfColumn(col: UiColumnKey): UiColumnKey | null {
+  const i = ACTIVE_COLUMNS.indexOf(col)
+  if (i < 0 || i === ACTIVE_COLUMNS.length - 1) return null
+  return ACTIVE_COLUMNS[i + 1]
+}
+
+export type WriteStage = "screen" | "hiring_manager" | "final" | "offer"
+
+// Canonical DB stage written when a card lands in a UI column via arrow or
+// drag. Full Loop reads accept both interview_loop and final, but writes
+// always use final.
+export function columnToWriteStage(col: UiColumnKey): WriteStage | null {
+  switch (col) {
+    case "screen":
+      return "screen"
+    case "hiring_manager":
+      return "hiring_manager"
+    case "full_loop":
+      return "final"
+    case "offer":
+      return "offer"
+    case "applied":
+      return null
+  }
+}

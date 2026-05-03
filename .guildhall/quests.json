@@ -30,18 +30,18 @@
       "id": "phase-3-job-crud",
       "name": "Job CRUD + activation + stage movement",
       "status": "in_progress",
-      "progress": 0.4,
+      "progress": 0.6,
       "started_at": "2026-05-02T09:00:00Z",
       "completed_at": null,
       "subphases": [
         { "id": "3a-add-job", "status": "complete", "completed_at": "2026-05-02T09:30:00Z" },
         { "id": "3b-activation", "status": "complete", "completed_at": "2026-05-02T10:15:00Z" },
-        { "id": "3c-stage-movement", "status": "not_started" },
+        { "id": "3c-stage-movement", "status": "complete", "completed_at": "2026-05-02T11:00:00Z" },
         { "id": "3d-search", "status": "not_started" },
         { "id": "3e-stage-labels", "status": "not_started" }
       ]
     }
   ],
-  "current_quest": "Phase 3b complete: They Responded activation flow (passive Applied -> active Screen with optional latest_message). Next: 3c stage movement (drag/drop + arrow keys + stage_events logging).",
-  "last_updated": "2026-05-02T10:15:00Z"
+  "current_quest": "Phase 3c complete: stage movement via left/right arrows on active cards + HTML5 drag-and-drop between active columns. moveJobStageAction writes jobs.stage and inserts stage_events (note='arrow' | 'drag'). Next: 3d search wiring.",
+  "last_updated": "2026-05-02T11:00:00Z"
 }

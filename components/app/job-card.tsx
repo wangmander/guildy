@@ -1,28 +1,63 @@
 "use client"
 
-import { GripVertical } from "lucide-react"
+import { ChevronLeft, ChevronRight, GripVertical } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
 import type { CardVariant } from "@/lib/stages"
 
 type Props = {
+  jobId?: string
   company: string
   role: string
   meta?: string
   variant: CardVariant
   onActivate?: () => void
+  onMoveLeft?: () => void
+  onMoveRight?: () => void
+  canMoveLeft?: boolean
+  canMoveRight?: boolean
+  onDragStart?: (jobId: string) => void
+  onDragEnd?: () => void
+  isDragging?: boolean
 }
 
-export function JobCard({ company, role, meta, variant, onActivate }: Props) {
+export function JobCard({
+  jobId,
+  company,
+  role,
+  meta,
+  variant,
+  onActivate,
+  onMoveLeft,
+  onMoveRight,
+  canMoveLeft,
+  canMoveRight,
+  onDragStart,
+  onDragEnd,
+  isDragging,
+}: Props) {
   const isInactive = variant === "inactive"
+  const draggable = !isInactive && Boolean(jobId)
+  const showArrows = !isInactive && (onMoveLeft !== undefined || onMoveRight !== undefined)
+
   return (
     <div
+      draggable={draggable}
+      onDragStart={(e) => {
+        if (!jobId) return
+        e.dataTransfer.setData("text/plain", jobId)
+        e.dataTransfer.effectAllowed = "move"
+        onDragStart?.(jobId)
+      }}
+      onDragEnd={() => onDragEnd?.()}
       className={cn(
         "group relative rounded-lg border px-3 py-2 transition-colors",
         isInactive
           ? "border-black/5 bg-white/70 text-gray-500"
-          : "border-black/10 bg-white text-[#1C1E21] shadow-xs"
+          : "border-black/10 bg-white text-[#1C1E21] shadow-xs",
+        draggable && "cursor-grab active:cursor-grabbing",
+        isDragging && "opacity-50"
       )}
     >
       <GripVertical
@@ -60,6 +95,28 @@ export function JobCard({ company, role, meta, variant, onActivate }: Props) {
         >
           They Responded
         </button>
+      )}
+      {showArrows && (
+        <div className="mt-2 flex items-center justify-between gap-1">
+          <button
+            type="button"
+            onClick={onMoveLeft}
+            disabled={!canMoveLeft}
+            aria-label="Move to previous stage"
+            className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-black/10 text-gray-500 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+          >
+            <ChevronLeft className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onMoveRight}
+            disabled={!canMoveRight}
+            aria-label="Move to next stage"
+            className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-black/10 text-gray-500 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+          >
+            <ChevronRight className="size-3.5" />
+          </button>
+        </div>
       )}
     </div>
   )
