@@ -1,7 +1,7 @@
 "use client"
 
-import { useSearchParams } from "next/navigation"
-import { useMemo, useState, useTransition } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 
 import { moveJobStageAction } from "@/app/app/actions"
 import {
@@ -16,6 +16,7 @@ import {
 
 import { AppliedColumn } from "./applied-column"
 import { BoardColumn } from "./board-column"
+import { PrepOverlay, type PrepJob } from "./prep-overlay"
 
 export type JobRow = {
   id: string
@@ -24,21 +25,67 @@ export type JobRow = {
   tc: string | null
   state: "passive" | "active"
   stage: StageKey
+  source_url: string | null
   jd_text: string | null
   latest_message: string | null
 }
 
-type Props = {
-  jobs: JobRow[]
+export type InterviewerInfo = {
+  name: string | null
 }
 
-export function Board({ jobs }: Props) {
+type Props = {
+  jobs: JobRow[]
+  hasResume: boolean
+  interviewerByJobId: Record<string, InterviewerInfo>
+  initialOpenJobId: string | null
+}
+
+export function Board({
+  jobs,
+  hasResume,
+  interviewerByJobId,
+  initialOpenJobId,
+}: Props) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [draggedJobId, setDraggedJobId] = useState<string | null>(null)
   const [, startTransition] = useTransition()
-  const searchParams = useSearchParams()
 
   const q = (searchParams.get("q") ?? "").trim().toLowerCase()
   const isSearchActive = q.length > 0
+  const urlJobId = searchParams.get("job")
+
+  const [openJobId, setOpenJobId] = useState<string | null>(initialOpenJobId)
+
+  // Sync state when URL changes from outside our open/close handlers
+  // (back/forward navigation, manual URL edits). The equality guard
+  // prevents a feedback loop when our own open/close already pushed.
+  useEffect(() => {
+    if (urlJobId !== openJobId) {
+      setOpenJobId(urlJobId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlJobId])
+
+  const open = useCallback(
+    (jobId: string) => {
+      setOpenJobId(jobId)
+      const params = new URLSearchParams(searchParams.toString())
+      params.set("job", jobId)
+      router.push(`${pathname}?${params.toString()}`, { scroll: false })
+    },
+    [router, pathname, searchParams]
+  )
+
+  const close = useCallback(() => {
+    setOpenJobId(null)
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete("job")
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }, [router, pathname, searchParams])
 
   const visibleJobs = useMemo(() => {
     if (!isSearchActive) return jobs
@@ -80,47 +127,78 @@ export function Board({ jobs }: Props) {
     })
   }
 
+  const openJob: PrepJob | null = openJobId
+    ? (() => {
+        const j = jobs.find((x) => x.id === openJobId)
+        if (!j) return null
+        return {
+          id: j.id,
+          company_name: j.company_name,
+          role_title: j.role_title,
+          tc: j.tc,
+          source_url: j.source_url,
+          jd_text: j.jd_text,
+          latest_message: j.latest_message,
+          stage: j.stage,
+        }
+      })()
+    : null
+  const interviewer = openJobId ? interviewerByJobId[openJobId] ?? null : null
+
   return (
-    <section aria-label="Pipeline" className="w-full">
-      <div className="px-4 lg:px-8">
-        <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 lg:grid lg:grid-cols-5 lg:snap-none lg:overflow-visible lg:pb-0">
-          {UI_COLUMNS.map((col) => {
-            if (col.key === "applied") {
+    <>
+      <section aria-label="Pipeline" className="w-full">
+        <div className="px-4 lg:px-8">
+          <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 lg:grid lg:grid-cols-5 lg:snap-none lg:overflow-visible lg:pb-0">
+            {UI_COLUMNS.map((col) => {
+              if (col.key === "applied") {
+                return (
+                  <AppliedColumn
+                    key={col.key}
+                    label={col.label}
+                    jobs={grouped.applied}
+                    isSearchActive={isSearchActive}
+                    onJobOpen={open}
+                  />
+                )
+              }
               return (
-                <AppliedColumn
+                <BoardColumn
                   key={col.key}
+                  columnKey={col.key}
                   label={col.label}
-                  jobs={grouped.applied}
+                  jobs={grouped[col.key]}
+                  variant={col.variant}
+                  hint="Cards land here when you move them from Applied"
                   isSearchActive={isSearchActive}
+                  draggedJobId={draggedJobId}
+                  onJobOpen={open}
+                  onJobMoveLeft={(jobId) => {
+                    const left = leftOfColumn(col.key)
+                    if (left) move(jobId, left, "arrow")
+                  }}
+                  onJobMoveRight={(jobId) => {
+                    const right = rightOfColumn(col.key)
+                    if (right) move(jobId, right, "arrow")
+                  }}
+                  onJobDrop={(jobId) => move(jobId, col.key, "drag")}
+                  onDragStart={setDraggedJobId}
+                  onDragEnd={() => setDraggedJobId(null)}
                 />
               )
-            }
-            return (
-              <BoardColumn
-                key={col.key}
-                columnKey={col.key}
-                label={col.label}
-                jobs={grouped[col.key]}
-                variant={col.variant}
-                hint="Cards land here when you move them from Applied"
-                isSearchActive={isSearchActive}
-                draggedJobId={draggedJobId}
-                onJobMoveLeft={(jobId) => {
-                  const left = leftOfColumn(col.key)
-                  if (left) move(jobId, left, "arrow")
-                }}
-                onJobMoveRight={(jobId) => {
-                  const right = rightOfColumn(col.key)
-                  if (right) move(jobId, right, "arrow")
-                }}
-                onJobDrop={(jobId) => move(jobId, col.key, "drag")}
-                onDragStart={setDraggedJobId}
-                onDragEnd={() => setDraggedJobId(null)}
-              />
-            )
-          })}
+            })}
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
+      {openJobId && (
+        <PrepOverlay
+          job={openJob}
+          hasResume={hasResume}
+          hasInterviewer={!!interviewer}
+          interviewerName={interviewer?.name ?? null}
+          onClose={close}
+        />
+      )}
+    </>
   )
 }

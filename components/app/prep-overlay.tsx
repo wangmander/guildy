@@ -1,7 +1,6 @@
 "use client"
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { useCallback, useEffect } from "react"
+import { useEffect } from "react"
 import { X } from "lucide-react"
 
 import type { StageKey } from "@/lib/stages"
@@ -29,6 +28,7 @@ type Props = {
   hasResume: boolean
   hasInterviewer: boolean
   interviewerName: string | null
+  onClose: () => void
 }
 
 export function PrepOverlay({
@@ -36,21 +36,11 @@ export function PrepOverlay({
   hasResume,
   hasInterviewer,
   interviewerName,
+  onClose,
 }: Props) {
-  const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
-
-  const close = useCallback(() => {
-    const params = new URLSearchParams(searchParams.toString())
-    params.delete("job")
-    const qs = params.toString()
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
-  }, [router, pathname, searchParams])
-
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close()
+      if (e.key === "Escape") onClose()
     }
     window.addEventListener("keydown", onKey)
     const prev = document.body.style.overflow
@@ -59,7 +49,7 @@ export function PrepOverlay({
       window.removeEventListener("keydown", onKey)
       document.body.style.overflow = prev
     }
-  }, [close])
+  }, [onClose])
 
   return (
     <div
@@ -71,13 +61,13 @@ export function PrepOverlay({
       <button
         type="button"
         aria-label="Close prep overlay"
-        onClick={close}
+        onClick={onClose}
         className="absolute inset-0 cursor-default bg-[#1C1E21]/40 backdrop-blur-md"
       />
 
       <button
         type="button"
-        onClick={close}
+        onClick={onClose}
         aria-label="Close"
         className="absolute right-4 top-4 z-10 inline-flex size-10 items-center justify-center rounded-full bg-white/90 text-gray-600 shadow-md backdrop-blur transition-colors hover:bg-white hover:text-[#1C1E21] md:right-6 md:top-6"
       >
@@ -87,7 +77,7 @@ export function PrepOverlay({
       <div className="pointer-events-none absolute inset-0 overflow-y-auto md:overflow-hidden">
         <div className="pointer-events-none mx-auto flex min-h-full w-full max-w-[1440px] flex-col gap-4 px-4 py-16 md:grid md:grid-cols-[280px_minmax(0,1fr)_320px] md:gap-6 md:px-6 md:py-6 lg:gap-8 lg:px-8">
           {!job ? (
-            <ErrorCard onClose={close} />
+            <ErrorCard onClose={onClose} />
           ) : (
             <>
               <aside className="pointer-events-auto flex flex-col gap-4 md:sticky md:top-6 md:max-h-[calc(100dvh-3rem)] md:overflow-y-auto md:pr-1">

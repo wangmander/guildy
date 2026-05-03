@@ -16,9 +16,10 @@ type Props = {
   label: string
   jobs: JobRow[]
   isSearchActive: boolean
+  onJobOpen: (jobId: string) => void
 }
 
-export function AppliedColumn({ label, jobs, isSearchActive }: Props) {
+export function AppliedColumn({ label, jobs, isSearchActive, onJobOpen }: Props) {
   const [open, setOpen] = useState(false)
   const [activatingJob, setActivatingJob] = useState<JobRow | null>(null)
   const count = jobs.length
@@ -54,6 +55,7 @@ export function AppliedColumn({ label, jobs, isSearchActive }: Props) {
             meta={job.tc ?? undefined}
             variant="inactive"
             onActivate={() => setActivatingJob(job)}
+            onOpen={onJobOpen}
           />
         ))}
         {Array.from({ length: ghostCount }).map((_, i) => (

@@ -23,6 +23,7 @@ type Props = {
   hint?: string
   isSearchActive: boolean
   draggedJobId: string | null
+  onJobOpen: (jobId: string) => void
   onJobMoveLeft: (jobId: string) => void
   onJobMoveRight: (jobId: string) => void
   onJobDrop: (jobId: string) => void
@@ -38,6 +39,7 @@ export function BoardColumn({
   hint,
   isSearchActive,
   draggedJobId,
+  onJobOpen,
   onJobMoveLeft,
   onJobMoveRight,
   onJobDrop,
@@ -106,6 +108,7 @@ export function BoardColumn({
             role={job.role_title}
             meta={job.tc ?? undefined}
             variant={variant}
+            onOpen={onJobOpen}
             onMoveLeft={() => onJobMoveLeft(job.id)}
             onMoveRight={() => onJobMoveRight(job.id)}
             canMoveLeft={canMoveLeft}

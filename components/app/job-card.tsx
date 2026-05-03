@@ -1,6 +1,5 @@
 "use client"
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useRef } from "react"
 import { ChevronLeft, ChevronRight, GripVertical } from "lucide-react"
 
@@ -14,6 +13,7 @@ type Props = {
   role: string
   meta?: string
   variant: CardVariant
+  onOpen?: (jobId: string) => void
   onActivate?: () => void
   onMoveLeft?: () => void
   onMoveRight?: () => void
@@ -30,6 +30,7 @@ export function JobCard({
   role,
   meta,
   variant,
+  onOpen,
   onActivate,
   onMoveLeft,
   onMoveRight,
@@ -39,21 +40,16 @@ export function JobCard({
   onDragEnd,
   isDragging,
 }: Props) {
-  const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
   const justDraggedRef = useRef(false)
 
   const isInactive = variant === "inactive"
   const draggable = !isInactive && Boolean(jobId)
   const showArrows = !isInactive && (onMoveLeft !== undefined || onMoveRight !== undefined)
-  const clickable = Boolean(jobId)
+  const clickable = Boolean(jobId && onOpen)
 
   const open = () => {
-    if (!jobId) return
-    const params = new URLSearchParams(searchParams.toString())
-    params.set("job", jobId)
-    router.push(`${pathname}?${params.toString()}`, { scroll: false })
+    if (!jobId || !onOpen) return
+    onOpen(jobId)
   }
 
   const stop = (e: React.MouseEvent) => e.stopPropagation()

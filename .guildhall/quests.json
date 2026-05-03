@@ -50,11 +50,12 @@
       "completed_at": null,
       "subphases": [
         { "id": "4a-overlay-shell", "status": "complete", "completed_at": "2026-05-03T01:30:00Z" },
+        { "id": "4a-responsiveness-patch", "status": "complete", "completed_at": "2026-05-03T02:15:00Z" },
         { "id": "4b-quick-prep", "status": "not_started" },
         { "id": "4c-deep-prep-paywall", "status": "not_started" }
       ]
     }
   ],
-  "current_quest": "Phase 4a complete: Prep Overlay shell. Click any job card body opens floating 3-column widget overlay over blurred pipeline. URL syncs to ?job=<id> (push on open, replace on close, q preserved). New: components/app/prep-overlay.tsx + 6 widgets (job-context, interviewer, upgrade, inputs, questions, prep-canvas). job-card.tsx wired with click→navigate, drag-click suppression via justDraggedRef + setTimeout(0), stopPropagation on activate/arrows. applied-column.tsx now passes jobId so passive cards open overlay too. app/app/page.tsx fetches target job + resume + interviewer-context presence in parallel when ?job= is set. Invalid job id → inline error card. Body scroll locked via overflow:hidden. ESC, X button, click-outside all close. No AI, no schema changes, no prep_versions writes. Next: 3e stage label editing or 4b Quick Prep generation.",
-  "last_updated": "2026-05-03T01:30:00Z"
+  "current_quest": "Phase 4a responsiveness patch complete. Overlay open/close is now state-driven, not URL-driven. Board owns openJobId state, initialized from initialOpenJobId prop (server hint via searchParams.job for deep-link parity). Card click → setState + router.push (non-blocking). Close → setState(null) + router.replace. useEffect on urlJobId syncs back/forward navigation with equality guard to prevent loop. page.tsx no longer reads searchParams.job for rendering; always fetches jobs + hasResume + interviewerByJobId map in parallel. JobRow extended with source_url. PrepOverlay takes onClose prop, no router internals. Drag/drop, arrows, activation, search untouched. Next: 4b Quick Prep generation or 3e stage label editing.",
+  "last_updated": "2026-05-03T02:15:00Z"
 }
