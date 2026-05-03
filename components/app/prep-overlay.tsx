@@ -7,7 +7,7 @@ import {
   generatePrepAction,
   getCachedPrepAction,
 } from "@/app/app/actions"
-import type { PrepOutput } from "@/lib/ai/prep-types"
+import type { PrepOutput, PrepTier } from "@/lib/ai/prep-types"
 import type { StageKey } from "@/lib/stages"
 
 import { InputsWidget } from "./widgets/inputs-widget"
@@ -53,6 +53,7 @@ export function PrepOverlay({
   const [prepState, setPrepState] = useState<PrepState>({
     status: "loading-cache",
   })
+  const [tier, setTier] = useState<PrepTier>("quick")
   const [, startTransition] = useTransition()
 
   useEffect(() => {
@@ -69,11 +70,13 @@ export function PrepOverlay({
   }, [onClose])
 
   // Fetch cached prep when the overlay opens for a job. Re-run when the job id
-  // changes (different card opened).
+  // changes (different card opened). Reset tier to Quick on job switch so the
+  // paywall doesn't carry over from a prior view.
   useEffect(() => {
     if (!job) return
     let cancelled = false
     setPrepState({ status: "loading-cache" })
+    setTier("quick")
     getCachedPrepAction({ job_id: job.id }).then((res) => {
       if (cancelled) return
       if (!res.ok) {
@@ -142,7 +145,7 @@ export function PrepOverlay({
                   jdSnippet={job.jd_text}
                 />
                 <InterviewerWidget initialName={interviewerName} />
-                <UpgradeWidget />
+                <UpgradeWidget onUpgrade={() => setTier("deep")} />
               </aside>
 
               <main className="pointer-events-auto rounded-2xl border border-black/5 bg-[#F8F9FA] shadow-sm md:max-h-[calc(100dvh-3rem)] md:overflow-y-auto">
@@ -150,6 +153,8 @@ export function PrepOverlay({
                   stage={job.stage}
                   prepState={prepState}
                   hasResume={hasResume}
+                  tier={tier}
+                  onTierChange={setTier}
                   onGenerate={onGenerate}
                 />
               </main>

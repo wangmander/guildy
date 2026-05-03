@@ -44,19 +44,19 @@
     {
       "id": "phase-4-prep-overlay",
       "name": "Prep Overlay (shell → Quick → Deep)",
-      "status": "in_progress",
-      "progress": 0.7,
+      "status": "complete",
+      "progress": 1.0,
       "started_at": "2026-05-03T01:00:00Z",
-      "completed_at": null,
+      "completed_at": "2026-05-03T05:00:00Z",
       "subphases": [
         { "id": "4a-overlay-shell", "status": "complete", "completed_at": "2026-05-03T01:30:00Z" },
         { "id": "4a-responsiveness-patch", "status": "complete", "completed_at": "2026-05-03T02:15:00Z" },
         { "id": "4b-1-prep-mock", "status": "complete", "completed_at": "2026-05-03T03:00:00Z" },
         { "id": "4b-2-prep-real-ai", "status": "complete", "completed_at": "2026-05-03T04:00:00Z" },
-        { "id": "4c-deep-prep-paywall", "status": "not_started" }
+        { "id": "4c-deep-prep-paywall", "status": "complete", "completed_at": "2026-05-03T05:00:00Z" }
       ]
     }
   ],
-  "current_quest": "Phase 4b-2 complete. lib/ai/generate-prep.ts now makes a real OpenAI call instead of returning mock JSON. Same signature, same PrepOutput shape. Model: gpt-4o-mini (gpt-5.4-nano per spec is not a real OpenAI model — flagged; swap when 5.x nano lands). QUICK_PREP_MODEL constant exported and used as model_used in app/app/actions.ts (was 'mock-quick-prep'). System prompt is a senior-coach role with explicit anti-boilerplate and stage-aware question rules; quick-tier counts hardcoded (3-5 questions_they_ask, 2-3 questions_you_ask, 3 risks counter=null, 4 frames, 4 checklist items done=false, 3-4 criteria with integer weights ~100). User prompt assembles stage/company/role/interviewer/tier + truncated resume (8K cap), JD (12K cap), latest_message (4K cap). Strict json_schema response_format with hand-written PREP_OUTPUT_JSON_SCHEMA (additionalProperties:false everywhere, nullable union types for counter/answer_plan/interviewer_insights). Falls back to json_object + Zod parse on strict-mode failure; prepOutputSchema.safeParse runs as final defense. For tier=quick, generator force-nulls counter/answer_plan/interviewer_insights post-parse (belt-and-suspenders, since strict mode allows non-null). Stage in output overridden to input.stage to keep staleness detection honest. lib/ai/prep-types.ts now exports zod schemas (prepStageSchema, prepCriterionSchema, prepFrameSchema, prepRiskItemSchema, prepChecklistItemSchema, prepQuestionThemSchema, prepQuestionYouSchema, prepOutputSchema); TS types are z.infer<> derived so existing callers compile unchanged. generatePrepAction wraps generatePrep in try/catch and returns { ok: false, error } on OpenAI failure (UI surfaces existing error state). No cache pre-check before generate — every Generate/Regenerate click is a fresh call, fresh prep_versions row (regenerate is explicit user intent). No rate limits / cooldowns yet (Phase 7). No schema/UI changes. tsc clean. Next: manual verification with real seed jobs (different stages, different JDs, confirm prep references resume + JD specifics, not boilerplate), then 4c Deep Prep + paywall.",
-  "last_updated": "2026-05-03T04:00:00Z"
+  "current_quest": "Phase 4c complete. Deep Prep + paywall shell shipped UI-only. PrepOverlay owns a tier: PrepTier state (default 'quick'), resets to 'quick' whenever a different job is opened. Tier + setter pass down to PrepCanvas; setTier('deep') also wired into UpgradeWidget's Upgrade button (left sidebar). PrepCanvas's two cosmetic tier badges replaced with a real TierSelector — segmented role=tablist control, aria-selected reflects state, focusable buttons, hover treatment. When tier === 'deep', middle column body is replaced by <DeepPrepPaywall /> (CanvasBody / prepState entirely bypassed). Paywall uses spec-locked copy: H1 'Deep Prep', H2 'Quick Prep gets you ready. Deep Prep gives you the plan.', primary CTA 'Upgrade to Deep Prep' (disabled, aria-disabled, title='Stripe checkout ships in a later phase'), secondary 'Back to Quick Prep' that calls onTierChange('quick'). 6 unlocks rendered as 2-column grid with check icons: Deeper role-specific prep, Stronger answer plans, Recruiter and interviewer strategy, Resume-to-JD fit, Company and role positioning, Sharper questions to ask. Microcopy below CTAs notes Stripe is later phase and Quick Prep stays unlimited free. UpgradeWidget now takes onUpgrade prop. Right column (InputsWidget, QuestionsWidget) unchanged — when tier=deep the Quick prep questions still render in the right widget if cached; that minor visual disconnect is acceptable for shell. No backend changes: generatePrepAction still hardcoded tier='quick'; no Stripe; no auth; no schema. lib/ai/* untouched. tsc clean. Phase 4 closed. Next: Phase 5 (search polish? stage-label editing? or jump to Phase 6 Stripe + Deep generation per tech spec).",
+  "last_updated": "2026-05-03T05:00:00Z"
 }

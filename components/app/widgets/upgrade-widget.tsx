@@ -7,7 +7,11 @@ const BULLETS = [
   "Interviewer-aware prep",
 ] as const
 
-export function UpgradeWidget() {
+type Props = {
+  onUpgrade: () => void
+}
+
+export function UpgradeWidget({ onUpgrade }: Props) {
   return (
     <div className="rounded-2xl border border-[#482C4C]/20 bg-gradient-to-b from-[#482C4C]/5 to-white p-4 shadow-sm">
       <div className="text-base font-semibold text-[#482C4C]">
@@ -31,6 +35,7 @@ export function UpgradeWidget() {
 
       <button
         type="button"
+        onClick={onUpgrade}
         className="mt-4 inline-flex h-9 w-full items-center justify-center rounded-md bg-[#482C4C] text-sm font-medium text-white transition-opacity hover:opacity-90"
       >
         Upgrade

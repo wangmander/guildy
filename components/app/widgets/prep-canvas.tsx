@@ -1,15 +1,17 @@
 "use client"
 
-import { Lock, RefreshCw, Sparkles, Shield } from "lucide-react"
+import { Check, Lock, RefreshCw, Sparkles, Shield } from "lucide-react"
 
 import type { PrepState } from "@/components/app/prep-overlay"
-import type { PrepOutput } from "@/lib/ai/prep-types"
+import type { PrepOutput, PrepTier } from "@/lib/ai/prep-types"
 import type { StageKey } from "@/lib/stages"
 
 type Props = {
   stage: StageKey
   prepState: PrepState
   hasResume: boolean
+  tier: PrepTier
+  onTierChange: (tier: PrepTier) => void
   onGenerate: () => void
 }
 
@@ -31,7 +33,14 @@ function stageHeading(stage: StageKey): string {
   }
 }
 
-export function PrepCanvas({ stage, prepState, hasResume, onGenerate }: Props) {
+export function PrepCanvas({
+  stage,
+  prepState,
+  hasResume,
+  tier,
+  onTierChange,
+  onGenerate,
+}: Props) {
   return (
     <div className="px-4 pb-12 pt-6 md:px-8">
       <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
@@ -41,20 +50,61 @@ export function PrepCanvas({ stage, prepState, hasResume, onGenerate }: Props) {
         {stageHeading(stage)}
       </h1>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#482C4C] px-3 py-1 text-xs font-medium text-white">
-          GPT 5.4 Nano · Quick Prep
-        </span>
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#482C4C]/20 bg-white px-3 py-1 text-xs font-medium text-[#482C4C]">
-          Sonnet 4.6 · Deep Prep · Upgrade
-        </span>
-      </div>
+      <TierSelector tier={tier} onTierChange={onTierChange} />
 
-      <CanvasBody
-        prepState={prepState}
-        hasResume={hasResume}
-        onGenerate={onGenerate}
-      />
+      {tier === "deep" ? (
+        <DeepPrepPaywall onBackToQuick={() => onTierChange("quick")} />
+      ) : (
+        <CanvasBody
+          prepState={prepState}
+          hasResume={hasResume}
+          onGenerate={onGenerate}
+        />
+      )}
+    </div>
+  )
+}
+
+function TierSelector({
+  tier,
+  onTierChange,
+}: {
+  tier: PrepTier
+  onTierChange: (tier: PrepTier) => void
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label="Prep tier"
+      className="mt-4 flex flex-wrap items-center gap-2"
+    >
+      <button
+        type="button"
+        role="tab"
+        aria-selected={tier === "quick"}
+        onClick={() => onTierChange("quick")}
+        className={
+          tier === "quick"
+            ? "inline-flex items-center gap-1.5 rounded-full bg-[#482C4C] px-3 py-1 text-xs font-medium text-white shadow-sm"
+            : "inline-flex items-center gap-1.5 rounded-full border border-[#482C4C]/20 bg-white px-3 py-1 text-xs font-medium text-[#482C4C] transition-colors hover:bg-[#482C4C]/5"
+        }
+      >
+        GPT 5.4 Nano · Quick Prep
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={tier === "deep"}
+        onClick={() => onTierChange("deep")}
+        className={
+          tier === "deep"
+            ? "inline-flex items-center gap-1.5 rounded-full bg-[#482C4C] px-3 py-1 text-xs font-medium text-white shadow-sm"
+            : "inline-flex items-center gap-1.5 rounded-full border border-[#482C4C]/20 bg-white px-3 py-1 text-xs font-medium text-[#482C4C] transition-colors hover:bg-[#482C4C]/5"
+        }
+      >
+        <Lock className="size-3" aria-hidden />
+        Sonnet 4.6 · Deep Prep
+      </button>
     </div>
   )
 }
@@ -325,6 +375,69 @@ function DeepLockedRow({ label }: { label: string }) {
       <Shield className="size-3" />
       {label}
       <Lock className="size-3 opacity-60" />
+    </div>
+  )
+}
+
+const DEEP_PREP_UNLOCKS = [
+  "Deeper role-specific prep",
+  "Stronger answer plans",
+  "Recruiter and interviewer strategy",
+  "Resume-to-JD fit",
+  "Company and role positioning",
+  "Sharper questions to ask",
+] as const
+
+function DeepPrepPaywall({ onBackToQuick }: { onBackToQuick: () => void }) {
+  return (
+    <div className="mt-6">
+      <div className="rounded-2xl border border-[#482C4C]/15 bg-gradient-to-b from-[#482C4C]/5 to-white p-6 shadow-sm md:p-8">
+        <div className="inline-flex items-center gap-1.5 rounded-full bg-[#482C4C]/10 px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-[#482C4C]">
+          <Lock className="size-3" />
+          Premium tier
+        </div>
+        <h2 className="mt-4 font-serif text-2xl font-semibold tracking-tight text-[#1C1E21] md:text-3xl">
+          Deep Prep
+        </h2>
+        <p className="mt-2 max-w-md text-sm leading-relaxed text-gray-600">
+          Quick Prep gets you ready. Deep Prep gives you the plan.
+        </p>
+
+        <ul className="mt-6 grid gap-3 sm:grid-cols-2">
+          {DEEP_PREP_UNLOCKS.map((unlock) => (
+            <li
+              key={unlock}
+              className="flex items-start gap-2.5 rounded-lg border border-black/5 bg-white px-3 py-2.5 text-sm text-[#1C1E21] shadow-sm"
+            >
+              <Check className="mt-0.5 size-4 shrink-0 text-[#482C4C]" />
+              <span className="leading-snug">{unlock}</span>
+            </li>
+          ))}
+        </ul>
+
+        <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <button
+            type="button"
+            disabled
+            aria-disabled
+            title="Stripe checkout ships in a later phase"
+            className="inline-flex h-10 items-center justify-center rounded-md bg-[#482C4C] px-5 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Upgrade to Deep Prep
+          </button>
+          <button
+            type="button"
+            onClick={onBackToQuick}
+            className="inline-flex h-10 items-center justify-center rounded-md px-3 text-sm font-medium text-[#482C4C] hover:underline"
+          >
+            Back to Quick Prep
+          </button>
+        </div>
+        <p className="mt-3 text-[11px] text-gray-400">
+          Checkout ships in a later phase. Quick Prep stays unlimited on the
+          free tier.
+        </p>
+      </div>
     </div>
   )
 }
