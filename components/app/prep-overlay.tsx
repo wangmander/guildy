@@ -69,9 +69,27 @@ export function PrepOverlay({
     }
   }, [onClose])
 
-  // Fetch cached prep when the overlay opens for a job. Re-run when the job id
-  // changes (different card opened). Reset tier to Quick on job switch so the
-  // paywall doesn't carry over from a prior view.
+  // After the overlay unmounts the browser restores focus to the trigger
+  // (a card with role=button), which paints a keyboard focus ring. Blur
+  // the next frame so the ring doesn't linger. Empty deps so this fires
+  // only on unmount, not whenever onClose's reference changes.
+  useEffect(() => {
+    return () => {
+      requestAnimationFrame(() => {
+        const active = document.activeElement
+        if (active instanceof HTMLElement && active !== document.body) {
+          active.blur()
+        }
+      })
+    }
+  }, [])
+
+  // Fetch cached prep when the overlay opens for a job. Re-run only when the
+  // job id changes (different card opened). Depending on the `job` object
+  // would re-fire on every parent re-render — the parent re-computes openJob
+  // from its jobs array, getting a new reference even when content is
+  // identical, which previously caused a double skeleton flash on open and
+  // again after every router.refresh() from input saves.
   useEffect(() => {
     if (!job) return
     let cancelled = false
@@ -92,7 +110,8 @@ export function PrepOverlay({
     return () => {
       cancelled = true
     }
-  }, [job])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job?.id])
 
   const onGenerate = useCallback(() => {
     if (!job) return
@@ -117,8 +136,16 @@ export function PrepOverlay({
       <button
         type="button"
         aria-label="Close prep overlay"
-        onClick={onClose}
-        className="absolute inset-0 cursor-default bg-[#1C1E21]/40 backdrop-blur-md"
+        tabIndex={-1}
+        onMouseDown={(e) => {
+          // Fire on press (not release) so the close feels instant, and
+          // preventDefault skips the native focus shift to this button —
+          // both reduce the rare "click did nothing" cases on the gray
+          // backdrop area.
+          e.preventDefault()
+          onClose()
+        }}
+        className="absolute inset-0 z-0 cursor-default bg-[#1C1E21]/40 backdrop-blur-md"
       />
 
       <button
