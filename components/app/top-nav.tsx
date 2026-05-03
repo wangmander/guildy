@@ -77,7 +77,7 @@ export function TopNav({ email }: Props) {
         <div className="mx-auto w-full max-w-[640px] flex-1">
           <div className="relative">
             <input
-              type="search"
+              type="text"
               placeholder="Search company, role, or context"
               aria-label="Search jobs"
               value={value}
