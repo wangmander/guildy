@@ -41,6 +41,7 @@ export function JobCard({
   isDragging,
 }: Props) {
   const justDraggedRef = useRef(false)
+  const cardRef = useRef<HTMLDivElement | null>(null)
 
   const isInactive = variant === "inactive"
   const draggable = !isInactive && Boolean(jobId)
@@ -56,6 +57,7 @@ export function JobCard({
 
   return (
     <div
+      ref={cardRef}
       role={clickable ? "button" : undefined}
       tabIndex={clickable ? 0 : undefined}
       draggable={draggable}
@@ -72,6 +74,9 @@ export function JobCard({
         setTimeout(() => {
           justDraggedRef.current = false
         }, 0)
+        // Drop focus left on the source card so the focus ring doesn't
+        // linger after a mouse drag-and-release.
+        cardRef.current?.blur()
         onDragEnd?.()
       }}
       onClick={() => {
@@ -86,13 +91,13 @@ export function JobCard({
         }
       }}
       className={cn(
-        "group relative rounded-lg border px-3 py-2 transition-colors",
+        "group relative rounded-lg border px-3 py-2 outline-none transition-shadow",
         isInactive
           ? "border-black/5 bg-white/70 text-gray-500"
           : "border-black/10 bg-white text-[#1C1E21] shadow-xs",
         clickable && !draggable && "cursor-pointer",
         draggable && "cursor-grab active:cursor-grabbing",
-        clickable && "hover:border-[#482C4C]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#482C4C]/30",
+        clickable && "hover:shadow-md focus-visible:ring-2 focus-visible:ring-[#482C4C]/40 focus-visible:ring-offset-2",
         isDragging && "opacity-50"
       )}
     >
