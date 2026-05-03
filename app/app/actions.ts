@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { z } from "zod"
 
-import { generatePrep } from "@/lib/ai/generate-prep"
+import { generatePrep, QUICK_PREP_MODEL } from "@/lib/ai/generate-prep"
 import { stageKeyToPrepStage, type PrepOutput } from "@/lib/ai/prep-types"
 import type { StageKey } from "@/lib/stages"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
@@ -326,16 +326,23 @@ export async function generatePrepAction(
     interviewerRow?.content ??
     null
 
-  const prep = await generatePrep({
-    resume_text: profile?.resume_text ?? null,
-    jd_text: job.jd_text,
-    latest_message: job.latest_message,
-    company_name: job.company_name,
-    role_title: job.role_title,
-    stage: prepStage,
-    interviewer_name: interviewerName,
-    tier: "quick",
-  })
+  let prep: PrepOutput
+  try {
+    prep = await generatePrep({
+      resume_text: profile?.resume_text ?? null,
+      jd_text: job.jd_text,
+      latest_message: job.latest_message,
+      company_name: job.company_name,
+      role_title: job.role_title,
+      stage: prepStage,
+      interviewer_name: interviewerName,
+      tier: "quick",
+    })
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Prep generation failed"
+    return { ok: false, error: message }
+  }
 
   const contextHash = createHash("sha256")
     .update(
@@ -352,7 +359,7 @@ export async function generatePrepAction(
     job_id: parsed.data.job_id,
     user_id: user.id,
     tier: "quick",
-    model_used: "mock-quick-prep",
+    model_used: QUICK_PREP_MODEL,
     context_hash: contextHash,
     output: prep,
   })
