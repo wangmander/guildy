@@ -45,17 +45,18 @@
       "id": "phase-4-prep-overlay",
       "name": "Prep Overlay (shell → Quick → Deep)",
       "status": "in_progress",
-      "progress": 0.33,
+      "progress": 0.5,
       "started_at": "2026-05-03T01:00:00Z",
       "completed_at": null,
       "subphases": [
         { "id": "4a-overlay-shell", "status": "complete", "completed_at": "2026-05-03T01:30:00Z" },
         { "id": "4a-responsiveness-patch", "status": "complete", "completed_at": "2026-05-03T02:15:00Z" },
-        { "id": "4b-quick-prep", "status": "not_started" },
+        { "id": "4b-1-prep-mock", "status": "complete", "completed_at": "2026-05-03T03:00:00Z" },
+        { "id": "4b-2-prep-real-ai", "status": "not_started" },
         { "id": "4c-deep-prep-paywall", "status": "not_started" }
       ]
     }
   ],
-  "current_quest": "Phase 4a responsiveness patch complete. Overlay open/close is now state-driven, not URL-driven. Board owns openJobId state, initialized from initialOpenJobId prop (server hint via searchParams.job for deep-link parity). Card click → setState + router.push (non-blocking). Close → setState(null) + router.replace. useEffect on urlJobId syncs back/forward navigation with equality guard to prevent loop. page.tsx no longer reads searchParams.job for rendering; always fetches jobs + hasResume + interviewerByJobId map in parallel. JobRow extended with source_url. PrepOverlay takes onClose prop, no router internals. Drag/drop, arrows, activation, search untouched. Next: 4b Quick Prep generation or 3e stage label editing.",
-  "last_updated": "2026-05-03T02:15:00Z"
+  "current_quest": "Phase 4b-1 complete. Prep data contract locked end-to-end with mock generator. lib/ai/prep-types.ts exports PrepInput/PrepOutput/PrepStage/PrepTier and stageKeyToPrepStage helper. lib/ai/generate-prep.ts is server-only (import 'server-only') and returns hardcoded JSON keyed by stage with ~500ms artificial delay; references company/role/interviewer in copy. Two new server actions in app/app/actions.ts: getCachedPrepAction (latest tier='quick' row by created_at desc) and generatePrepAction (assembles input from jobs + user_profiles.resume_text + job_context interviewer row, calls generatePrep, persists to prep_versions with model_used='mock-quick-prep' and context_hash=sha256(stage+jd+msg+interviewer), flips jobs.prep_status to 'quick_generated'). Stage stored INSIDE output jsonb (no schema migration). Versions persist; never overwrite. Schema verified: prep_versions has output column, not content; no stage column. PrepOverlay lifts prepState (idle/loading-cache/generating/ready/error) and shares it between PrepCanvas and QuestionsWidget. PrepCanvas renders Purpose (criteria as labeled bars with weight%), Positioning (numbered frames), Risks (items with Deep-only counters; locked rows show shield icon), Prep Checklist. Empty state = Generate CTA (disabled if !hasResume), generating/loading-cache = skeleton, error = retry. Regenerate button creates a new prep_versions row. QuestionsWidget renders real questions_they_ask + questions_you_ask grouped by category with count chip. tsc clean. Next: 4b-2 swap mock generatePrep body for real GPT-5.4 nano call (signature stays).",
+  "last_updated": "2026-05-03T03:00:00Z"
 }

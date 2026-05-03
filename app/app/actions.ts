@@ -1,9 +1,14 @@
 "use server"
 
+import { createHash } from "node:crypto"
+
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { z } from "zod"
 
+import { generatePrep } from "@/lib/ai/generate-prep"
+import { stageKeyToPrepStage, type PrepOutput } from "@/lib/ai/prep-types"
+import type { StageKey } from "@/lib/stages"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 export async function signOutAction() {
@@ -215,4 +220,149 @@ export async function activateJobAction(
 
   revalidatePath("/app")
   return { ok: true }
+}
+
+// Prep ---------------------------------------------------------------------
+
+const jobIdSchema = z.object({
+  job_id: z.string().uuid("Invalid job id"),
+})
+
+export type GetCachedPrepResult =
+  | { ok: true; prep: PrepOutput | null }
+  | { ok: false; error: string }
+
+export async function getCachedPrepAction(
+  input: z.input<typeof jobIdSchema>
+): Promise<GetCachedPrepResult> {
+  const parsed = jobIdSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" }
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: "Not signed in" }
+
+  const { data: job, error: jobError } = await supabase
+    .from("jobs")
+    .select("id")
+    .eq("id", parsed.data.job_id)
+    .eq("user_id", user.id)
+    .maybeSingle()
+  if (jobError) return { ok: false, error: jobError.message }
+  if (!job) return { ok: false, error: "Job not found" }
+
+  const { data: row, error: prepError } = await supabase
+    .from("prep_versions")
+    .select("output")
+    .eq("job_id", parsed.data.job_id)
+    .eq("user_id", user.id)
+    .eq("tier", "quick")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (prepError) return { ok: false, error: prepError.message }
+
+  return { ok: true, prep: (row?.output ?? null) as PrepOutput | null }
+}
+
+export type GeneratePrepResult =
+  | { ok: true; prep: PrepOutput }
+  | { ok: false; error: string }
+
+export async function generatePrepAction(
+  input: z.input<typeof jobIdSchema>
+): Promise<GeneratePrepResult> {
+  const parsed = jobIdSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" }
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: "Not signed in" }
+
+  const [{ data: job, error: jobError }, { data: profile }] = await Promise.all([
+    supabase
+      .from("jobs")
+      .select("id, company_name, role_title, stage, jd_text, latest_message")
+      .eq("id", parsed.data.job_id)
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("user_profiles")
+      .select("resume_text")
+      .eq("id", user.id)
+      .maybeSingle(),
+  ])
+  if (jobError) return { ok: false, error: jobError.message }
+  if (!job) return { ok: false, error: "Job not found" }
+
+  const prepStage = stageKeyToPrepStage(job.stage as StageKey)
+  if (!prepStage) {
+    return {
+      ok: false,
+      error: "Prep is only available once the job is active.",
+    }
+  }
+
+  const { data: interviewerRow } = await supabase
+    .from("job_context")
+    .select("content, metadata")
+    .eq("job_id", parsed.data.job_id)
+    .eq("user_id", user.id)
+    .eq("type", "interviewer")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const interviewerName =
+    (interviewerRow?.metadata as { name?: string | null } | null)?.name ??
+    interviewerRow?.content ??
+    null
+
+  const prep = await generatePrep({
+    resume_text: profile?.resume_text ?? null,
+    jd_text: job.jd_text,
+    latest_message: job.latest_message,
+    company_name: job.company_name,
+    role_title: job.role_title,
+    stage: prepStage,
+    interviewer_name: interviewerName,
+    tier: "quick",
+  })
+
+  const contextHash = createHash("sha256")
+    .update(
+      JSON.stringify({
+        stage: prepStage,
+        jd: job.jd_text ?? "",
+        msg: job.latest_message ?? "",
+        interviewer: interviewerName ?? "",
+      })
+    )
+    .digest("hex")
+
+  const { error: insertError } = await supabase.from("prep_versions").insert({
+    job_id: parsed.data.job_id,
+    user_id: user.id,
+    tier: "quick",
+    model_used: "mock-quick-prep",
+    context_hash: contextHash,
+    output: prep,
+  })
+  if (insertError) return { ok: false, error: insertError.message }
+
+  await supabase
+    .from("jobs")
+    .update({ prep_status: "quick_generated" })
+    .eq("id", parsed.data.job_id)
+    .eq("user_id", user.id)
+
+  return { ok: true, prep }
 }

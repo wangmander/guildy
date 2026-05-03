@@ -1,8 +1,13 @@
 "use client"
 
-import { useEffect } from "react"
+import { useCallback, useEffect, useState, useTransition } from "react"
 import { X } from "lucide-react"
 
+import {
+  generatePrepAction,
+  getCachedPrepAction,
+} from "@/app/app/actions"
+import type { PrepOutput } from "@/lib/ai/prep-types"
 import type { StageKey } from "@/lib/stages"
 
 import { InputsWidget } from "./widgets/inputs-widget"
@@ -31,6 +36,13 @@ type Props = {
   onClose: () => void
 }
 
+type PrepState =
+  | { status: "idle" }
+  | { status: "loading-cache" }
+  | { status: "generating" }
+  | { status: "ready"; prep: PrepOutput }
+  | { status: "error"; message: string }
+
 export function PrepOverlay({
   job,
   hasResume,
@@ -38,6 +50,9 @@ export function PrepOverlay({
   interviewerName,
   onClose,
 }: Props) {
+  const [prepState, setPrepState] = useState<PrepState>({ status: "idle" })
+  const [, startTransition] = useTransition()
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose()
@@ -50,6 +65,42 @@ export function PrepOverlay({
       document.body.style.overflow = prev
     }
   }, [onClose])
+
+  // Fetch cached prep when the overlay opens for a job. Re-run when the job id
+  // changes (different card opened).
+  useEffect(() => {
+    if (!job) return
+    let cancelled = false
+    setPrepState({ status: "loading-cache" })
+    getCachedPrepAction({ job_id: job.id }).then((res) => {
+      if (cancelled) return
+      if (!res.ok) {
+        setPrepState({ status: "error", message: res.error })
+        return
+      }
+      if (res.prep) {
+        setPrepState({ status: "ready", prep: res.prep })
+      } else {
+        setPrepState({ status: "idle" })
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [job])
+
+  const onGenerate = useCallback(() => {
+    if (!job) return
+    setPrepState({ status: "generating" })
+    startTransition(async () => {
+      const res = await generatePrepAction({ job_id: job.id })
+      if (!res.ok) {
+        setPrepState({ status: "error", message: res.error })
+        return
+      }
+      setPrepState({ status: "ready", prep: res.prep })
+    })
+  }, [job])
 
   return (
     <div
@@ -93,7 +144,12 @@ export function PrepOverlay({
               </aside>
 
               <main className="pointer-events-auto rounded-2xl border border-black/5 bg-[#F8F9FA] shadow-sm md:max-h-[calc(100dvh-3rem)] md:overflow-y-auto">
-                <PrepCanvas stage={job.stage} />
+                <PrepCanvas
+                  stage={job.stage}
+                  prepState={prepState}
+                  hasResume={hasResume}
+                  onGenerate={onGenerate}
+                />
               </main>
 
               <aside className="pointer-events-auto flex flex-col gap-4 md:sticky md:top-6 md:max-h-[calc(100dvh-3rem)] md:overflow-y-auto md:pr-1">
@@ -105,7 +161,7 @@ export function PrepOverlay({
                   }
                   hasInterviewer={hasInterviewer}
                 />
-                <QuestionsWidget />
+                <QuestionsWidget prepState={prepState} />
               </aside>
             </>
           )}
@@ -134,3 +190,5 @@ function ErrorCard({ onClose }: { onClose: () => void }) {
     </div>
   )
 }
+
+export type { PrepState }
