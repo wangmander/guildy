@@ -1,5 +1,7 @@
 "use client"
 
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { useRef } from "react"
 import { ChevronLeft, ChevronRight, GripVertical } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -37,26 +39,64 @@ export function JobCard({
   onDragEnd,
   isDragging,
 }: Props) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const justDraggedRef = useRef(false)
+
   const isInactive = variant === "inactive"
   const draggable = !isInactive && Boolean(jobId)
   const showArrows = !isInactive && (onMoveLeft !== undefined || onMoveRight !== undefined)
+  const clickable = Boolean(jobId)
+
+  const open = () => {
+    if (!jobId) return
+    const params = new URLSearchParams(searchParams.toString())
+    params.set("job", jobId)
+    router.push(`${pathname}?${params.toString()}`, { scroll: false })
+  }
+
+  const stop = (e: React.MouseEvent) => e.stopPropagation()
 
   return (
     <div
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
       draggable={draggable}
       onDragStart={(e) => {
         if (!jobId) return
+        justDraggedRef.current = true
         e.dataTransfer.setData("text/plain", jobId)
         e.dataTransfer.effectAllowed = "move"
         onDragStart?.(jobId)
       }}
-      onDragEnd={() => onDragEnd?.()}
+      onDragEnd={() => {
+        // The browser fires a synthetic click after a drag completes.
+        // Keep the flag true through that tick so the click handler bails.
+        setTimeout(() => {
+          justDraggedRef.current = false
+        }, 0)
+        onDragEnd?.()
+      }}
+      onClick={() => {
+        if (justDraggedRef.current) return
+        open()
+      }}
+      onKeyDown={(e) => {
+        if (!clickable) return
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          open()
+        }
+      }}
       className={cn(
         "group relative rounded-lg border px-3 py-2 transition-colors",
         isInactive
           ? "border-black/5 bg-white/70 text-gray-500"
           : "border-black/10 bg-white text-[#1C1E21] shadow-xs",
+        clickable && !draggable && "cursor-pointer",
         draggable && "cursor-grab active:cursor-grabbing",
+        clickable && "hover:border-[#482C4C]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#482C4C]/30",
         isDragging && "opacity-50"
       )}
     >
@@ -90,17 +130,26 @@ export function JobCard({
       {onActivate && (
         <button
           type="button"
-          onClick={onActivate}
+          onClick={(e) => {
+            e.stopPropagation()
+            onActivate()
+          }}
           className="mt-2 inline-flex h-7 w-full items-center justify-center rounded-md border border-[#482C4C]/20 bg-white text-xs font-medium text-[#482C4C] transition-colors hover:bg-[#482C4C]/5"
         >
           They Responded
         </button>
       )}
       {showArrows && (
-        <div className="mt-2 flex items-center justify-between gap-1">
+        <div
+          className="mt-2 flex items-center justify-between gap-1"
+          onClick={stop}
+        >
           <button
             type="button"
-            onClick={onMoveLeft}
+            onClick={(e) => {
+              e.stopPropagation()
+              onMoveLeft?.()
+            }}
             disabled={!canMoveLeft}
             aria-label="Move to previous stage"
             className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-black/10 text-gray-500 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
@@ -109,7 +158,10 @@ export function JobCard({
           </button>
           <button
             type="button"
-            onClick={onMoveRight}
+            onClick={(e) => {
+              e.stopPropagation()
+              onMoveRight?.()
+            }}
             disabled={!canMoveRight}
             aria-label="Move to next stage"
             className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-black/10 text-gray-500 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"

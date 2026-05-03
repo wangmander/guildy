@@ -48,6 +48,7 @@ export function AppliedColumn({ label, jobs, isSearchActive }: Props) {
         {jobs.map((job) => (
           <JobCard
             key={job.id}
+            jobId={job.id}
             company={job.company_name}
             role={job.role_title}
             meta={job.tc ?? undefined}
