@@ -222,6 +222,106 @@ export async function activateJobAction(
   return { ok: true }
 }
 
+// Context capture ----------------------------------------------------------
+
+const setLatestMessageSchema = z.object({
+  job_id: z.string().uuid("Invalid job id"),
+  latest_message: z.string().trim().min(1, "Message is required").max(20000),
+})
+
+export type SetLatestMessageInput = z.input<typeof setLatestMessageSchema>
+export type SetLatestMessageResult =
+  | { ok: true }
+  | { ok: false; error: string }
+
+export async function setLatestMessageAction(
+  input: SetLatestMessageInput
+): Promise<SetLatestMessageResult> {
+  const parsed = setLatestMessageSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input",
+    }
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: "Not signed in" }
+
+  const { error } = await supabase
+    .from("jobs")
+    .update({ latest_message: parsed.data.latest_message })
+    .eq("id", parsed.data.job_id)
+    .eq("user_id", user.id)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath("/app")
+  return { ok: true }
+}
+
+const setInterviewerSchema = z.object({
+  job_id: z.string().uuid("Invalid job id"),
+  name: z.string().trim().min(1, "Name is required").max(200),
+})
+
+export type SetInterviewerInput = z.input<typeof setInterviewerSchema>
+export type SetInterviewerResult =
+  | { ok: true }
+  | { ok: false; error: string }
+
+export async function setInterviewerAction(
+  input: SetInterviewerInput
+): Promise<SetInterviewerResult> {
+  const parsed = setInterviewerSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input",
+    }
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: "Not signed in" }
+
+  // Verify ownership before mutating.
+  const { data: job, error: jobError } = await supabase
+    .from("jobs")
+    .select("id")
+    .eq("id", parsed.data.job_id)
+    .eq("user_id", user.id)
+    .maybeSingle()
+  if (jobError) return { ok: false, error: jobError.message }
+  if (!job) return { ok: false, error: "Job not found" }
+
+  // No unique constraint on (user_id, job_id, type) — emulate upsert by
+  // wiping any existing interviewer rows for this job, then inserting one.
+  const { error: deleteError } = await supabase
+    .from("job_context")
+    .delete()
+    .eq("job_id", parsed.data.job_id)
+    .eq("user_id", user.id)
+    .eq("type", "interviewer")
+  if (deleteError) return { ok: false, error: deleteError.message }
+
+  const { error: insertError } = await supabase.from("job_context").insert({
+    job_id: parsed.data.job_id,
+    user_id: user.id,
+    type: "interviewer",
+    content: parsed.data.name,
+    metadata: { name: parsed.data.name },
+  })
+  if (insertError) return { ok: false, error: insertError.message }
+
+  revalidatePath("/app")
+  return { ok: true }
+}
+
 // Prep ---------------------------------------------------------------------
 
 const jobIdSchema = z.object({

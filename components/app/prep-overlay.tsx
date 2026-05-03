@@ -144,7 +144,7 @@ export function PrepOverlay({
                   sourceUrl={job.source_url}
                   jdSnippet={job.jd_text}
                 />
-                <InterviewerWidget initialName={interviewerName} />
+                <InterviewerWidget jobId={job.id} initialName={interviewerName} />
                 <UpgradeWidget onUpgrade={() => setTier("deep")} />
               </aside>
 
@@ -161,6 +161,7 @@ export function PrepOverlay({
 
               <aside className="pointer-events-auto flex flex-col gap-4 md:sticky md:top-6 md:max-h-[calc(100dvh-3rem)] md:overflow-y-auto md:pr-1">
                 <InputsWidget
+                  jobId={job.id}
                   hasResume={hasResume}
                   hasJd={!!job.jd_text && job.jd_text.trim().length > 0}
                   hasLatestMessage={

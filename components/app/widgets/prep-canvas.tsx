@@ -119,7 +119,7 @@ function CanvasBody({
   onGenerate: () => void
 }) {
   if (prepState.status === "loading-cache") {
-    return <LoadingSkeleton hint="Checking for saved prep…" />
+    return <LoadingSkeleton />
   }
   if (prepState.status === "generating") {
     return <LoadingSkeleton hint="Generating Quick Prep…" />
@@ -189,17 +189,20 @@ function ErrorState({
   )
 }
 
-function LoadingSkeleton({ hint }: { hint: string }) {
+function LoadingSkeleton({ hint }: { hint?: string }) {
   return (
-    <div className="mt-8 space-y-6">
-      <p className="text-xs uppercase tracking-wide text-gray-400">{hint}</p>
+    <div className="mt-8 space-y-6" aria-busy="true" aria-live="polite">
+      {hint ? (
+        <p className="text-xs uppercase tracking-wide text-gray-400">{hint}</p>
+      ) : (
+        <span className="sr-only">Loading prep…</span>
+      )}
       {[0, 1, 2, 3].map((i) => (
         <div
           key={i}
-          className="rounded-xl border border-black/5 bg-white p-5 shadow-sm"
+          className="animate-pulse rounded-xl border border-black/5 bg-white p-5 shadow-sm"
         >
-          <div className="h-4 w-1/3 rounded bg-gray-100" />
-          <div className="mt-4 space-y-2">
+          <div className="space-y-2">
             <div className="h-2 w-3/4 rounded-full bg-gray-100" />
             <div className="h-2 w-2/3 rounded-full bg-gray-100" />
             <div className="h-2 w-1/2 rounded-full bg-gray-100" />
