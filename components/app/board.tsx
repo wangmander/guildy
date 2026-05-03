@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useSearchParams } from "next/navigation"
+import { useMemo, useState, useTransition } from "react"
 
 import { moveJobStageAction } from "@/app/app/actions"
 import {
@@ -23,6 +24,8 @@ export type JobRow = {
   tc: string | null
   state: "passive" | "active"
   stage: StageKey
+  jd_text: string | null
+  latest_message: string | null
 }
 
 type Props = {
@@ -32,6 +35,25 @@ type Props = {
 export function Board({ jobs }: Props) {
   const [draggedJobId, setDraggedJobId] = useState<string | null>(null)
   const [, startTransition] = useTransition()
+  const searchParams = useSearchParams()
+
+  const q = (searchParams.get("q") ?? "").trim().toLowerCase()
+  const isSearchActive = q.length > 0
+
+  const visibleJobs = useMemo(() => {
+    if (!isSearchActive) return jobs
+    return jobs.filter((j) => {
+      const fields = [
+        j.company_name,
+        j.role_title,
+        j.jd_text,
+        j.latest_message,
+      ]
+      return fields.some(
+        (f) => typeof f === "string" && f.toLowerCase().includes(q)
+      )
+    })
+  }, [jobs, q, isSearchActive])
 
   const grouped: Record<UiColumnKey, JobRow[]> = {
     applied: [],
@@ -41,7 +63,7 @@ export function Board({ jobs }: Props) {
     offer: [],
   }
 
-  for (const job of jobs) {
+  for (const job of visibleJobs) {
     const col = stageToColumn(job.stage)
     if (col) grouped[col].push(job)
   }
@@ -69,6 +91,7 @@ export function Board({ jobs }: Props) {
                   key={col.key}
                   label={col.label}
                   jobs={grouped.applied}
+                  isSearchActive={isSearchActive}
                 />
               )
             }
@@ -80,6 +103,7 @@ export function Board({ jobs }: Props) {
                 jobs={grouped[col.key]}
                 variant={col.variant}
                 hint="Cards land here when you move them from Applied"
+                isSearchActive={isSearchActive}
                 draggedJobId={draggedJobId}
                 onJobMoveLeft={(jobId) => {
                   const left = leftOfColumn(col.key)

@@ -15,13 +15,14 @@ import type { JobRow } from "./board"
 type Props = {
   label: string
   jobs: JobRow[]
+  isSearchActive: boolean
 }
 
-export function AppliedColumn({ label, jobs }: Props) {
+export function AppliedColumn({ label, jobs, isSearchActive }: Props) {
   const [open, setOpen] = useState(false)
   const [activatingJob, setActivatingJob] = useState<JobRow | null>(null)
   const count = jobs.length
-  const ghostCount = count === 0 ? 2 : 0
+  const ghostCount = count === 0 && !isSearchActive ? 2 : 0
 
   return (
     <div

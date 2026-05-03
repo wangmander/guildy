@@ -21,6 +21,7 @@ type Props = {
   jobs: JobRow[]
   variant: CardVariant
   hint?: string
+  isSearchActive: boolean
   draggedJobId: string | null
   onJobMoveLeft: (jobId: string) => void
   onJobMoveRight: (jobId: string) => void
@@ -35,6 +36,7 @@ export function BoardColumn({
   jobs,
   variant,
   hint,
+  isSearchActive,
   draggedJobId,
   onJobMoveLeft,
   onJobMoveRight,
@@ -45,7 +47,8 @@ export function BoardColumn({
   const [isOver, setIsOver] = useState(false)
   const isInactive = variant === "inactive"
   const count = jobs.length
-  const ghostCount = count === 0 ? 2 : 0
+  const ghostCount = count === 0 && !isSearchActive ? 2 : 0
+  const showHint = !!hint && count === 0 && !isSearchActive
   const canAcceptDrop = !isInactive && draggedJobId !== null
   const canMoveLeft = leftOfColumn(columnKey) !== null
   const canMoveRight = rightOfColumn(columnKey) !== null
@@ -90,7 +93,7 @@ export function BoardColumn({
       </div>
 
       <div className="flex max-h-[calc(100dvh-200px)] flex-col gap-2 overflow-y-auto pr-1">
-        {hint && count === 0 && (
+        {showHint && (
           <p className="px-1 pb-1 text-[11px] leading-snug text-gray-400">
             {hint}
           </p>
