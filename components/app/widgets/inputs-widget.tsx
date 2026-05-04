@@ -356,7 +356,7 @@ const Section = forwardRef<HTMLDivElement, SectionProps>(function Section(
   return (
     <div
       ref={ref}
-      className="rounded-md border border-black/5 bg-[#F8F9FA] p-4"
+      className="rounded-md border border-black/5 bg-[#F8F9FA] p-5"
     >
       {children}
     </div>
@@ -419,7 +419,7 @@ function JdForm({
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder="Paste the full JD…"
-        rows={10}
+        rows={12}
         className="w-full resize-y rounded-md border border-black/10 bg-white px-3 py-2.5 text-sm leading-relaxed text-[#1C1E21] placeholder:text-gray-400 focus:border-[#482C4C] focus:outline-none focus:ring-2 focus:ring-[#482C4C]/15"
       />
     </FormShell>
@@ -488,7 +488,7 @@ function LatestMessageForm({
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder="Paste the message…"
-        rows={6}
+        rows={8}
         className="w-full resize-y rounded-md border border-black/10 bg-white px-3 py-2.5 text-sm leading-relaxed text-[#1C1E21] placeholder:text-gray-400 focus:border-[#482C4C] focus:outline-none focus:ring-2 focus:ring-[#482C4C]/15"
       />
     </FormShell>
@@ -651,7 +651,7 @@ function NoteForm({
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder="Personal context, target comp, internal referrals, anything…"
-        rows={6}
+        rows={8}
         className="w-full resize-y rounded-md border border-black/10 bg-white px-3 py-2.5 text-sm leading-relaxed text-[#1C1E21] placeholder:text-gray-400 focus:border-[#482C4C] focus:outline-none focus:ring-2 focus:ring-[#482C4C]/15"
       />
     </FormShell>
@@ -684,7 +684,7 @@ function FormShell({
       {error ? (
         <p className="mt-1.5 text-[11px] text-red-600">{error}</p>
       ) : null}
-      <div className="mt-4 flex items-center justify-between gap-2 pt-2">
+      <div className="mt-5 flex items-center justify-between gap-2 pt-3">
         {hasExisting ? (
           <button
             type="button"

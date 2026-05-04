@@ -209,7 +209,7 @@ export function PrepOverlay({
       </button>
 
       <div className="pointer-events-none absolute inset-0 overflow-y-auto md:overflow-hidden">
-        <div className="pointer-events-none mx-auto flex min-h-full w-full max-w-[1440px] flex-col gap-4 px-4 py-16 md:grid md:grid-cols-[280px_minmax(0,1fr)_320px] md:gap-6 md:px-6 md:py-6 lg:gap-8 lg:px-8">
+        <div className="pointer-events-none mx-auto flex min-h-full w-full max-w-[1440px] flex-col gap-4 px-4 py-16 md:grid md:grid-cols-[280px_minmax(0,1fr)_360px] md:gap-6 md:px-6 md:py-6 lg:gap-8 lg:px-8">
           {!job ? (
             <ErrorCard onClose={onClose} />
           ) : (

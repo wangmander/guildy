@@ -26,7 +26,7 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
-- Last phase shipped: **Phase 4c-4 + patch 1** — overlay layout v2 plus visual + UX corrections (cream-favored gradient, blurple `#4E3BDD` primary CTA, DEEP chips standardized, Regenerate button removed, InputsWidget sizing bumped, Cancel/Clear/Save pattern standardized)
+- Last phase shipped: **Phase 4c-4 + patches 1 and 2** — overlay layout v2, visual + UX corrections, then typography pass (Geist Sans display + Inter body) plus inline locked-preview footers plus inputs breathing room (right column 360px, JD textarea 12 rows, latent font bug fixed)
 - Date: 2026-05-04
 - Project status: ready for Phase 4d (multi-session Full Loop)
 
@@ -47,6 +47,14 @@ Total realistic: ~32-41 hours, ~4-5 focused build sessions.
 - 4 default sessions: Hiring Manager, Cross-functional, Skills/Portfolio, Bar Raiser
 - LLM picks plausible names from JD/company context
 - No schema change
+
+### Phase 4c-4 patch 2 — DONE
+- Latent font bug fixed: `globals.css` was pointing `--font-sans` at undefined `--font-geist-sans`, falling back to system sans. Now `--font-sans: var(--font-inter)` (body becomes Inter as originally intended). Added `--font-display: var(--font-geist-sans)` for headers; `GeistSans.variable` wired in `app/layout.tsx` from the already-installed `geist` package. Tailwind v4 picks the variable up automatically as `font-display` utility.
+- Typography pass: prep round title `font-serif` → `font-display`; UpgradeWidget H1 `font-serif text-xl font-semibold` → `font-display text-xl font-medium`; all section headers (Purpose, Positioning, Risks & Probes, Questions they'll ask, Questions to ask them, Prep Checklist) `text-lg font-semibold` → `font-display text-lg font-medium`; LockedPreviewModule title gets `font-display font-medium`. Editorial / restrained, less heavy.
+- Locked-preview pattern split into two exports: `LockedPreviewModule` (standalone card, used only for ResumeJdFit) and `LockedPreviewFooter` (inline footer rendered inside parent module's card). Footer visual: subtle border-t divider, very light blurple wash `bg-[#4E3BDD]/[0.04]`, smaller text + h-7 Upgrade button. Sits visually attached to parent.
+- `SectionShell` and `QuestionsTheyAsk` accept a `footer?: React.ReactNode` prop. PrepView in PrepCanvas passes a `LockedPreviewFooter` to Positioning, Risks, and QuestionsTheyAsk when `tier === "quick"`. Standalone locked modules between cards (full positioning, risk counters, per-cat answers) deleted; resume-to-JD-fit standalone module preserved (no Quick parent to attach to).
+- Right column grid `[280px_minmax(0,1fr)_320px]` → `[280px_minmax(0,1fr)_360px]`. Section card padding `p-4` → `p-5`. JD textarea rows 10 → 12; Latest message 6 → 8; Note 6 → 8. FormShell action row `mt-4 pt-2` → `mt-5 pt-3`.
+- TypeScript clean. Banned-copy grep clean.
 
 ### Phase 4c-4 patch 1 — DONE
 - UpgradeWidget gradient swapped to inline `linear-gradient(135deg, #E4BCED 0%, #FFFFF1 60%)` (cream-favored), border `#4E3BDD/15`, headline + checks + secondary link recolored `#4E3BDD`.

@@ -6,7 +6,10 @@ import type { PrepState } from "@/components/app/prep-overlay"
 import type { PrepOutput, PrepTier } from "@/lib/ai/prep-types"
 import type { StageKey } from "@/lib/stages"
 
-import { LockedPreviewModule } from "./locked-preview-module"
+import {
+  LockedPreviewFooter,
+  LockedPreviewModule,
+} from "./locked-preview-module"
 import { QuestionsTheyAsk, QuestionsYouAsk } from "./questions-widget"
 
 type Props = {
@@ -56,7 +59,7 @@ export function PrepCanvas({
           removed — context_hash invalidates cache automatically when any
           input edit happens, so manual regenerate is unnecessary. */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-serif text-2xl font-semibold tracking-tight text-[#1C1E21] md:text-[1.625rem]">
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-[#1C1E21] md:text-[1.625rem]">
           {stageHeading(stage)}
         </h1>
         <TierSelector tier={tier} onTierChange={onTierChange} />
@@ -269,32 +272,44 @@ function PrepView({
       <PositioningSection
         positioning={prep.positioning}
         truncated={isQuick}
+        footer={
+          isQuick ? (
+            <LockedPreviewFooter
+              title="Full positioning plan"
+              teaser="Deep Prep adds 2 more framing points with rich, resume-grounded context and per-interviewer angles."
+              onUpgrade={onUpgrade}
+            />
+          ) : null
+        }
       />
-      {isQuick ? (
-        <LockedPreviewModule
-          title="Full positioning plan"
-          teaser="Deep Prep adds 2 more framing points with rich, resume-grounded context and per-interviewer angles."
-          onUpgrade={onUpgrade}
-        />
-      ) : null}
 
-      <RisksSection risks={prep.risks} tier={tier} />
-      {isQuick ? (
-        <LockedPreviewModule
-          title="Risks with prepared counters"
-          teaser="Deep Prep returns each likely concern with a specific counter anchored in your resume."
-          onUpgrade={onUpgrade}
-        />
-      ) : null}
+      <RisksSection
+        risks={prep.risks}
+        tier={tier}
+        footer={
+          isQuick ? (
+            <LockedPreviewFooter
+              title="Risks with prepared counters"
+              teaser="Deep Prep returns each likely concern with a specific counter anchored in your resume."
+              onUpgrade={onUpgrade}
+            />
+          ) : null
+        }
+      />
 
-      <QuestionsTheyAsk items={prep.questions_they_ask} tier={tier} />
-      {isQuick ? (
-        <LockedPreviewModule
-          title="Per-category answer plans"
-          teaser="Deep Prep groups questions across 8 interview categories and gives a structured answer plan for each."
-          onUpgrade={onUpgrade}
-        />
-      ) : null}
+      <QuestionsTheyAsk
+        items={prep.questions_they_ask}
+        tier={tier}
+        footer={
+          isQuick ? (
+            <LockedPreviewFooter
+              title="Per-category answer plans"
+              teaser="Deep Prep groups questions across 8 interview categories and gives a structured answer plan for each."
+              onUpgrade={onUpgrade}
+            />
+          ) : null
+        }
+      />
 
       <QuestionsYouAsk items={prep.questions_you_ask} />
 
@@ -315,11 +330,13 @@ function SectionShell({
   id,
   title,
   subtitle,
+  footer,
   children,
 }: {
   id: string
   title: string
   subtitle: string
+  footer?: React.ReactNode
   children: React.ReactNode
 }) {
   return (
@@ -329,11 +346,14 @@ function SectionShell({
     >
       <div className="flex items-baseline justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-[#1C1E21]">{title}</h2>
+          <h2 className="font-display text-lg font-medium text-[#1C1E21]">
+            {title}
+          </h2>
           <p className="mt-0.5 text-sm text-gray-500">{subtitle}</p>
         </div>
       </div>
       <div className="mt-4">{children}</div>
+      {footer}
     </section>
   )
 }
@@ -366,9 +386,11 @@ function PurposeSection({ purpose }: { purpose: PrepOutput["purpose"] }) {
 function PositioningSection({
   positioning,
   truncated,
+  footer,
 }: {
   positioning: PrepOutput["positioning"]
   truncated: boolean
+  footer?: React.ReactNode
 }) {
   const frames = truncated
     ? positioning.frames.slice(0, QUICK_POSITIONING_VISIBLE_FRAMES)
@@ -378,6 +400,7 @@ function PositioningSection({
       id="positioning"
       title="Positioning"
       subtitle={positioning.headline}
+      footer={footer}
     >
       <p className="text-sm leading-relaxed text-gray-700">
         {positioning.summary}
@@ -404,12 +427,19 @@ function PositioningSection({
 function RisksSection({
   risks,
   tier,
+  footer,
 }: {
   risks: PrepOutput["risks"]
   tier: PrepTier
+  footer?: React.ReactNode
 }) {
   return (
-    <SectionShell id="risks" title="Risks & Probes" subtitle={risks.headline}>
+    <SectionShell
+      id="risks"
+      title="Risks & Probes"
+      subtitle={risks.headline}
+      footer={footer}
+    >
       <p className="text-sm leading-relaxed text-gray-700">{risks.summary}</p>
       <ul className="mt-5 space-y-3">
         {risks.items.map((item) => (

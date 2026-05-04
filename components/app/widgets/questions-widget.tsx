@@ -16,9 +16,10 @@ import type {
 type TheyAskProps = {
   items: PrepQuestionThey[]
   tier: PrepTier
+  footer?: React.ReactNode
 }
 
-export function QuestionsTheyAsk({ items, tier }: TheyAskProps) {
+export function QuestionsTheyAsk({ items, tier, footer }: TheyAskProps) {
   // Quick view hides category labels per spec ("common questions, no
   // categories"). Deep view groups by the model-supplied category.
   const grouped = useMemo(() => groupByCategory(items), [items])
@@ -29,7 +30,7 @@ export function QuestionsTheyAsk({ items, tier }: TheyAskProps) {
     >
       <div className="flex items-baseline justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-[#1C1E21]">
+          <h2 className="font-display text-lg font-medium text-[#1C1E21]">
             Questions they&rsquo;ll ask you
           </h2>
           <p className="mt-0.5 text-sm text-gray-500">
@@ -63,6 +64,7 @@ export function QuestionsTheyAsk({ items, tier }: TheyAskProps) {
               </li>
             ))}
       </ul>
+      {footer}
     </section>
   )
 }
@@ -80,7 +82,7 @@ export function QuestionsYouAsk({ items }: YouAskProps) {
     >
       <div className="flex items-baseline justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-[#1C1E21]">
+          <h2 className="font-display text-lg font-medium text-[#1C1E21]">
             Questions to ask them
           </h2>
           <p className="mt-0.5 text-sm text-gray-500">

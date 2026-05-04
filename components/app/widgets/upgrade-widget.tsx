@@ -27,7 +27,7 @@ export function UpgradeWidget({ onUpgrade }: Props) {
             "linear-gradient(135deg, #E4BCED 0%, #FFFFF1 60%)",
         }}
       >
-        <h3 className="font-serif text-xl font-semibold tracking-tight text-[#4E3BDD]">
+        <h3 className="font-display text-xl font-medium tracking-tight text-[#4E3BDD]">
           Deep Prep
         </h3>
         <p className="mt-1.5 text-xs leading-relaxed text-gray-700">
