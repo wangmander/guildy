@@ -1,6 +1,6 @@
 "use client"
 
-import { RefreshCw, Sparkles } from "lucide-react"
+import { RefreshCw, Sparkles } from "lucide-react" // RefreshCw used in ErrorState
 
 import type { PrepState } from "@/components/app/prep-overlay"
 import type { PrepOutput, PrepTier } from "@/lib/ai/prep-types"
@@ -50,36 +50,16 @@ export function PrepCanvas({
   onGenerate,
   onUpgrade,
 }: Props) {
-  const tierLabel = tier === "deep" ? "Deep Prep" : "Quick Prep"
-  const isReady = prepState.status === "ready"
-  const regenerateBlocked = tier === "deep" && !hasJd
-
   return (
     <div className="px-4 pb-12 pt-6 md:px-7">
-      {/* Compact top row: title + tier toggle + regenerate */}
+      {/* Compact top row: title (left) + tier toggle (right). Regenerate
+          removed — context_hash invalidates cache automatically when any
+          input edit happens, so manual regenerate is unnecessary. */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-serif text-2xl font-semibold tracking-tight text-[#1C1E21] md:text-[1.625rem]">
           {stageHeading(stage)}
         </h1>
-        <div className="flex items-center gap-2">
-          <TierSelector tier={tier} onTierChange={onTierChange} />
-          {isReady ? (
-            <button
-              type="button"
-              onClick={onGenerate}
-              disabled={regenerateBlocked}
-              title={
-                regenerateBlocked
-                  ? "Paste the JD to regenerate Deep Prep"
-                  : `Regenerate ${tierLabel}`
-              }
-              aria-label={`Regenerate ${tierLabel}`}
-              className="inline-flex size-7 items-center justify-center rounded-full border border-black/10 bg-white text-gray-600 transition-colors hover:border-black/20 hover:text-[#1C1E21] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <RefreshCw className="size-3.5" />
-            </button>
-          ) : null}
-        </div>
+        <TierSelector tier={tier} onTierChange={onTierChange} />
       </div>
 
       <CanvasBody

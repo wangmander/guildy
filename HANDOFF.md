@@ -26,7 +26,7 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
-- Last phase shipped: **Phase 4c-4** — Overlay layout v2: InputsWidget inline-expand (popover killed), QuestionsWidget moved to center as inline modules, UpgradeWidget restored bottom-left FE-only with spec-locked copy + Compare drawer (Radix Dialog), tier-aware center modules with locked-preview pattern, compact center top row
+- Last phase shipped: **Phase 4c-4 + patch 1** — overlay layout v2 plus visual + UX corrections (cream-favored gradient, blurple `#4E3BDD` primary CTA, DEEP chips standardized, Regenerate button removed, InputsWidget sizing bumped, Cancel/Clear/Save pattern standardized)
 - Date: 2026-05-04
 - Project status: ready for Phase 4d (multi-session Full Loop)
 
@@ -47,6 +47,16 @@ Total realistic: ~32-41 hours, ~4-5 focused build sessions.
 - 4 default sessions: Hiring Manager, Cross-functional, Skills/Portfolio, Bar Raiser
 - LLM picks plausible names from JD/company context
 - No schema change
+
+### Phase 4c-4 patch 1 — DONE
+- UpgradeWidget gradient swapped to inline `linear-gradient(135deg, #E4BCED 0%, #FFFFF1 60%)` (cream-favored), border `#4E3BDD/15`, headline + checks + secondary link recolored `#4E3BDD`.
+- Primary CTA color standardized to blurple `#4E3BDD` (hover `#4332C2`) across UpgradeWidget primary button and all LockedPreviewModule "Upgrade to Deep Prep" buttons.
+- DEEP chips in InputsWidget rows: `bg-[#EDE9FE] text-[#4E3BDD]`. Sparkle icon inherits color.
+- Regenerate icon button removed from PrepCanvas top row entirely. Top row is now title (left) + tier toggle (right). Cache invalidates automatically when context_hash changes (any input edit), so manual regenerate is unnecessary.
+- InputsWidget expanded sections sizing bumped: section padding `p-2.5` → `p-4`; JD textarea 6 → 10 rows; Latest message 5 → 6 rows; Note 5 → 6 rows; Interviewer inputs `h-8` → `h-9`; text size `text-xs` → `text-sm`; padding `px-2.5/py-2` → `px-3/py-2.5`.
+- Cancel/Clear/Save pattern: each form now has explicit `[Clear (left)] ........... [Cancel] [Save]`. Cancel collapses without writing. Bottom "+ Add context" trigger hides entirely when any section is open (no more "Close" branch — Cancel is the close path).
+- Backend writes verified read-only: `updateJobJdAction` writes `jobs.jd_text` (null OK), `updateJobLatestMessageAction` writes `jobs.latest_message` (null OK), `upsertInterviewerAction` writes name/title/link to `job_context.metadata` via delete-then-insert, `upsertNoteAction` writes to `job_context` `type='note'` via delete-then-insert. No code changes.
+- Banned-copy grep clean.
 
 ### Phase 4c-4 — DONE
 - Overlay layout v2: InputsWidget grows inline (no popover); right column is just InputsWidget; QuestionsTheyAsk + QuestionsYouAsk render as full-width center modules.
