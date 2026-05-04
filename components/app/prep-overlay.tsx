@@ -14,7 +14,7 @@ import { InputsWidget } from "./widgets/inputs-widget"
 import { InterviewerWidget } from "./widgets/interviewer-widget"
 import { JobContextWidget } from "./widgets/job-context-widget"
 import { PrepCanvas } from "./widgets/prep-canvas"
-import { QuestionsWidget } from "./widgets/questions-widget"
+import { UpgradeWidget } from "./widgets/upgrade-widget"
 
 export type PrepJob = {
   id: string
@@ -46,11 +46,19 @@ type PrepState =
   | { status: "ready"; prep: PrepOutput }
   | { status: "error"; message: string }
 
-export type PopoverSection = "jd" | "message" | "interviewer" | "note"
+export type InputsExpansionSection =
+  | "jd"
+  | "message"
+  | "interviewer"
+  | "note"
 
-type PopoverState = {
-  open: boolean
-  section: PopoverSection | null
+type InputsExpansionState = {
+  // Which section of the InputsWidget is currently expanded inline.
+  // `null` means the widget is collapsed (no section open).
+  section: InputsExpansionSection | null
+  // Increments whenever an external trigger (e.g. InterviewerWidget click)
+  // requests opening — used by InputsWidget to pulse its border so the
+  // user's eye follows the action across columns.
   pulseToken: number
 }
 
@@ -69,25 +77,29 @@ export function PrepOverlay({
     status: "loading-cache",
   })
   const [tier, setTier] = useState<PrepTier>("quick")
-  const [popover, setPopover] = useState<PopoverState>({
-    open: false,
+  const [inputsExpansion, setInputsExpansion] = useState<InputsExpansionState>({
     section: null,
     pulseToken: 0,
   })
   const [, startTransition] = useTransition()
 
-  const openPopover = useCallback(
-    (section: PopoverSection, options?: { pulse?: boolean }) => {
-      setPopover((prev) => ({
-        open: true,
+  const expandInputsSection = useCallback(
+    (
+      section: InputsExpansionSection | null,
+      options?: { pulse?: boolean }
+    ) => {
+      setInputsExpansion((prev) => ({
         section,
         pulseToken: options?.pulse ? prev.pulseToken + 1 : prev.pulseToken,
       }))
     },
     []
   )
-  const closePopover = useCallback(() => {
-    setPopover((prev) => ({ ...prev, open: false }))
+
+  const onUpgradeClick = useCallback(() => {
+    // PHASE 6b: wire to Stripe checkout. Logging only in test mode.
+    // eslint-disable-next-line no-console
+    console.log("upgrade clicked, paywall ships in 6b")
   }, [])
 
   useEffect(() => {
@@ -123,6 +135,7 @@ export function PrepOverlay({
   // on tier and would loop if it also reset tier).
   useEffect(() => {
     setTier("quick")
+    setInputsExpansion({ section: null, pulseToken: 0 })
   }, [job?.id])
 
   // Fetch cached prep for the current tier. Re-runs when job or tier
@@ -219,8 +232,13 @@ export function PrepOverlay({
                       ? prepState.prep.interviewer_insights
                       : null
                   }
-                  onEdit={() => openPopover("interviewer", { pulse: true })}
+                  onEdit={() =>
+                    expandInputsSection("interviewer", { pulse: true })
+                  }
                 />
+                {tier === "quick" ? (
+                  <UpgradeWidget onUpgrade={onUpgradeClick} />
+                ) : null}
               </aside>
 
               <main className="pointer-events-auto rounded-2xl border border-black/5 bg-[#F8F9FA] shadow-sm md:max-h-[calc(100dvh-3rem)] md:overflow-y-auto">
@@ -232,6 +250,7 @@ export function PrepOverlay({
                   tier={tier}
                   onTierChange={setTier}
                   onGenerate={onGenerate}
+                  onUpgrade={onUpgradeClick}
                 />
               </main>
 
@@ -247,11 +266,9 @@ export function PrepOverlay({
                   noteText={noteText}
                   hasInterviewer={hasInterviewer}
                   hasNote={hasNote}
-                  popover={popover}
-                  onOpenPopover={openPopover}
-                  onClosePopover={closePopover}
+                  expansion={inputsExpansion}
+                  onExpand={expandInputsSection}
                 />
-                <QuestionsWidget prepState={prepState} tier={tier} />
               </aside>
             </>
           )}

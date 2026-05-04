@@ -26,8 +26,8 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
-- Last phase shipped: **Phase 4c-3** — 5-row inputs checklist, full add/edit/clear lifecycle for jd/message/interviewer/note, tier-aware Generate Deep gate (UI disabled + server-side guard), context_hash includes resume + note + tier
-- Date: 2026-05-03
+- Last phase shipped: **Phase 4c-4** — Overlay layout v2: InputsWidget inline-expand (popover killed), QuestionsWidget moved to center as inline modules, UpgradeWidget restored bottom-left FE-only with spec-locked copy + Compare drawer (Radix Dialog), tier-aware center modules with locked-preview pattern, compact center top row
+- Date: 2026-05-04
 - Project status: ready for Phase 4d (multi-session Full Loop)
 
 ## Locked models [LIVE]
@@ -47,6 +47,15 @@ Total realistic: ~32-41 hours, ~4-5 focused build sessions.
 - 4 default sessions: Hiring Manager, Cross-functional, Skills/Portfolio, Bar Raiser
 - LLM picks plausible names from JD/company context
 - No schema change
+
+### Phase 4c-4 — DONE
+- Overlay layout v2: InputsWidget grows inline (no popover); right column is just InputsWidget; QuestionsTheyAsk + QuestionsYouAsk render as full-width center modules.
+- UpgradeWidget restored from git, bottom-left of overlay, visible only when tier=quick. Spec-locked copy (H1 "Deep Prep" / H2 "Quick Prep gets you ready. Deep Prep gives you the plan." / button "Upgrade to Deep Prep" / secondary "Compare Quick vs Deep"). Upgrade click logs `"upgrade clicked, paywall ships in 6b"`. CompareTiersDrawer uses existing Radix Dialog primitive with the spec section 6 comparison matrix.
+- Tier-aware center module visibility: Quick view truncates positioning to first 2 frames + LockedPreviewModule teaser, hides Risk counters (Quick prep produces null counters, Deep gets real ones), hides per-question answer plans + categories on questions_they_ask, intermixes 4 LockedPreviewModule cards (full positioning, risk counters, per-category answer plans, resume-to-JD fit). Deep view unlocks everything; ResumeJdFit lives only as a Quick locked preview (resume-to-JD analysis is woven into Positioning + Risks via the prompt per 4c-2 Option C).
+- Compact center top: single row with stage heading, tier toggle, and Regenerate icon button (hidden until prep is ready).
+- Cross-column trigger renamed: `openPopover` → `expandInputsSection`. InterviewerWidget click still pulses InputsWidget border (600ms) and opens the interviewer section.
+- New components: `locked-preview-module.tsx`, `compare-tiers-drawer.tsx`. No prompt or model changes; no schema changes; no new server actions.
+- Banned-copy grep gate run before commit (passes — none of "Deep Prep upgrades everything", "Company-specific angles", "Role-specific positioning", "Experience mapping" appear in any new/changed component).
 
 ### Phase 4c-3 — DONE
 - Inputs widget: 5 rows (Background, JD, Latest Message, Interviewer, Additional context). Count "N/5" with "Deep is sharper with all 5" subtext. Each filled row shows a 50-char preview. Clicking a row opens the popover at that section. Hint chip "Deep" on Interviewer + Additional context.

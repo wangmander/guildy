@@ -56,13 +56,15 @@ Track progress in .guildhall/quests.json. Update at end of each phase. Current p
 
 Order is locked. Do not reorder, do not skip, do not "helpfully" combine phases.
 
-1. Phase 4c-2 — Anthropic migration (Quick→Haiku 4.5, Deep→Sonnet 4.6, generate-prep.ts only) + paywall removal. extract-jd.ts stays OpenAI. ~2-3h
-2. Phase 4d — Multi-session Full Loop, Option C+ (per-session generations, own prep_versions row, context_hash includes session name). No schema change. ~3-4h
-3. Phase 5 — Perplexity web research for Deep Prep, cached per company 7d TTL, per interviewer name+company. ~5-7h
-4. Phase 6 — Polish + mobile responsive overlay + FTUE empty state + error states + loading states. ~5-6h
-5. Phase 6.5 — Legal (ToS/PP via Termly) + Resend transactional email + PostHog analytics + end-to-end QA on 10 real jobs. ~6h
-6. Phase 6b — Stripe checkout + webhook + subscription state + customer portal + grace period. ~8-12h
-7. Phase 7 — Production deploy, guildy.ai DNS, SSL, Vercel env vars, prod smoke test. ~3h
+1. Phase 4c-2 — Anthropic migration (Quick→Haiku 4.5, Deep→Sonnet 4.6, generate-prep.ts only) + paywall removal. extract-jd.ts stays OpenAI. ~2-3h. ✓ shipped at 0e6ecfa
+2. Phase 4c-3 — Complete context inputs (editable + updatable) + tier-aware Deep gate. ✓ shipped at fea3f3c
+3. Phase 4c-4 — Overlay layout v2 + tier differentiation + upsell restoration. ✓ shipped at [hash]
+4. Phase 4d — Multi-session Full Loop, Option C+ (per-session generations, own prep_versions row, context_hash includes session name). No schema change. ~3-4h — NEXT
+5. Phase 5 — Perplexity web research for Deep Prep, cached per company 7d TTL, per interviewer name+company. ~5-7h
+6. Phase 6 — Polish + mobile responsive overlay + FTUE empty state + error states + loading states. ~5-6h
+7. Phase 6.5 — Legal (ToS/PP via Termly) + Resend transactional email + PostHog analytics + end-to-end QA on 10 real jobs. ~6h
+8. Phase 6b — Stripe checkout + webhook + subscription state + customer portal + grace period. ~8-12h
+9. Phase 7 — Production deploy, guildy.ai DNS, SSL, Vercel env vars, prod smoke test. ~3h
 
 Total: 32-41 hours, ~4-5 focused build sessions.
 

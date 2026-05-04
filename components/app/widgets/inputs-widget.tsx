@@ -17,7 +17,6 @@ import {
   Plus,
   Sparkles,
   Trash2,
-  X,
 } from "lucide-react"
 
 import {
@@ -28,7 +27,7 @@ import {
   upsertInterviewerAction,
   upsertNoteAction,
 } from "@/app/app/actions"
-import type { PopoverSection } from "@/components/app/prep-overlay"
+import type { InputsExpansionSection } from "@/components/app/prep-overlay"
 
 type Props = {
   jobId: string
@@ -41,15 +40,17 @@ type Props = {
   noteText: string | null
   hasInterviewer: boolean
   hasNote: boolean
-  popover: { open: boolean; section: PopoverSection | null; pulseToken: number }
-  onOpenPopover: (
-    section: PopoverSection,
+  expansion: {
+    section: InputsExpansionSection | null
+    pulseToken: number
+  }
+  onExpand: (
+    section: InputsExpansionSection | null,
     options?: { pulse?: boolean }
   ) => void
-  onClosePopover: () => void
 }
 
-type RowKey = "background" | PopoverSection
+type RowKey = "background" | InputsExpansionSection
 
 type Row = {
   key: RowKey
@@ -58,7 +59,7 @@ type Row = {
   present: boolean
   hint?: "deep"
   clickable: boolean
-  section: PopoverSection | null
+  section: InputsExpansionSection | null
 }
 
 const PREVIEW_CHARS = 50
@@ -74,9 +75,8 @@ export function InputsWidget({
   noteText,
   hasInterviewer,
   hasNote,
-  popover,
-  onOpenPopover,
-  onClosePopover,
+  expansion,
+  onExpand,
 }: Props) {
   const interviewerPreview = previewOfInterviewer(
     interviewerName,
@@ -131,22 +131,49 @@ export function InputsWidget({
   const filled = rows.filter((r) => r.present).length
 
   // Pulse outer border when an external trigger (e.g. InterviewerWidget) opens
-  // the popover, so the user's eye follows the action across columns.
+  // the widget at a section, so the user's eye follows the action across columns.
   const [pulse, setPulse] = useState(false)
   const pulseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
-    if (popover.pulseToken === 0) return
+    if (expansion.pulseToken === 0) return
     setPulse(true)
     if (pulseTimer.current) clearTimeout(pulseTimer.current)
     pulseTimer.current = setTimeout(() => setPulse(false), 600)
     return () => {
       if (pulseTimer.current) clearTimeout(pulseTimer.current)
     }
-  }, [popover.pulseToken])
+  }, [expansion.pulseToken])
+
+  const sectionRefs = {
+    jd: useRef<HTMLDivElement | null>(null),
+    message: useRef<HTMLDivElement | null>(null),
+    interviewer: useRef<HTMLDivElement | null>(null),
+    note: useRef<HTMLDivElement | null>(null),
+  } as const
+
+  // Scroll the active section into view when it changes.
+  useEffect(() => {
+    if (!expansion.section) return
+    const ref = sectionRefs[expansion.section]?.current
+    if (!ref) return
+    requestAnimationFrame(() => {
+      ref.scrollIntoView({ block: "nearest", behavior: "smooth" })
+    })
+    // sectionRefs is a stable object literal; no need in deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expansion.section])
+
+  const onToggle = (section: InputsExpansionSection) => {
+    if (expansion.section === section) onExpand(null)
+    else onExpand(section)
+  }
+
+  const onClose = () => onExpand(null)
+  const isExpanded = expansion.section !== null
 
   return (
     <div
-      className={`relative rounded-2xl border bg-white p-4 shadow-sm transition-colors duration-300 ${
+      className={`rounded-2xl border bg-white p-4 shadow-sm transition-colors duration-300 ${
         pulse ? "border-[#482C4C]/40 ring-2 ring-[#482C4C]/15" : "border-black/5"
       }`}
     >
@@ -167,38 +194,87 @@ export function InputsWidget({
           <RowItem
             key={row.key}
             row={row}
+            isOpen={!!row.section && expansion.section === row.section}
             onClick={
               row.clickable && row.section
-                ? () => onOpenPopover(row.section!)
+                ? () => onToggle(row.section!)
                 : undefined
             }
           />
         ))}
       </ul>
 
-      <AddContextPopover
-        jobId={jobId}
-        jdText={jdText}
-        latestMessage={latestMessage}
-        interviewerName={interviewerName}
-        interviewerTitle={interviewerTitle}
-        interviewerLink={interviewerLink}
-        noteText={noteText}
-        hasInterviewer={hasInterviewer}
-        hasNote={hasNote}
-        popover={popover}
-        onOpenPopover={onOpenPopover}
-        onClosePopover={onClosePopover}
-      />
+      {/* Inline-expand: section content lives directly in the widget, no popover. */}
+      <div className="mt-3 space-y-1.5">
+        <Section
+          ref={sectionRefs.jd}
+          isOpen={expansion.section === "jd"}
+        >
+          <JdForm
+            jobId={jobId}
+            initial={jdText ?? ""}
+            onSaved={onClose}
+          />
+        </Section>
+
+        <Section
+          ref={sectionRefs.message}
+          isOpen={expansion.section === "message"}
+        >
+          <LatestMessageForm
+            jobId={jobId}
+            initial={latestMessage ?? ""}
+            onSaved={onClose}
+          />
+        </Section>
+
+        <Section
+          ref={sectionRefs.interviewer}
+          isOpen={expansion.section === "interviewer"}
+        >
+          <InterviewerForm
+            jobId={jobId}
+            initialName={interviewerName ?? ""}
+            initialTitle={interviewerTitle ?? ""}
+            initialLink={interviewerLink ?? ""}
+            hasExisting={hasInterviewer}
+            onSaved={onClose}
+          />
+        </Section>
+
+        <Section
+          ref={sectionRefs.note}
+          isOpen={expansion.section === "note"}
+        >
+          <NoteForm
+            jobId={jobId}
+            initial={noteText ?? ""}
+            hasExisting={hasNote}
+            onSaved={onClose}
+          />
+        </Section>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => (isExpanded ? onClose() : onExpand("jd"))}
+        aria-expanded={isExpanded}
+        className="mt-3 inline-flex h-8 items-center gap-1 text-xs font-medium text-[#482C4C] hover:underline"
+      >
+        <Plus className="size-3.5" />
+        {isExpanded ? "Close" : "Add context"}
+      </button>
     </div>
   )
 }
 
 function RowItem({
   row,
+  isOpen,
   onClick,
 }: {
   row: Row
+  isOpen: boolean
   onClick?: () => void
 }) {
   const Wrapper = onClick ? "button" : "div"
@@ -206,8 +282,10 @@ function RowItem({
     ? {
         type: "button" as const,
         onClick,
-        className:
-          "flex w-full items-start gap-2 rounded-md p-1 text-left transition-colors hover:bg-[#F8F9FA]",
+        "aria-expanded": isOpen,
+        className: `flex w-full items-start gap-2 rounded-md p-1 text-left transition-colors hover:bg-[#F8F9FA] ${
+          isOpen ? "bg-[#482C4C]/5" : ""
+        }`,
       }
     : { className: "flex items-start gap-2 p-1" }
   return (
@@ -246,248 +324,37 @@ function RowItem({
             </p>
           ) : null}
         </div>
+        {onClick ? (
+          <ChevronDown
+            className={
+              isOpen
+                ? "mt-0.5 size-3.5 shrink-0 text-[#482C4C] transition-transform"
+                : "mt-0.5 size-3.5 shrink-0 -rotate-90 text-gray-400 transition-transform"
+            }
+            aria-hidden
+          />
+        ) : null}
       </Wrapper>
     </li>
   )
 }
 
-function AddContextPopover({
-  jobId,
-  jdText,
-  latestMessage,
-  interviewerName,
-  interviewerTitle,
-  interviewerLink,
-  noteText,
-  hasInterviewer,
-  hasNote,
-  popover,
-  onOpenPopover,
-  onClosePopover,
-}: {
-  jobId: string
-  jdText: string | null
-  latestMessage: string | null
-  interviewerName: string | null
-  interviewerTitle: string | null
-  interviewerLink: string | null
-  noteText: string | null
-  hasInterviewer: boolean
-  hasNote: boolean
-  popover: { open: boolean; section: PopoverSection | null; pulseToken: number }
-  onOpenPopover: (section: PopoverSection) => void
-  onClosePopover: () => void
-}) {
-  const containerRef = useRef<HTMLDivElement | null>(null)
-  const sectionRefs = {
-    jd: useRef<HTMLDivElement | null>(null),
-    message: useRef<HTMLDivElement | null>(null),
-    interviewer: useRef<HTMLDivElement | null>(null),
-    note: useRef<HTMLDivElement | null>(null),
-  } as const
-
-  // Close on outside click / Escape.
-  useEffect(() => {
-    if (!popover.open) return
-    const onDown = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) onClosePopover()
-    }
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClosePopover()
-    }
-    document.addEventListener("mousedown", onDown)
-    document.addEventListener("keydown", onKey)
-    return () => {
-      document.removeEventListener("mousedown", onDown)
-      document.removeEventListener("keydown", onKey)
-    }
-  }, [popover.open, onClosePopover])
-
-  // Scroll the active section into view when it changes.
-  useEffect(() => {
-    if (!popover.open || !popover.section) return
-    const ref = sectionRefs[popover.section]?.current
-    if (!ref) return
-    // Defer one frame so layout settles before scroll.
-    requestAnimationFrame(() => {
-      ref.scrollIntoView({ block: "nearest", behavior: "smooth" })
-    })
-    // sectionRefs is a stable object literal across renders; don't include.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [popover.open, popover.section])
-
-  return (
-    <div ref={containerRef} className="relative mt-4">
-      <button
-        type="button"
-        onClick={() =>
-          popover.open ? onClosePopover() : onOpenPopover("jd")
-        }
-        aria-expanded={popover.open}
-        aria-haspopup="dialog"
-        className="inline-flex h-8 items-center gap-1 text-xs font-medium text-[#482C4C] hover:underline"
-      >
-        <Plus className="size-3.5" />
-        Add context
-      </button>
-
-      {popover.open ? (
-        <div
-          role="dialog"
-          aria-label="Add context"
-          className="absolute right-0 top-full z-20 mt-2 max-h-[70vh] w-[360px] overflow-y-auto rounded-xl border border-black/10 bg-white p-3 shadow-lg"
-        >
-          <div className="flex items-baseline justify-between">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-              Context
-            </p>
-            <button
-              type="button"
-              onClick={onClosePopover}
-              aria-label="Close"
-              className="rounded p-1 text-gray-400 hover:text-[#1C1E21]"
-            >
-              <X className="size-3.5" />
-            </button>
-          </div>
-
-          <div className="mt-2 space-y-1">
-            <Section
-              ref={sectionRefs.jd}
-              section="jd"
-              label="Job description"
-              preview={previewOf(jdText)}
-              isOpen={popover.section === "jd"}
-              onToggle={() =>
-                popover.section === "jd"
-                  ? onClosePopover()
-                  : onOpenPopover("jd")
-              }
-            >
-              <JdForm
-                jobId={jobId}
-                initial={jdText ?? ""}
-                onSaved={() => onClosePopover()}
-              />
-            </Section>
-
-            <Section
-              ref={sectionRefs.message}
-              section="message"
-              label="Latest message"
-              preview={previewOf(latestMessage)}
-              isOpen={popover.section === "message"}
-              onToggle={() =>
-                popover.section === "message"
-                  ? onClosePopover()
-                  : onOpenPopover("message")
-              }
-            >
-              <LatestMessageForm
-                jobId={jobId}
-                initial={latestMessage ?? ""}
-                onSaved={() => onClosePopover()}
-              />
-            </Section>
-
-            <Section
-              ref={sectionRefs.interviewer}
-              section="interviewer"
-              label="Interviewer"
-              preview={previewOfInterviewer(
-                interviewerName,
-                interviewerTitle,
-                interviewerLink
-              )}
-              isOpen={popover.section === "interviewer"}
-              onToggle={() =>
-                popover.section === "interviewer"
-                  ? onClosePopover()
-                  : onOpenPopover("interviewer")
-              }
-            >
-              <InterviewerForm
-                jobId={jobId}
-                initialName={interviewerName ?? ""}
-                initialTitle={interviewerTitle ?? ""}
-                initialLink={interviewerLink ?? ""}
-                hasExisting={hasInterviewer}
-                onSaved={() => onClosePopover()}
-              />
-            </Section>
-
-            <Section
-              ref={sectionRefs.note}
-              section="note"
-              label="Additional context"
-              preview={previewOf(noteText)}
-              isOpen={popover.section === "note"}
-              onToggle={() =>
-                popover.section === "note"
-                  ? onClosePopover()
-                  : onOpenPopover("note")
-              }
-            >
-              <NoteForm
-                jobId={jobId}
-                initial={noteText ?? ""}
-                hasExisting={hasNote}
-                onSaved={() => onClosePopover()}
-              />
-            </Section>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
 type SectionProps = {
-  section: PopoverSection
-  label: string
-  preview: string | null
   isOpen: boolean
-  onToggle: () => void
   children: React.ReactNode
 }
 
 const Section = forwardRef<HTMLDivElement, SectionProps>(function Section(
-  { section, label, preview, isOpen, onToggle, children },
+  { isOpen, children },
   ref
 ) {
+  if (!isOpen) return null
   return (
     <div
       ref={ref}
-      data-section={section}
-      className="rounded-md border border-black/5"
+      className="rounded-md border border-black/5 bg-[#F8F9FA] p-2.5"
     >
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={isOpen}
-        className="flex w-full items-center gap-2 rounded-md p-2 text-left transition-colors hover:bg-[#F8F9FA]"
-      >
-        <ChevronDown
-          className={
-            isOpen
-              ? "size-3 shrink-0 text-[#482C4C] transition-transform"
-              : "size-3 shrink-0 -rotate-90 text-gray-400 transition-transform"
-          }
-        />
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-medium text-[#1C1E21]">{label}</p>
-          {preview ? (
-            <p className="mt-0.5 truncate text-[11px] leading-snug text-gray-400">
-              {preview}
-            </p>
-          ) : (
-            <p className="mt-0.5 text-[11px] leading-snug text-gray-400">Add</p>
-          )}
-        </div>
-      </button>
-      {isOpen ? (
-        <div className="border-t border-black/5 p-2.5">{children}</div>
-      ) : null}
+      {children}
     </div>
   )
 })

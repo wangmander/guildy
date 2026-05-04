@@ -3,122 +3,114 @@
 import { useMemo, useState } from "react"
 import { ChevronDown } from "lucide-react"
 
-import type { PrepState } from "@/components/app/prep-overlay"
 import type {
   PrepQuestionThey,
   PrepQuestionYou,
   PrepTier,
 } from "@/lib/ai/prep-types"
 
-type Tab = "ask_you" | "you_ask"
+// Two named modules for center inline rendering. Phase 4c-4 moved Questions
+// out of the right column so they live alongside Purpose / Positioning /
+// Risks as full-width prep modules.
 
-type Props = {
-  prepState: PrepState
-  tier: PrepTier
-}
-
-export function QuestionsWidget({ prepState, tier }: Props) {
-  const [tab, setTab] = useState<Tab>("ask_you")
-
-  const prep = prepState.status === "ready" ? prepState.prep : null
-  const isLoading =
-    prepState.status === "loading-cache" || prepState.status === "generating"
-
-  const askYouCount = prep?.questions_they_ask.length ?? 0
-  const youAskCount = prep?.questions_you_ask.length ?? 0
-
-  return (
-    <div className="rounded-2xl border border-black/5 bg-white p-4 shadow-sm">
-      <div className="flex items-baseline justify-between">
-        <h3 className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-          Questions
-        </h3>
-        {prep && (
-          <span className="text-xs text-gray-400">
-            {tab === "ask_you" ? askYouCount : youAskCount}
-          </span>
-        )}
-      </div>
-
-      <div className="mt-2 inline-flex rounded-md border border-black/10 p-0.5">
-        <button
-          type="button"
-          onClick={() => setTab("ask_you")}
-          className={
-            tab === "ask_you"
-              ? "rounded-sm bg-[#482C4C] px-2.5 py-1 text-xs font-medium text-white"
-              : "rounded-sm px-2.5 py-1 text-xs font-medium text-gray-500 hover:text-[#1C1E21]"
-          }
-        >
-          They&rsquo;ll ask you
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab("you_ask")}
-          className={
-            tab === "you_ask"
-              ? "rounded-sm bg-[#482C4C] px-2.5 py-1 text-xs font-medium text-white"
-              : "rounded-sm px-2.5 py-1 text-xs font-medium text-gray-500 hover:text-[#1C1E21]"
-          }
-        >
-          You ask them
-        </button>
-      </div>
-
-      <div className="mt-4">
-        {isLoading ? (
-          <Skeleton />
-        ) : !prep ? (
-          <p className="text-xs leading-relaxed text-gray-500">
-            Generate {tier === "deep" ? "Deep" : "Quick"} Prep to see questions
-            tailored to this round.
-          </p>
-        ) : tab === "ask_you" ? (
-          <TheyAsk items={prep.questions_they_ask} tier={tier} />
-        ) : (
-          <YouAsk items={prep.questions_you_ask} />
-        )}
-      </div>
-    </div>
-  )
-}
-
-function Skeleton() {
-  return (
-    <ul className="space-y-3">
-      {[0, 1, 2].map((i) => (
-        <li key={i} className="space-y-1.5">
-          <div className="h-2 w-1/3 rounded-full bg-gray-100" />
-          <div className="h-2 w-full rounded-full bg-gray-100" />
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-function TheyAsk({
-  items,
-  tier,
-}: {
+type TheyAskProps = {
   items: PrepQuestionThey[]
   tier: PrepTier
-}) {
+}
+
+export function QuestionsTheyAsk({ items, tier }: TheyAskProps) {
+  // Quick view hides category labels per spec ("common questions, no
+  // categories"). Deep view groups by the model-supplied category.
   const grouped = useMemo(() => groupByCategory(items), [items])
   return (
-    <ul className="space-y-4">
-      {grouped.map(([category, group]) => (
-        <li key={category}>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-[#482C4C]">
-            {category}
+    <section
+      id="questions-they-ask"
+      className="rounded-xl border border-black/5 bg-white p-5 shadow-sm scroll-mt-6"
+    >
+      <div className="flex items-baseline justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-[#1C1E21]">
+            Questions they&rsquo;ll ask you
+          </h2>
+          <p className="mt-0.5 text-sm text-gray-500">
+            {tier === "deep"
+              ? "Plausible questions for the round, grouped by category."
+              : "A handful of likely questions for the round."}
           </p>
-          <ul className="mt-1.5 space-y-1.5">
-            {group.map((q) => (
-              <TheyAskItem key={q.question} q={q} tier={tier} />
+        </div>
+        <span className="text-xs tabular-nums text-gray-400">
+          {items.length}
+        </span>
+      </div>
+
+      <ul className="mt-4 space-y-4">
+        {tier === "deep"
+          ? grouped.map(([category, group]) => (
+              <li key={category}>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-[#482C4C]">
+                  {category}
+                </p>
+                <ul className="mt-1.5 space-y-1.5">
+                  {group.map((q) => (
+                    <TheyAskItem key={q.question} q={q} tier={tier} />
+                  ))}
+                </ul>
+              </li>
+            ))
+          : items.map((q) => (
+              <li key={q.question}>
+                <TheyAskItem q={q} tier={tier} />
+              </li>
             ))}
-          </ul>
-        </li>
-      ))}
-    </ul>
+      </ul>
+    </section>
+  )
+}
+
+type YouAskProps = {
+  items: PrepQuestionYou[]
+}
+
+export function QuestionsYouAsk({ items }: YouAskProps) {
+  const grouped = useMemo(() => groupByCategory(items), [items])
+  return (
+    <section
+      id="questions-you-ask"
+      className="rounded-xl border border-black/5 bg-white p-5 shadow-sm scroll-mt-6"
+    >
+      <div className="flex items-baseline justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-[#1C1E21]">
+            Questions to ask them
+          </h2>
+          <p className="mt-0.5 text-sm text-gray-500">
+            Sharper questions surface fit and seriousness.
+          </p>
+        </div>
+        <span className="text-xs tabular-nums text-gray-400">
+          {items.length}
+        </span>
+      </div>
+      <ul className="mt-4 space-y-4">
+        {grouped.map(([category, group]) => (
+          <li key={category}>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-[#482C4C]">
+              {category}
+            </p>
+            <ul className="mt-1.5 space-y-1.5">
+              {group.map((q) => (
+                <li
+                  key={q.question}
+                  className="text-sm leading-relaxed text-gray-700"
+                >
+                  {q.question}
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
 
@@ -134,60 +126,42 @@ function TheyAskItem({
 
   if (!hasPlan) {
     return (
-      <li className="text-xs leading-relaxed text-gray-700">{q.question}</li>
+      <span className="block text-sm leading-relaxed text-gray-700">
+        {q.question}
+      </span>
     )
   }
 
   return (
-    <li>
+    <div>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="group flex w-full items-start gap-1.5 text-left text-xs leading-relaxed text-gray-700 transition-colors hover:text-[#1C1E21]"
+        className="group flex w-full items-start gap-1.5 text-left text-sm leading-relaxed text-gray-700 transition-colors hover:text-[#1C1E21]"
       >
         <ChevronDown
           className={
             open
-              ? "mt-0.5 size-3 shrink-0 text-[#482C4C] transition-transform"
-              : "mt-0.5 size-3 shrink-0 -rotate-90 text-gray-400 transition-transform group-hover:text-[#482C4C]"
+              ? "mt-1 size-3.5 shrink-0 text-[#482C4C] transition-transform"
+              : "mt-1 size-3.5 shrink-0 -rotate-90 text-gray-400 transition-transform group-hover:text-[#482C4C]"
           }
           aria-hidden
         />
         <span>{q.question}</span>
       </button>
       {open ? (
-        <p className="mt-1.5 ml-4.5 rounded-md bg-[#F8F9FA] p-2.5 text-[11px] leading-relaxed text-gray-600">
+        <p className="ml-5 mt-2 rounded-md bg-[#F8F9FA] p-3 text-xs leading-relaxed text-gray-600">
           {q.answer_plan}
         </p>
       ) : null}
-    </li>
+    </div>
   )
 }
 
-function YouAsk({ items }: { items: PrepQuestionYou[] }) {
-  const grouped = useMemo(() => groupByCategory(items), [items])
-  return (
-    <ul className="space-y-4">
-      {grouped.map(([category, group]) => (
-        <li key={category}>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-[#482C4C]">
-            {category}
-          </p>
-          <ul className="mt-1.5 space-y-2">
-            {group.map((q) => (
-              <li key={q.question} className="text-xs leading-relaxed text-gray-700">
-                {q.question}
-              </li>
-            ))}
-          </ul>
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-function groupByCategory<T extends { category: string }>(items: T[]): [string, T[]][] {
+function groupByCategory<T extends { category: string }>(
+  items: T[]
+): [string, T[]][] {
   const order: string[] = []
   const map = new Map<string, T[]>()
   for (const item of items) {

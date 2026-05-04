@@ -6,6 +6,9 @@ import type { PrepState } from "@/components/app/prep-overlay"
 import type { PrepOutput, PrepTier } from "@/lib/ai/prep-types"
 import type { StageKey } from "@/lib/stages"
 
+import { LockedPreviewModule } from "./locked-preview-module"
+import { QuestionsTheyAsk, QuestionsYouAsk } from "./questions-widget"
+
 type Props = {
   stage: StageKey
   prepState: PrepState
@@ -14,7 +17,10 @@ type Props = {
   tier: PrepTier
   onTierChange: (tier: PrepTier) => void
   onGenerate: () => void
+  onUpgrade: () => void
 }
+
+const QUICK_POSITIONING_VISIBLE_FRAMES = 2
 
 function stageHeading(stage: StageKey): string {
   switch (stage) {
@@ -42,17 +48,39 @@ export function PrepCanvas({
   tier,
   onTierChange,
   onGenerate,
+  onUpgrade,
 }: Props) {
-  return (
-    <div className="px-4 pb-12 pt-6 md:px-8">
-      <div className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-        Prep
-      </div>
-      <h1 className="mt-1 font-serif text-3xl font-semibold tracking-tight text-[#1C1E21]">
-        {stageHeading(stage)}
-      </h1>
+  const tierLabel = tier === "deep" ? "Deep Prep" : "Quick Prep"
+  const isReady = prepState.status === "ready"
+  const regenerateBlocked = tier === "deep" && !hasJd
 
-      <TierSelector tier={tier} onTierChange={onTierChange} />
+  return (
+    <div className="px-4 pb-12 pt-6 md:px-7">
+      {/* Compact top row: title + tier toggle + regenerate */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="font-serif text-2xl font-semibold tracking-tight text-[#1C1E21] md:text-[1.625rem]">
+          {stageHeading(stage)}
+        </h1>
+        <div className="flex items-center gap-2">
+          <TierSelector tier={tier} onTierChange={onTierChange} />
+          {isReady ? (
+            <button
+              type="button"
+              onClick={onGenerate}
+              disabled={regenerateBlocked}
+              title={
+                regenerateBlocked
+                  ? "Paste the JD to regenerate Deep Prep"
+                  : `Regenerate ${tierLabel}`
+              }
+              aria-label={`Regenerate ${tierLabel}`}
+              className="inline-flex size-7 items-center justify-center rounded-full border border-black/10 bg-white text-gray-600 transition-colors hover:border-black/20 hover:text-[#1C1E21] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <RefreshCw className="size-3.5" />
+            </button>
+          ) : null}
+        </div>
+      </div>
 
       <CanvasBody
         prepState={prepState}
@@ -60,6 +88,7 @@ export function PrepCanvas({
         hasJd={hasJd}
         tier={tier}
         onGenerate={onGenerate}
+        onUpgrade={onUpgrade}
       />
     </div>
   )
@@ -77,11 +106,7 @@ function TierSelector({
   const baseUnselected =
     "inline-flex items-center gap-1.5 rounded-full border border-[#482C4C]/20 bg-white px-3 py-1 text-xs font-medium text-[#482C4C] transition-colors hover:bg-[#482C4C]/5"
   return (
-    <div
-      role="tablist"
-      aria-label="Prep tier"
-      className="mt-4 flex flex-wrap items-center gap-2"
-    >
+    <div role="tablist" aria-label="Prep tier" className="flex items-center gap-1.5">
       <button
         type="button"
         role="tab"
@@ -89,7 +114,7 @@ function TierSelector({
         onClick={() => onTierChange("quick")}
         className={tier === "quick" ? baseSelected : baseUnselected}
       >
-        Haiku 4.5 · Quick Prep
+        Haiku 4.5 · Quick
       </button>
       <button
         type="button"
@@ -98,7 +123,7 @@ function TierSelector({
         onClick={() => onTierChange("deep")}
         className={tier === "deep" ? baseSelected : baseUnselected}
       >
-        Sonnet 4.6 · Deep Prep
+        Sonnet 4.6 · Deep
       </button>
     </div>
   )
@@ -110,12 +135,14 @@ function CanvasBody({
   hasJd,
   tier,
   onGenerate,
+  onUpgrade,
 }: {
   prepState: PrepState
   hasResume: boolean
   hasJd: boolean
   tier: PrepTier
   onGenerate: () => void
+  onUpgrade: () => void
 }) {
   const tierLabel = tier === "deep" ? "Deep Prep" : "Quick Prep"
   if (prepState.status === "loading-cache") {
@@ -141,8 +168,7 @@ function CanvasBody({
     <PrepView
       prep={prepState.prep}
       tier={tier}
-      hasJd={hasJd}
-      onRegenerate={onGenerate}
+      onUpgrade={onUpgrade}
     />
   )
 }
@@ -249,37 +275,57 @@ function LoadingSkeleton({ hint }: { hint?: string }) {
 function PrepView({
   prep,
   tier,
-  hasJd,
-  onRegenerate,
+  onUpgrade,
 }: {
   prep: PrepOutput
   tier: PrepTier
-  hasJd: boolean
-  onRegenerate: () => void
+  onUpgrade: () => void
 }) {
-  const regenerateBlocked = tier === "deep" && !hasJd
+  const isQuick = tier === "quick"
   return (
-    <div className="mt-6 space-y-6">
-      <div className="flex items-center justify-end">
-        <button
-          type="button"
-          onClick={onRegenerate}
-          disabled={regenerateBlocked}
-          title={
-            regenerateBlocked
-              ? "Paste the JD to regenerate Deep Prep"
-              : undefined
-          }
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-black/10 bg-white px-3 text-xs font-medium text-gray-700 transition-colors hover:border-black/20 hover:text-[#1C1E21] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <RefreshCw className="size-3.5" />
-          Regenerate
-        </button>
-      </div>
-
+    <div className="mt-6 space-y-5">
       <PurposeSection purpose={prep.purpose} />
-      <PositioningSection positioning={prep.positioning} />
+
+      <PositioningSection
+        positioning={prep.positioning}
+        truncated={isQuick}
+      />
+      {isQuick ? (
+        <LockedPreviewModule
+          title="Full positioning plan"
+          teaser="Deep Prep adds 2 more framing points with rich, resume-grounded context and per-interviewer angles."
+          onUpgrade={onUpgrade}
+        />
+      ) : null}
+
       <RisksSection risks={prep.risks} tier={tier} />
+      {isQuick ? (
+        <LockedPreviewModule
+          title="Risks with prepared counters"
+          teaser="Deep Prep returns each likely concern with a specific counter anchored in your resume."
+          onUpgrade={onUpgrade}
+        />
+      ) : null}
+
+      <QuestionsTheyAsk items={prep.questions_they_ask} tier={tier} />
+      {isQuick ? (
+        <LockedPreviewModule
+          title="Per-category answer plans"
+          teaser="Deep Prep groups questions across 8 interview categories and gives a structured answer plan for each."
+          onUpgrade={onUpgrade}
+        />
+      ) : null}
+
+      <QuestionsYouAsk items={prep.questions_you_ask} />
+
+      {isQuick ? (
+        <LockedPreviewModule
+          title="Resume-to-JD fit"
+          teaser="Deep Prep weaves your resume into the JD: strong matches, visible gaps, what to emphasize."
+          onUpgrade={onUpgrade}
+        />
+      ) : null}
+
       <ChecklistSection checklist={prep.prep_checklist} />
     </div>
   )
@@ -339,18 +385,25 @@ function PurposeSection({ purpose }: { purpose: PrepOutput["purpose"] }) {
 
 function PositioningSection({
   positioning,
+  truncated,
 }: {
   positioning: PrepOutput["positioning"]
+  truncated: boolean
 }) {
+  const frames = truncated
+    ? positioning.frames.slice(0, QUICK_POSITIONING_VISIBLE_FRAMES)
+    : positioning.frames
   return (
     <SectionShell
       id="positioning"
       title="Positioning"
       subtitle={positioning.headline}
     >
-      <p className="text-sm leading-relaxed text-gray-700">{positioning.summary}</p>
+      <p className="text-sm leading-relaxed text-gray-700">
+        {positioning.summary}
+      </p>
       <ol className="mt-5 space-y-4">
-        {positioning.frames.map((f, i) => (
+        {frames.map((f, i) => (
           <li key={f.title} className="flex gap-3">
             <span className="mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-[#482C4C]/10 text-xs font-semibold text-[#482C4C]">
               {i + 1}
@@ -423,4 +476,3 @@ function ChecklistSection({
     </SectionShell>
   )
 }
-
