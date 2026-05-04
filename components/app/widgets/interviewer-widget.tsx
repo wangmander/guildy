@@ -2,16 +2,24 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { Lock } from "lucide-react"
+import { Lock, Sparkles } from "lucide-react"
 
 import { setInterviewerAction } from "@/app/app/actions"
+import type { PrepTier } from "@/lib/ai/prep-types"
 
 type Props = {
   jobId: string
   initialName?: string | null
+  tier: PrepTier
+  insights: string | null
 }
 
-export function InterviewerWidget({ jobId, initialName }: Props) {
+export function InterviewerWidget({
+  jobId,
+  initialName,
+  tier,
+  insights,
+}: Props) {
   const router = useRouter()
   const [name, setName] = useState(initialName ?? "")
   const [savedName, setSavedName] = useState(initialName ?? "")
@@ -34,6 +42,8 @@ export function InterviewerWidget({ jobId, initialName }: Props) {
     })
   }
 
+  const showInsights = tier === "deep" && !!insights && insights.length > 0
+
   return (
     <div className="rounded-2xl border border-black/5 bg-white p-4 shadow-sm">
       <h3 className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
@@ -52,15 +62,29 @@ export function InterviewerWidget({ jobId, initialName }: Props) {
         <p className="mt-1.5 text-[11px] text-red-600">{error}</p>
       ) : null}
 
-      <div className="mt-3 rounded-lg border border-dashed border-black/10 bg-gray-50/60 p-3">
-        <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
-          <Lock className="size-3" />
-          Insights
+      {showInsights ? (
+        <div className="mt-3 rounded-lg border border-[#482C4C]/15 bg-gradient-to-b from-[#482C4C]/5 to-white p-3">
+          <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-[#482C4C]">
+            <Sparkles className="size-3" />
+            Insights
+          </div>
+          <p className="mt-1.5 text-xs leading-relaxed text-gray-700">
+            {insights}
+          </p>
         </div>
-        <p className="mt-1.5 text-xs leading-relaxed text-gray-500">
-          Insights unlock with Deep Prep.
-        </p>
-      </div>
+      ) : (
+        <div className="mt-3 rounded-lg border border-dashed border-black/10 bg-gray-50/60 p-3">
+          <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+            <Lock className="size-3" />
+            Insights
+          </div>
+          <p className="mt-1.5 text-xs leading-relaxed text-gray-500">
+            {tier === "deep"
+              ? "Generate Deep Prep with an interviewer name to see insights here."
+              : "Insights appear here when Deep Prep runs."}
+          </p>
+        </div>
+      )}
     </div>
   )
 }

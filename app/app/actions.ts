@@ -6,8 +6,14 @@ import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { z } from "zod"
 
-import { generatePrep, QUICK_PREP_MODEL } from "@/lib/ai/generate-prep"
-import { stageKeyToPrepStage, type PrepOutput } from "@/lib/ai/prep-types"
+import { generatePrep } from "@/lib/ai/generate-prep"
+import { DEEP_PREP_MODEL, QUICK_PREP_MODEL } from "@/lib/ai/models"
+import {
+  prepTierSchema,
+  stageKeyToPrepStage,
+  type PrepOutput,
+  type PrepTier,
+} from "@/lib/ai/prep-types"
 import type { StageKey } from "@/lib/stages"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
@@ -324,18 +330,20 @@ export async function setInterviewerAction(
 
 // Prep ---------------------------------------------------------------------
 
-const jobIdSchema = z.object({
+const cachedPrepSchema = z.object({
   job_id: z.string().uuid("Invalid job id"),
+  tier: prepTierSchema,
 })
 
+export type GetCachedPrepInput = z.input<typeof cachedPrepSchema>
 export type GetCachedPrepResult =
   | { ok: true; prep: PrepOutput | null }
   | { ok: false; error: string }
 
 export async function getCachedPrepAction(
-  input: z.input<typeof jobIdSchema>
+  input: GetCachedPrepInput
 ): Promise<GetCachedPrepResult> {
-  const parsed = jobIdSchema.safeParse(input)
+  const parsed = cachedPrepSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" }
   }
@@ -360,7 +368,7 @@ export async function getCachedPrepAction(
     .select("output")
     .eq("job_id", parsed.data.job_id)
     .eq("user_id", user.id)
-    .eq("tier", "quick")
+    .eq("tier", parsed.data.tier)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -369,14 +377,24 @@ export async function getCachedPrepAction(
   return { ok: true, prep: (row?.output ?? null) as PrepOutput | null }
 }
 
+const generatePrepSchema = z.object({
+  job_id: z.string().uuid("Invalid job id"),
+  tier: prepTierSchema,
+})
+
+export type GeneratePrepInput = z.input<typeof generatePrepSchema>
 export type GeneratePrepResult =
   | { ok: true; prep: PrepOutput }
   | { ok: false; error: string }
 
+function modelForTier(tier: PrepTier): string {
+  return tier === "deep" ? DEEP_PREP_MODEL : QUICK_PREP_MODEL
+}
+
 export async function generatePrepAction(
-  input: z.input<typeof jobIdSchema>
+  input: GeneratePrepInput
 ): Promise<GeneratePrepResult> {
-  const parsed = jobIdSchema.safeParse(input)
+  const parsed = generatePrepSchema.safeParse(input)
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" }
   }
@@ -426,6 +444,11 @@ export async function generatePrepAction(
     interviewerRow?.content ??
     null
 
+  // PHASE 6b: re-add subscription gate here. Free users can call tier="deep"
+  // during test mode; production should require active subscription before
+  // dispatching the Sonnet call.
+
+  const tier = parsed.data.tier
   let prep: PrepOutput
   try {
     prep = await generatePrep({
@@ -436,7 +459,7 @@ export async function generatePrepAction(
       role_title: job.role_title,
       stage: prepStage,
       interviewer_name: interviewerName,
-      tier: "quick",
+      tier,
     })
   } catch (err) {
     const message =
@@ -458,8 +481,8 @@ export async function generatePrepAction(
   const { error: insertError } = await supabase.from("prep_versions").insert({
     job_id: parsed.data.job_id,
     user_id: user.id,
-    tier: "quick",
-    model_used: QUICK_PREP_MODEL,
+    tier,
+    model_used: modelForTier(tier),
     context_hash: contextHash,
     output: prep,
   })
@@ -467,7 +490,9 @@ export async function generatePrepAction(
 
   await supabase
     .from("jobs")
-    .update({ prep_status: "quick_generated" })
+    .update({
+      prep_status: tier === "deep" ? "deep_generated" : "quick_generated",
+    })
     .eq("id", parsed.data.job_id)
     .eq("user_id", user.id)
 

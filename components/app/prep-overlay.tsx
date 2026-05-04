@@ -15,7 +15,6 @@ import { InterviewerWidget } from "./widgets/interviewer-widget"
 import { JobContextWidget } from "./widgets/job-context-widget"
 import { PrepCanvas } from "./widgets/prep-canvas"
 import { QuestionsWidget } from "./widgets/questions-widget"
-import { UpgradeWidget } from "./widgets/upgrade-widget"
 
 export type PrepJob = {
   id: string
@@ -84,18 +83,22 @@ export function PrepOverlay({
     }
   }, [])
 
-  // Fetch cached prep when the overlay opens for a job. Re-run only when the
-  // job id changes (different card opened). Depending on the `job` object
-  // would re-fire on every parent re-render — the parent re-computes openJob
-  // from its jobs array, getting a new reference even when content is
-  // identical, which previously caused a double skeleton flash on open and
-  // again after every router.refresh() from input saves.
+  // Reset tier to Quick whenever a different job opens. Kept in its own
+  // effect so it doesn't fight the cache-fetch effect (which now depends
+  // on tier and would loop if it also reset tier).
+  useEffect(() => {
+    setTier("quick")
+  }, [job?.id])
+
+  // Fetch cached prep for the current tier. Re-runs when job or tier
+  // changes. Depending on the `job` object reference would re-fire on every
+  // parent re-render (parent recomputes openJob from its jobs array),
+  // causing a double skeleton flash — that's why we key on job?.id only.
   useEffect(() => {
     if (!job) return
     let cancelled = false
     setPrepState({ status: "loading-cache" })
-    setTier("quick")
-    getCachedPrepAction({ job_id: job.id }).then((res) => {
+    getCachedPrepAction({ job_id: job.id, tier }).then((res) => {
       if (cancelled) return
       if (!res.ok) {
         setPrepState({ status: "error", message: res.error })
@@ -111,20 +114,20 @@ export function PrepOverlay({
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [job?.id])
+  }, [job?.id, tier])
 
   const onGenerate = useCallback(() => {
     if (!job) return
     setPrepState({ status: "generating" })
     startTransition(async () => {
-      const res = await generatePrepAction({ job_id: job.id })
+      const res = await generatePrepAction({ job_id: job.id, tier })
       if (!res.ok) {
         setPrepState({ status: "error", message: res.error })
         return
       }
       setPrepState({ status: "ready", prep: res.prep })
     })
-  }, [job])
+  }, [job, tier])
 
   return (
     <div
@@ -171,8 +174,16 @@ export function PrepOverlay({
                   sourceUrl={job.source_url}
                   jdSnippet={job.jd_text}
                 />
-                <InterviewerWidget jobId={job.id} initialName={interviewerName} />
-                <UpgradeWidget onUpgrade={() => setTier("deep")} />
+                <InterviewerWidget
+                  jobId={job.id}
+                  initialName={interviewerName}
+                  tier={tier}
+                  insights={
+                    prepState.status === "ready"
+                      ? prepState.prep.interviewer_insights
+                      : null
+                  }
+                />
               </aside>
 
               <main className="pointer-events-auto rounded-2xl border border-black/5 bg-[#F8F9FA] shadow-sm md:max-h-[calc(100dvh-3rem)] md:overflow-y-auto">
@@ -196,7 +207,7 @@ export function PrepOverlay({
                   }
                   hasInterviewer={hasInterviewer}
                 />
-                <QuestionsWidget prepState={prepState} />
+                <QuestionsWidget prepState={prepState} tier={tier} />
               </aside>
             </>
           )}

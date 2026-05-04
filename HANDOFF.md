@@ -26,34 +26,36 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
-- Last phase shipped: **Phase 4c bugfix patch 2** — skeleton flash, backdrop click, ESC focus ring fixes
+- Last phase shipped: **Phase 4c-2** — Anthropic migration (Quick → Haiku 4.5, Deep → Sonnet 4.6 via tool use + ephemeral prompt cache), paywall surfaces removed, tier-aware cache + UI
 - Date: 2026-05-03
-- Project status: ready for Phase 4c-2 (Anthropic migration + paywall removal)
+- Project status: ready for Phase 4d (multi-session Full Loop)
 
 ## Locked models [LIVE]
 
-- `QUICK_PREP_MODEL = "claude-haiku-4-5-20251001"` (NOT YET WIRED — currently gpt-4o-mini in code, migrates in Phase 4c-2)
-- `DEEP_PREP_MODEL = "claude-sonnet-4-6"` (NOT YET WIRED — currently paywall shell, generates real prep in Phase 4c-2)
-- `extract-jd.ts` = gpt-4o-mini (separate path, stays OpenAI for now)
+- `QUICK_PREP_MODEL = "claude-haiku-4-5-20251001"` — wired, exported from `lib/ai/models.ts`, written to `prep_versions.model_used` for tier=quick
+- `DEEP_PREP_MODEL = "claude-sonnet-4-6"` — wired, exported from `lib/ai/models.ts`, written to `prep_versions.model_used` for tier=deep
+- `extract-jd.ts` = gpt-4o-mini (separate path, stays OpenAI)
 
 ## What's left to V2.0 launch [LIVE]
 
 Total realistic: ~32-41 hours, ~4-5 focused build sessions.
 
-### Phase 4c-2 — Anthropic migration + paywall removal (~2-3h) — NEXT
-- Quick: gpt-4o-mini → Haiku 4.5
-- Deep: paywall shell → real Sonnet 4.6
-- No paywall surfaces during test mode (both tiers free + functional)
-- extract-jd.ts unchanged
-- Single Anthropic SDK alongside existing OpenAI SDK
-
-### Phase 4d — Multi-session Full Loop, Option C+ (~3-4h)
+### Phase 4d — Multi-session Full Loop, Option C+ (~3-4h) — NEXT
 - Each session = its own prep generation = its own prep_versions row
 - context_hash includes session name
 - Full-attention LLM call per session (not nested array in one call)
 - 4 default sessions: Hiring Manager, Cross-functional, Skills/Portfolio, Bar Raiser
 - LLM picks plausible names from JD/company context
 - No schema change
+
+### Phase 4c-2 — DONE
+- Quick → Haiku 4.5, Deep → Sonnet 4.6, both via Anthropic tool use with ephemeral prompt caching on system message
+- `lib/ai/models.ts` is the single source of truth for model strings
+- `getCachedPrepAction` + `generatePrepAction` accept `tier` and route accordingly; `model_used` written from constants
+- Paywall removed: UpgradeWidget deleted, DeepPrepPaywall deleted, Lock icon dropped, tier-aware EmptyState/LoadingSkeleton/CTA copy
+- InterviewerWidget renders `interviewer_insights` when tier=deep + present
+- QuestionsWidget renders expandable `answer_plan` per Deep question (collapsed by default)
+- Phase 6b marker comment lives in `generatePrepAction` for the future subscription gate
 
 ### Phase 5 — Perplexity research for Deep Prep (~5-7h)
 - Company research cached per company, 7-day TTL
@@ -155,4 +157,4 @@ Gmail/OAuth, auto-stage detection, comparison matrix, negotiation module, XP/pal
 
 ## Open questions / blockers [LIVE]
 
-- None right now. Phase 4c-2 ready to ship.
+- Quality bar for Deep is unverified by code — real Sonnet output needs to be smoke-tested with a real resume + JD + interviewer to confirm it weaves resume-to-JD comparison into positioning frames and risks.items as the prompt instructs. If output drifts toward generic, tighten the system prompt or move resume-to-JD to a dedicated field in Phase 6.

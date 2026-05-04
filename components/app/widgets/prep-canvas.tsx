@@ -1,6 +1,6 @@
 "use client"
 
-import { Check, Lock, RefreshCw, Sparkles, Shield } from "lucide-react"
+import { RefreshCw, Sparkles } from "lucide-react"
 
 import type { PrepState } from "@/components/app/prep-overlay"
 import type { PrepOutput, PrepTier } from "@/lib/ai/prep-types"
@@ -52,15 +52,12 @@ export function PrepCanvas({
 
       <TierSelector tier={tier} onTierChange={onTierChange} />
 
-      {tier === "deep" ? (
-        <DeepPrepPaywall onBackToQuick={() => onTierChange("quick")} />
-      ) : (
-        <CanvasBody
-          prepState={prepState}
-          hasResume={hasResume}
-          onGenerate={onGenerate}
-        />
-      )}
+      <CanvasBody
+        prepState={prepState}
+        hasResume={hasResume}
+        tier={tier}
+        onGenerate={onGenerate}
+      />
     </div>
   )
 }
@@ -72,6 +69,10 @@ function TierSelector({
   tier: PrepTier
   onTierChange: (tier: PrepTier) => void
 }) {
+  const baseSelected =
+    "inline-flex items-center gap-1.5 rounded-full bg-[#482C4C] px-3 py-1 text-xs font-medium text-white shadow-sm"
+  const baseUnselected =
+    "inline-flex items-center gap-1.5 rounded-full border border-[#482C4C]/20 bg-white px-3 py-1 text-xs font-medium text-[#482C4C] transition-colors hover:bg-[#482C4C]/5"
   return (
     <div
       role="tablist"
@@ -83,26 +84,17 @@ function TierSelector({
         role="tab"
         aria-selected={tier === "quick"}
         onClick={() => onTierChange("quick")}
-        className={
-          tier === "quick"
-            ? "inline-flex items-center gap-1.5 rounded-full bg-[#482C4C] px-3 py-1 text-xs font-medium text-white shadow-sm"
-            : "inline-flex items-center gap-1.5 rounded-full border border-[#482C4C]/20 bg-white px-3 py-1 text-xs font-medium text-[#482C4C] transition-colors hover:bg-[#482C4C]/5"
-        }
+        className={tier === "quick" ? baseSelected : baseUnselected}
       >
-        GPT 5.4 Nano · Quick Prep
+        Haiku 4.5 · Quick Prep
       </button>
       <button
         type="button"
         role="tab"
         aria-selected={tier === "deep"}
         onClick={() => onTierChange("deep")}
-        className={
-          tier === "deep"
-            ? "inline-flex items-center gap-1.5 rounded-full bg-[#482C4C] px-3 py-1 text-xs font-medium text-white shadow-sm"
-            : "inline-flex items-center gap-1.5 rounded-full border border-[#482C4C]/20 bg-white px-3 py-1 text-xs font-medium text-[#482C4C] transition-colors hover:bg-[#482C4C]/5"
-        }
+        className={tier === "deep" ? baseSelected : baseUnselected}
       >
-        <Lock className="size-3" aria-hidden />
         Sonnet 4.6 · Deep Prep
       </button>
     </div>
@@ -112,44 +104,60 @@ function TierSelector({
 function CanvasBody({
   prepState,
   hasResume,
+  tier,
   onGenerate,
 }: {
   prepState: PrepState
   hasResume: boolean
+  tier: PrepTier
   onGenerate: () => void
 }) {
+  const tierLabel = tier === "deep" ? "Deep Prep" : "Quick Prep"
   if (prepState.status === "loading-cache") {
     return <LoadingSkeleton />
   }
   if (prepState.status === "generating") {
-    return <LoadingSkeleton hint="Generating Quick Prep…" />
+    return <LoadingSkeleton hint={`Generating ${tierLabel}…`} />
   }
   if (prepState.status === "error") {
     return <ErrorState message={prepState.message} onRetry={onGenerate} />
   }
   if (prepState.status === "empty") {
-    return <EmptyState hasResume={hasResume} onGenerate={onGenerate} />
+    return (
+      <EmptyState
+        hasResume={hasResume}
+        tier={tier}
+        onGenerate={onGenerate}
+      />
+    )
   }
-  return <PrepView prep={prepState.prep} onRegenerate={onGenerate} />
+  return (
+    <PrepView prep={prepState.prep} tier={tier} onRegenerate={onGenerate} />
+  )
 }
 
 function EmptyState({
   hasResume,
+  tier,
   onGenerate,
 }: {
   hasResume: boolean
+  tier: PrepTier
   onGenerate: () => void
 }) {
+  const tierLabel = tier === "deep" ? "Deep Prep" : "Quick Prep"
+  const subhead =
+    tier === "deep"
+      ? "Sonnet 4.6 with research-grade depth. Takes a few seconds."
+      : "Pulls in your resume, the JD, and any context you've added. Takes about a second."
   return (
     <div className="mt-8 rounded-xl border border-dashed border-black/10 bg-white p-8 text-center">
       <Sparkles className="mx-auto size-6 text-[#482C4C]" />
       <h2 className="mt-3 text-lg font-semibold text-[#1C1E21]">
-        Generate Quick Prep
+        Generate {tierLabel}
       </h2>
       <p className="mx-auto mt-2 max-w-sm text-sm text-gray-500">
-        {hasResume
-          ? "Pulls in your resume, the JD, and any context you've added. Takes about a second."
-          : "Add your resume in onboarding before running prep."}
+        {hasResume ? subhead : "Add your resume in onboarding before running prep."}
       </p>
       <button
         type="button"
@@ -158,7 +166,7 @@ function EmptyState({
         className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#482C4C] px-5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <Sparkles className="size-4" />
-        Generate Quick Prep
+        Generate {tierLabel}
       </button>
     </div>
   )
@@ -215,9 +223,11 @@ function LoadingSkeleton({ hint }: { hint?: string }) {
 
 function PrepView({
   prep,
+  tier,
   onRegenerate,
 }: {
   prep: PrepOutput
+  tier: PrepTier
   onRegenerate: () => void
 }) {
   return (
@@ -235,7 +245,7 @@ function PrepView({
 
       <PurposeSection purpose={prep.purpose} />
       <PositioningSection positioning={prep.positioning} />
-      <RisksSection risks={prep.risks} />
+      <RisksSection risks={prep.risks} tier={tier} />
       <ChecklistSection checklist={prep.prep_checklist} />
     </div>
   )
@@ -324,7 +334,13 @@ function PositioningSection({
   )
 }
 
-function RisksSection({ risks }: { risks: PrepOutput["risks"] }) {
+function RisksSection({
+  risks,
+  tier,
+}: {
+  risks: PrepOutput["risks"]
+  tier: PrepTier
+}) {
   return (
     <SectionShell id="risks" title="Risks & Probes" subtitle={risks.headline}>
       <p className="text-sm leading-relaxed text-gray-700">{risks.summary}</p>
@@ -339,9 +355,11 @@ function RisksSection({ risks }: { risks: PrepOutput["risks"] }) {
               <p className="mt-2 text-sm leading-relaxed text-gray-600">
                 {item.counter}
               </p>
-            ) : (
-              <DeepLockedRow label="Counter unlocks with Deep Prep" />
-            )}
+            ) : tier === "deep" ? (
+              <p className="mt-2 text-xs italic text-gray-400">
+                No prepared counter for this risk.
+              </p>
+            ) : null}
           </li>
         ))}
       </ul>
@@ -372,75 +390,3 @@ function ChecklistSection({
   )
 }
 
-function DeepLockedRow({ label }: { label: string }) {
-  return (
-    <div className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-[#482C4C]/20 bg-white px-2 py-1 text-[11px] font-medium text-[#482C4C]">
-      <Shield className="size-3" />
-      {label}
-      <Lock className="size-3 opacity-60" />
-    </div>
-  )
-}
-
-const DEEP_PREP_UNLOCKS = [
-  "Deeper role-specific prep",
-  "Stronger answer plans",
-  "Recruiter and interviewer strategy",
-  "Resume-to-JD fit",
-  "Company and role positioning",
-  "Sharper questions to ask",
-] as const
-
-function DeepPrepPaywall({ onBackToQuick }: { onBackToQuick: () => void }) {
-  return (
-    <div className="mt-6">
-      <div className="rounded-2xl border border-[#482C4C]/15 bg-gradient-to-b from-[#482C4C]/5 to-white p-6 shadow-sm md:p-8">
-        <div className="inline-flex items-center gap-1.5 rounded-full bg-[#482C4C]/10 px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-[#482C4C]">
-          <Lock className="size-3" />
-          Premium tier
-        </div>
-        <h2 className="mt-4 font-serif text-2xl font-semibold tracking-tight text-[#1C1E21] md:text-3xl">
-          Deep Prep
-        </h2>
-        <p className="mt-2 max-w-md text-sm leading-relaxed text-gray-600">
-          Quick Prep gets you ready. Deep Prep gives you the plan.
-        </p>
-
-        <ul className="mt-6 grid gap-3 sm:grid-cols-2">
-          {DEEP_PREP_UNLOCKS.map((unlock) => (
-            <li
-              key={unlock}
-              className="flex items-start gap-2.5 rounded-lg border border-black/5 bg-white px-3 py-2.5 text-sm text-[#1C1E21] shadow-sm"
-            >
-              <Check className="mt-0.5 size-4 shrink-0 text-[#482C4C]" />
-              <span className="leading-snug">{unlock}</span>
-            </li>
-          ))}
-        </ul>
-
-        <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center">
-          <button
-            type="button"
-            disabled
-            aria-disabled
-            title="Stripe checkout ships in a later phase"
-            className="inline-flex h-10 items-center justify-center rounded-md bg-[#482C4C] px-5 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            Upgrade to Deep Prep
-          </button>
-          <button
-            type="button"
-            onClick={onBackToQuick}
-            className="inline-flex h-10 items-center justify-center rounded-md px-3 text-sm font-medium text-[#482C4C] hover:underline"
-          >
-            Back to Quick Prep
-          </button>
-        </div>
-        <p className="mt-3 text-[11px] text-gray-400">
-          Checkout ships in a later phase. Quick Prep stays unlimited on the
-          free tier.
-        </p>
-      </div>
-    </div>
-  )
-}

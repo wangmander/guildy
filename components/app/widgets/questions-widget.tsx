@@ -1,20 +1,23 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { ChevronDown } from "lucide-react"
 
 import type { PrepState } from "@/components/app/prep-overlay"
 import type {
   PrepQuestionThey,
   PrepQuestionYou,
+  PrepTier,
 } from "@/lib/ai/prep-types"
 
 type Tab = "ask_you" | "you_ask"
 
 type Props = {
   prepState: PrepState
+  tier: PrepTier
 }
 
-export function QuestionsWidget({ prepState }: Props) {
+export function QuestionsWidget({ prepState, tier }: Props) {
   const [tab, setTab] = useState<Tab>("ask_you")
 
   const prep = prepState.status === "ready" ? prepState.prep : null
@@ -67,10 +70,11 @@ export function QuestionsWidget({ prepState }: Props) {
           <Skeleton />
         ) : !prep ? (
           <p className="text-xs leading-relaxed text-gray-500">
-            Generate Quick Prep to see questions tailored to this round.
+            Generate {tier === "deep" ? "Deep" : "Quick"} Prep to see questions
+            tailored to this round.
           </p>
         ) : tab === "ask_you" ? (
-          <TheyAsk items={prep.questions_they_ask} />
+          <TheyAsk items={prep.questions_they_ask} tier={tier} />
         ) : (
           <YouAsk items={prep.questions_you_ask} />
         )}
@@ -92,7 +96,13 @@ function Skeleton() {
   )
 }
 
-function TheyAsk({ items }: { items: PrepQuestionThey[] }) {
+function TheyAsk({
+  items,
+  tier,
+}: {
+  items: PrepQuestionThey[]
+  tier: PrepTier
+}) {
   const grouped = useMemo(() => groupByCategory(items), [items])
   return (
     <ul className="space-y-4">
@@ -101,16 +111,57 @@ function TheyAsk({ items }: { items: PrepQuestionThey[] }) {
           <p className="text-[10px] font-semibold uppercase tracking-wide text-[#482C4C]">
             {category}
           </p>
-          <ul className="mt-1.5 space-y-2">
+          <ul className="mt-1.5 space-y-1.5">
             {group.map((q) => (
-              <li key={q.question} className="text-xs leading-relaxed text-gray-700">
-                {q.question}
-              </li>
+              <TheyAskItem key={q.question} q={q} tier={tier} />
             ))}
           </ul>
         </li>
       ))}
     </ul>
+  )
+}
+
+function TheyAskItem({
+  q,
+  tier,
+}: {
+  q: PrepQuestionThey
+  tier: PrepTier
+}) {
+  const [open, setOpen] = useState(false)
+  const hasPlan = tier === "deep" && !!q.answer_plan && q.answer_plan.length > 0
+
+  if (!hasPlan) {
+    return (
+      <li className="text-xs leading-relaxed text-gray-700">{q.question}</li>
+    )
+  }
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="group flex w-full items-start gap-1.5 text-left text-xs leading-relaxed text-gray-700 transition-colors hover:text-[#1C1E21]"
+      >
+        <ChevronDown
+          className={
+            open
+              ? "mt-0.5 size-3 shrink-0 text-[#482C4C] transition-transform"
+              : "mt-0.5 size-3 shrink-0 -rotate-90 text-gray-400 transition-transform group-hover:text-[#482C4C]"
+          }
+          aria-hidden
+        />
+        <span>{q.question}</span>
+      </button>
+      {open ? (
+        <p className="mt-1.5 ml-4.5 rounded-md bg-[#F8F9FA] p-2.5 text-[11px] leading-relaxed text-gray-600">
+          {q.answer_plan}
+        </p>
+      ) : null}
+    </li>
   )
 }
 

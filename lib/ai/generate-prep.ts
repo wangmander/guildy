@@ -1,16 +1,15 @@
 import "server-only"
 
-import OpenAI from "openai"
+import Anthropic from "@anthropic-ai/sdk"
 
+import { DEEP_PREP_MODEL, QUICK_PREP_MODEL } from "./models"
 import { prepOutputSchema, type PrepInput, type PrepOutput } from "./prep-types"
-
-// gpt-5.4-nano (per spec) does not exist as a real OpenAI model. Using
-// gpt-4o-mini as the closest current cheap model. Swap when 5.x nano lands.
-export const QUICK_PREP_MODEL = "gpt-4o-mini"
 
 const RESUME_CHAR_CAP = 8000
 const JD_CHAR_CAP = 12000
 const LATEST_MESSAGE_CHAR_CAP = 4000
+const QUICK_MAX_TOKENS = 2048
+const DEEP_MAX_TOKENS = 4096
 
 const SYSTEM_PROMPT = `You are a senior interview prep coach with 15+ years guiding candidates through interviews at top tech companies. You produce sharp, candidate-specific prep — never generic boilerplate.
 
@@ -20,6 +19,7 @@ INPUTS YOU RECEIVE
 - Latest message from recruiter or hiring manager (signals about what they care about, who's involved, what stage)
 - Current interview stage
 - Interviewer name (when known)
+- Tier (quick or deep) — controls depth, counts, and which fields populate
 
 QUALITY BAR
 1. Every framing point, risk item, and answer plan must reference at least one concrete item from the resume or JD. Zero "research the company" filler.
@@ -33,20 +33,36 @@ QUALITY BAR
 5. Reference specifics from the latest message if it hints at what they care about.
 6. Do not invent facts about the company that aren't in the JD or message.
 
-QUICK PREP TIER RULES (this generation)
-- 3 to 5 items in questions_they_ask
+QUICK PREP TIER RULES (when tier === "quick")
+- 3 to 5 items in questions_they_ask, plain category labels
 - 2 to 3 items in questions_you_ask
 - Exactly 3 items in risks.items, each with counter set to null
 - Exactly 4 items in positioning.frames
 - Exactly 4 items in prep_checklist, each with done set to false
-- 3 to 4 items in purpose.criteria; weights are integers 0-100 that sum to roughly 100
+- 3 to 4 items in purpose.criteria; integer weights 0-100 summing to roughly 100
 - Each questions_they_ask item must set answer_plan to null
 - interviewer_insights must be null
 
-OUTPUT
-Return strict JSON conforming to the schema. No markdown, no preamble, no commentary. The "stage" field in your output must equal the input stage value.`
+DEEP PREP TIER RULES (when tier === "deep")
+- 8 to 12 items in questions_they_ask distributed across these categories — use the labels meaningfully, do not force every category if the stage doesn't warrant it: Background, Role fit, Behavioral, Product/design judgment, Leadership/conflict, Weakness/gaps, Company motivation, Bar raiser
+- Each questions_they_ask item MUST have a non-null answer_plan: a structured 3-5 sentence plan, not a one-liner tip. Reference at least one concrete resume item per plan.
+- 3 to 5 items in questions_you_ask, sharper than Quick (specific to the company/team if context allows)
+- Exactly 4 items in risks.items, each with a NON-NULL counter (specific prepared response, anchored in resume facts)
+- 4 to 6 items in positioning.frames with rich, resume-grounded context
+- 6 to 8 items in prep_checklist, each with done set to false
+- 4 to 5 items in purpose.criteria with detailed descriptions; integer weights summing to roughly 100
+- If interviewer_name is provided, interviewer_insights MUST be a non-null string (3-6 sentences) with prep tailored to that interviewer's likely angle, grounded in the JD and resume. If interviewer_name is not provided, interviewer_insights must be null.
 
-const PREP_OUTPUT_JSON_SCHEMA = {
+DEEP PREP — RESUME-TO-JD FIT (Deep only, no separate field)
+Weave resume-to-JD comparison into existing fields:
+- At least 2 of the positioning.frames must explicitly cite specific resume items that match (or fail to match) JD requirements.
+- At least 2 of the risks.items must come from specific resume gaps versus JD asks (e.g., "JD asks for B2B SaaS scale; your most recent shipped work is consumer — bridge with the X project").
+- Do not generate filler. If no clear gap exists, surface scope or seniority mismatches instead.
+
+OUTPUT
+Call the submit_prep tool with the structured prep. The "stage" field in your output must equal the input stage value.`
+
+const PREP_OUTPUT_TOOL_SCHEMA = {
   type: "object",
   additionalProperties: false,
   required: [
@@ -170,38 +186,63 @@ const PREP_OUTPUT_JSON_SCHEMA = {
 } as const
 
 export async function generatePrep(input: PrepInput): Promise<PrepOutput> {
-  if (!process.env.OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY is missing from environment")
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error("ANTHROPIC_API_KEY is missing from environment")
   }
 
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-  const messages = buildMessages(input)
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  const userPrompt = buildUserPrompt(input)
+  const model = input.tier === "deep" ? DEEP_PREP_MODEL : QUICK_PREP_MODEL
+  const maxTokens = input.tier === "deep" ? DEEP_MAX_TOKENS : QUICK_MAX_TOKENS
 
-  let parsed: unknown
-  try {
-    parsed = await callWithStrictSchema(client, messages)
-  } catch (strictErr) {
-    try {
-      parsed = await callWithJsonObject(client, messages)
-    } catch {
-      throw strictErr
-    }
+  const response = await client.messages.create({
+    model,
+    max_tokens: maxTokens,
+    temperature: 0.4,
+    system: [
+      {
+        type: "text",
+        text: SYSTEM_PROMPT,
+        // ephemeral cache lasts ~5 min — pays off across regenerations of
+        // the same job within a session.
+        cache_control: { type: "ephemeral" },
+      },
+    ],
+    messages: [{ role: "user", content: userPrompt }],
+    tools: [
+      {
+        name: "submit_prep",
+        description:
+          "Submit the structured interview prep output. Always use this tool for the response.",
+        // Anthropic's input_schema accepts standard JSON Schema; we reuse
+        // the same shape we used with OpenAI.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        input_schema: PREP_OUTPUT_TOOL_SCHEMA as any,
+      },
+    ],
+    tool_choice: { type: "tool", name: "submit_prep" },
+  })
+
+  const toolUse = response.content.find(
+    (block): block is Anthropic.Messages.ToolUseBlock =>
+      block.type === "tool_use" && block.name === "submit_prep"
+  )
+  if (!toolUse) {
+    throw new Error("Anthropic did not return a submit_prep tool call")
   }
 
-  const result = prepOutputSchema.safeParse(parsed)
+  const result = prepOutputSchema.safeParse(toolUse.input)
   if (!result.success) {
     throw new Error(
-      `OpenAI prep output failed schema validation: ${result.error.issues
+      `Anthropic prep output failed schema validation: ${result.error.issues
         .map((i) => `${i.path.join(".")}: ${i.message}`)
         .join("; ")}`
     )
   }
 
-  // Belt-and-suspenders: model is told to set quick-tier fields to null but
-  // strict mode allows non-null counter/answer_plan/interviewer_insights.
-  // For tier=quick, force them to null so the UI's locked-state rendering
-  // doesn't accidentally show Deep content.
   if (input.tier === "quick") {
+    // Belt-and-suspenders: model is told to null these for Quick, but force
+    // it so the UI's tier-aware rendering never sees Deep-only content.
     result.data.interviewer_insights = null
     result.data.risks.items = result.data.risks.items.map((item) => ({
       ...item,
@@ -212,20 +253,20 @@ export async function generatePrep(input: PrepInput): Promise<PrepOutput> {
     )
   }
 
-  // Stage in output must match input stage. If the model echoed something
-  // weird, override — caller relies on stage to detect staleness.
+  // Stage in output must match input stage. Override if the model echoed
+  // something weird — caller relies on this for staleness detection.
   result.data.stage = input.stage
 
   return result.data
 }
 
-function buildMessages(input: PrepInput): OpenAI.Chat.ChatCompletionMessageParam[] {
+function buildUserPrompt(input: PrepInput): string {
   const resume = truncate(input.resume_text, RESUME_CHAR_CAP)
   const jd = truncate(input.jd_text, JD_CHAR_CAP)
   const message = truncate(input.latest_message, LATEST_MESSAGE_CHAR_CAP)
   const interviewer = input.interviewer_name?.trim()
 
-  const userPrompt = [
+  return [
     `[STAGE]: ${input.stage}`,
     `[COMPANY]: ${input.company_name}`,
     `[ROLE]: ${input.role_title}`,
@@ -241,62 +282,8 @@ function buildMessages(input: PrepInput): OpenAI.Chat.ChatCompletionMessageParam
     "[LATEST MESSAGE]",
     message ?? "(not provided)",
     "",
-    "Generate the prep.",
+    `Generate ${input.tier} prep. Call the submit_prep tool with the structured output.`,
   ].join("\n")
-
-  return [
-    { role: "system", content: SYSTEM_PROMPT },
-    { role: "user", content: userPrompt },
-  ]
-}
-
-async function callWithStrictSchema(
-  client: OpenAI,
-  messages: OpenAI.Chat.ChatCompletionMessageParam[]
-): Promise<unknown> {
-  const completion = await client.chat.completions.create({
-    model: QUICK_PREP_MODEL,
-    temperature: 0.4,
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        name: "PrepOutput",
-        strict: true,
-        schema: PREP_OUTPUT_JSON_SCHEMA,
-      },
-    },
-    messages,
-  })
-  return parseChoiceContent(completion)
-}
-
-async function callWithJsonObject(
-  client: OpenAI,
-  messages: OpenAI.Chat.ChatCompletionMessageParam[]
-): Promise<unknown> {
-  const completion = await client.chat.completions.create({
-    model: QUICK_PREP_MODEL,
-    temperature: 0.4,
-    response_format: { type: "json_object" },
-    messages,
-  })
-  return parseChoiceContent(completion)
-}
-
-function parseChoiceContent(
-  completion: OpenAI.Chat.ChatCompletion
-): unknown {
-  const content = completion.choices[0]?.message?.content
-  if (!content) {
-    throw new Error("OpenAI returned empty content")
-  }
-  try {
-    return JSON.parse(content)
-  } catch {
-    throw new Error(
-      `OpenAI returned non-JSON: ${content.slice(0, 200)}`
-    )
-  }
 }
 
 function truncate(text: string | null, cap: number): string | null {
