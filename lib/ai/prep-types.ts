@@ -23,6 +23,9 @@ export type PrepInput = {
   role_title: string
   stage: PrepStage
   interviewer_name: string | null
+  interviewer_title: string | null
+  interviewer_link: string | null
+  note_text: string | null
   tier: PrepTier
 }
 

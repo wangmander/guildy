@@ -32,12 +32,15 @@ export type JobRow = {
 
 export type InterviewerInfo = {
   name: string | null
+  title: string | null
+  link: string | null
 }
 
 type Props = {
   jobs: JobRow[]
   hasResume: boolean
   interviewerByJobId: Record<string, InterviewerInfo>
+  noteByJobId: Record<string, string>
   initialOpenJobId: string | null
 }
 
@@ -45,6 +48,7 @@ export function Board({
   jobs,
   hasResume,
   interviewerByJobId,
+  noteByJobId,
   initialOpenJobId,
 }: Props) {
   const router = useRouter()
@@ -144,6 +148,11 @@ export function Board({
       })()
     : null
   const interviewer = openJobId ? interviewerByJobId[openJobId] ?? null : null
+  const noteText = openJobId ? noteByJobId[openJobId] ?? null : null
+  const hasInterviewer = !!(
+    interviewer && (interviewer.name || interviewer.title || interviewer.link)
+  )
+  const hasNote = !!noteText
 
   return (
     <>
@@ -194,8 +203,12 @@ export function Board({
         <PrepOverlay
           job={openJob}
           hasResume={hasResume}
-          hasInterviewer={!!interviewer}
+          hasInterviewer={hasInterviewer}
+          hasNote={hasNote}
           interviewerName={interviewer?.name ?? null}
+          interviewerTitle={interviewer?.title ?? null}
+          interviewerLink={interviewer?.link ?? null}
+          noteText={noteText}
           onClose={close}
         />
       )}

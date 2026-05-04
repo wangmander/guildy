@@ -26,7 +26,7 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
-- Last phase shipped: **Phase 4c-2** — Anthropic migration (Quick → Haiku 4.5, Deep → Sonnet 4.6 via tool use + ephemeral prompt cache), paywall surfaces removed, tier-aware cache + UI
+- Last phase shipped: **Phase 4c-3** — 5-row inputs checklist, full add/edit/clear lifecycle for jd/message/interviewer/note, tier-aware Generate Deep gate (UI disabled + server-side guard), context_hash includes resume + note + tier
 - Date: 2026-05-03
 - Project status: ready for Phase 4d (multi-session Full Loop)
 
@@ -47,6 +47,16 @@ Total realistic: ~32-41 hours, ~4-5 focused build sessions.
 - 4 default sessions: Hiring Manager, Cross-functional, Skills/Portfolio, Bar Raiser
 - LLM picks plausible names from JD/company context
 - No schema change
+
+### Phase 4c-3 — DONE
+- Inputs widget: 5 rows (Background, JD, Latest Message, Interviewer, Additional context). Count "N/5" with "Deep is sharper with all 5" subtext. Each filled row shows a 50-char preview. Clicking a row opens the popover at that section. Hint chip "Deep" on Interviewer + Additional context.
+- Add Context popover: 360px wide, accordion-style with 4 sections (JD, Latest message, Interviewer 3-fields, Additional context). Each section has Save + Clear. Edit pre-fills from current server state. Pulses when triggered from across columns.
+- InterviewerWidget: display-only (name + title + LinkedIn-style link chip). Click anywhere → opens popover at interviewer section with cross-column pulse highlight.
+- Tier-aware gating: Generate Deep button disabled when `jobs.jd_text` empty, native `title` tooltip "Paste the JD to generate Deep Prep". Quick stays enabled whenever resume present.
+- Server actions renamed for consistency: `setLatestMessageAction` → `updateJobLatestMessageAction` (now accepts null for clear); `setInterviewerAction` → `upsertInterviewerAction` (extended to name/title/link, at least one required). New: `updateJobJdAction`, `clearInterviewerAction`, `upsertNoteAction`, `clearNoteAction`. All revalidate `/app`.
+- generatePrepAction: server-side Deep guard (returns error if tier=deep + jd_text empty). `context_hash` now includes resume_text, note content, and tier. Fetches note row + full interviewer metadata (name/title/link) and passes all to generatePrep.
+- PrepInput extended with `interviewer_title`, `interviewer_link`, `note_text`. `buildUserPrompt` renders an [INTERVIEWER] block (name/title/link) and an [ADDITIONAL CONTEXT] block.
+- No schema migrations. job_context already supports type='note' in the CHECK constraint; first use of that type. Existing prep_versions rows become cache misses on next generate (acceptable).
 
 ### Phase 4c-2 — DONE
 - Quick → Haiku 4.5, Deep → Sonnet 4.6, both via Anthropic tool use with ephemeral prompt caching on system message
@@ -157,4 +167,4 @@ Gmail/OAuth, auto-stage detection, comparison matrix, negotiation module, XP/pal
 
 ## Open questions / blockers [LIVE]
 
-- Quality bar for Deep is unverified by code — real Sonnet output needs to be smoke-tested with a real resume + JD + interviewer to confirm it weaves resume-to-JD comparison into positioning frames and risks.items as the prompt instructs. If output drifts toward generic, tighten the system prompt or move resume-to-JD to a dedicated field in Phase 6.
+- None right now. Phase 4d ready to ship.

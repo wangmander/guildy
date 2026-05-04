@@ -229,59 +229,138 @@ export async function activateJobAction(
 }
 
 // Context capture ----------------------------------------------------------
+//
+// Helpers for jobs.* and job_context.* mutations driven by the Inputs widget.
+// All actions verify ownership via auth.uid() then revalidate /app so the
+// server-fetched props (jd snippet, latest message, interviewer, note) refresh.
 
-const setLatestMessageSchema = z.object({
+async function ownedJobOrError(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  jobId: string
+): Promise<{ ok: true; userId: string } | { ok: false; error: string }> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: "Not signed in" }
+  const { data, error } = await supabase
+    .from("jobs")
+    .select("id")
+    .eq("id", jobId)
+    .eq("user_id", user.id)
+    .maybeSingle()
+  if (error) return { ok: false, error: error.message }
+  if (!data) return { ok: false, error: "Job not found" }
+  return { ok: true, userId: user.id }
+}
+
+const optionalText = z
+  .string()
+  .trim()
+  .max(20000)
+  .optional()
+  .transform((v) => (v && v.length > 0 ? v : null))
+
+// Update jobs.jd_text. Pass null to clear.
+const updateJobJdSchema = z.object({
   job_id: z.string().uuid("Invalid job id"),
-  latest_message: z.string().trim().min(1, "Message is required").max(20000),
+  jd_text: z.string().max(20000).nullable(),
 })
 
-export type SetLatestMessageInput = z.input<typeof setLatestMessageSchema>
-export type SetLatestMessageResult =
-  | { ok: true }
-  | { ok: false; error: string }
+export type UpdateJobJdInput = z.input<typeof updateJobJdSchema>
+export type UpdateJobJdResult = { ok: true } | { ok: false; error: string }
 
-export async function setLatestMessageAction(
-  input: SetLatestMessageInput
-): Promise<SetLatestMessageResult> {
-  const parsed = setLatestMessageSchema.safeParse(input)
+export async function updateJobJdAction(
+  input: UpdateJobJdInput
+): Promise<UpdateJobJdResult> {
+  const parsed = updateJobJdSchema.safeParse(input)
   if (!parsed.success) {
     return {
       ok: false,
       error: parsed.error.issues[0]?.message ?? "Invalid input",
     }
   }
+  const next = parsed.data.jd_text?.trim()
+  const value = next && next.length > 0 ? next : null
 
   const supabase = await createSupabaseServerClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return { ok: false, error: "Not signed in" }
+  const owned = await ownedJobOrError(supabase, parsed.data.job_id)
+  if (!owned.ok) return owned
 
   const { error } = await supabase
     .from("jobs")
-    .update({ latest_message: parsed.data.latest_message })
+    .update({ jd_text: value })
     .eq("id", parsed.data.job_id)
-    .eq("user_id", user.id)
+    .eq("user_id", owned.userId)
   if (error) return { ok: false, error: error.message }
 
   revalidatePath("/app")
   return { ok: true }
 }
 
-const setInterviewerSchema = z.object({
+// Update jobs.latest_message. Pass null to clear.
+const updateJobLatestMessageSchema = z.object({
   job_id: z.string().uuid("Invalid job id"),
-  name: z.string().trim().min(1, "Name is required").max(200),
+  latest_message: z.string().max(20000).nullable(),
 })
 
-export type SetInterviewerInput = z.input<typeof setInterviewerSchema>
-export type SetInterviewerResult =
+export type UpdateJobLatestMessageInput = z.input<
+  typeof updateJobLatestMessageSchema
+>
+export type UpdateJobLatestMessageResult =
   | { ok: true }
   | { ok: false; error: string }
 
-export async function setInterviewerAction(
-  input: SetInterviewerInput
-): Promise<SetInterviewerResult> {
-  const parsed = setInterviewerSchema.safeParse(input)
+export async function updateJobLatestMessageAction(
+  input: UpdateJobLatestMessageInput
+): Promise<UpdateJobLatestMessageResult> {
+  const parsed = updateJobLatestMessageSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input",
+    }
+  }
+  const next = parsed.data.latest_message?.trim()
+  const value = next && next.length > 0 ? next : null
+
+  const supabase = await createSupabaseServerClient()
+  const owned = await ownedJobOrError(supabase, parsed.data.job_id)
+  if (!owned.ok) return owned
+
+  const { error } = await supabase
+    .from("jobs")
+    .update({ latest_message: value })
+    .eq("id", parsed.data.job_id)
+    .eq("user_id", owned.userId)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath("/app")
+  return { ok: true }
+}
+
+// Upsert single interviewer row per job (delete-then-insert). At least one of
+// name/title/link must be non-empty.
+const upsertInterviewerSchema = z
+  .object({
+    job_id: z.string().uuid("Invalid job id"),
+    name: optionalText,
+    title: optionalText,
+    link: optionalText,
+  })
+  .refine(
+    (data) => !!(data.name || data.title || data.link),
+    { message: "Provide at least one of name, title, or link" }
+  )
+
+export type UpsertInterviewerInput = z.input<typeof upsertInterviewerSchema>
+export type UpsertInterviewerResult =
+  | { ok: true }
+  | { ok: false; error: string }
+
+export async function upsertInterviewerAction(
+  input: UpsertInterviewerInput
+): Promise<UpsertInterviewerResult> {
+  const parsed = upsertInterviewerSchema.safeParse(input)
   if (!parsed.success) {
     return {
       ok: false,
@@ -290,39 +369,147 @@ export async function setInterviewerAction(
   }
 
   const supabase = await createSupabaseServerClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return { ok: false, error: "Not signed in" }
+  const owned = await ownedJobOrError(supabase, parsed.data.job_id)
+  if (!owned.ok) return owned
 
-  // Verify ownership before mutating.
-  const { data: job, error: jobError } = await supabase
-    .from("jobs")
-    .select("id")
-    .eq("id", parsed.data.job_id)
-    .eq("user_id", user.id)
-    .maybeSingle()
-  if (jobError) return { ok: false, error: jobError.message }
-  if (!job) return { ok: false, error: "Job not found" }
-
-  // No unique constraint on (user_id, job_id, type) — emulate upsert by
-  // wiping any existing interviewer rows for this job, then inserting one.
+  // Wipe any existing interviewer rows for this job, then insert one.
   const { error: deleteError } = await supabase
     .from("job_context")
     .delete()
     .eq("job_id", parsed.data.job_id)
-    .eq("user_id", user.id)
+    .eq("user_id", owned.userId)
     .eq("type", "interviewer")
+  if (deleteError) return { ok: false, error: deleteError.message }
+
+  const display =
+    parsed.data.name ?? parsed.data.title ?? parsed.data.link ?? ""
+
+  const { error: insertError } = await supabase.from("job_context").insert({
+    job_id: parsed.data.job_id,
+    user_id: owned.userId,
+    type: "interviewer",
+    content: display,
+    metadata: {
+      name: parsed.data.name,
+      title: parsed.data.title,
+      link: parsed.data.link,
+    },
+  })
+  if (insertError) return { ok: false, error: insertError.message }
+
+  revalidatePath("/app")
+  return { ok: true }
+}
+
+const clearInterviewerSchema = z.object({
+  job_id: z.string().uuid("Invalid job id"),
+})
+
+export type ClearInterviewerInput = z.input<typeof clearInterviewerSchema>
+export type ClearInterviewerResult =
+  | { ok: true }
+  | { ok: false; error: string }
+
+export async function clearInterviewerAction(
+  input: ClearInterviewerInput
+): Promise<ClearInterviewerResult> {
+  const parsed = clearInterviewerSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input",
+    }
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const owned = await ownedJobOrError(supabase, parsed.data.job_id)
+  if (!owned.ok) return owned
+
+  const { error } = await supabase
+    .from("job_context")
+    .delete()
+    .eq("job_id", parsed.data.job_id)
+    .eq("user_id", owned.userId)
+    .eq("type", "interviewer")
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath("/app")
+  return { ok: true }
+}
+
+// Single freeform note per job (job_context type='note', delete-then-insert).
+const upsertNoteSchema = z.object({
+  job_id: z.string().uuid("Invalid job id"),
+  content: z.string().trim().min(1, "Note is required").max(20000),
+})
+
+export type UpsertNoteInput = z.input<typeof upsertNoteSchema>
+export type UpsertNoteResult = { ok: true } | { ok: false; error: string }
+
+export async function upsertNoteAction(
+  input: UpsertNoteInput
+): Promise<UpsertNoteResult> {
+  const parsed = upsertNoteSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input",
+    }
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const owned = await ownedJobOrError(supabase, parsed.data.job_id)
+  if (!owned.ok) return owned
+
+  const { error: deleteError } = await supabase
+    .from("job_context")
+    .delete()
+    .eq("job_id", parsed.data.job_id)
+    .eq("user_id", owned.userId)
+    .eq("type", "note")
   if (deleteError) return { ok: false, error: deleteError.message }
 
   const { error: insertError } = await supabase.from("job_context").insert({
     job_id: parsed.data.job_id,
-    user_id: user.id,
-    type: "interviewer",
-    content: parsed.data.name,
-    metadata: { name: parsed.data.name },
+    user_id: owned.userId,
+    type: "note",
+    content: parsed.data.content,
   })
   if (insertError) return { ok: false, error: insertError.message }
+
+  revalidatePath("/app")
+  return { ok: true }
+}
+
+const clearNoteSchema = z.object({
+  job_id: z.string().uuid("Invalid job id"),
+})
+
+export type ClearNoteInput = z.input<typeof clearNoteSchema>
+export type ClearNoteResult = { ok: true } | { ok: false; error: string }
+
+export async function clearNoteAction(
+  input: ClearNoteInput
+): Promise<ClearNoteResult> {
+  const parsed = clearNoteSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input",
+    }
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const owned = await ownedJobOrError(supabase, parsed.data.job_id)
+  if (!owned.ok) return owned
+
+  const { error } = await supabase
+    .from("job_context")
+    .delete()
+    .eq("job_id", parsed.data.job_id)
+    .eq("user_id", owned.userId)
+    .eq("type", "note")
+  if (error) return { ok: false, error: error.message }
 
   revalidatePath("/app")
   return { ok: true }
@@ -429,26 +616,50 @@ export async function generatePrepAction(
     }
   }
 
-  const { data: interviewerRow } = await supabase
-    .from("job_context")
-    .select("content, metadata")
-    .eq("job_id", parsed.data.job_id)
-    .eq("user_id", user.id)
-    .eq("type", "interviewer")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  const tier = parsed.data.tier
 
+  // Defense in depth: UI disables the Generate Deep button when JD is empty.
+  // This guard catches direct action calls (browser devtools, mistaken
+  // client code, etc) so Sonnet is never dispatched without JD context.
+  if (tier === "deep" && (!job.jd_text || job.jd_text.trim().length === 0)) {
+    return { ok: false, error: "Paste the JD to generate Deep Prep" }
+  }
+
+  const [{ data: interviewerRow }, { data: noteRow }] = await Promise.all([
+    supabase
+      .from("job_context")
+      .select("content, metadata")
+      .eq("job_id", parsed.data.job_id)
+      .eq("user_id", user.id)
+      .eq("type", "interviewer")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("job_context")
+      .select("content")
+      .eq("job_id", parsed.data.job_id)
+      .eq("user_id", user.id)
+      .eq("type", "note")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ])
+
+  const interviewerMeta =
+    (interviewerRow?.metadata as
+      | { name?: string | null; title?: string | null; link?: string | null }
+      | null) ?? null
   const interviewerName =
-    (interviewerRow?.metadata as { name?: string | null } | null)?.name ??
-    interviewerRow?.content ??
-    null
+    interviewerMeta?.name ?? interviewerRow?.content ?? null
+  const interviewerTitle = interviewerMeta?.title ?? null
+  const interviewerLink = interviewerMeta?.link ?? null
+  const noteText = noteRow?.content ?? null
 
   // PHASE 6b: re-add subscription gate here. Free users can call tier="deep"
   // during test mode; production should require active subscription before
   // dispatching the Sonnet call.
 
-  const tier = parsed.data.tier
   let prep: PrepOutput
   try {
     prep = await generatePrep({
@@ -459,6 +670,9 @@ export async function generatePrepAction(
       role_title: job.role_title,
       stage: prepStage,
       interviewer_name: interviewerName,
+      interviewer_title: interviewerTitle,
+      interviewer_link: interviewerLink,
+      note_text: noteText,
       tier,
     })
   } catch (err) {
@@ -467,13 +681,21 @@ export async function generatePrepAction(
     return { ok: false, error: message }
   }
 
+  // Hash includes every input the model sees so any change invalidates cache
+  // naturally on the next generate. Resume in full (truncation only happens
+  // in prompt assembly).
   const contextHash = createHash("sha256")
     .update(
       JSON.stringify({
+        tier,
         stage: prepStage,
+        resume: profile?.resume_text ?? "",
         jd: job.jd_text ?? "",
         msg: job.latest_message ?? "",
-        interviewer: interviewerName ?? "",
+        interviewer_name: interviewerName ?? "",
+        interviewer_title: interviewerTitle ?? "",
+        interviewer_link: interviewerLink ?? "",
+        note: noteText ?? "",
       })
     )
     .digest("hex")

@@ -8,6 +8,7 @@ import { prepOutputSchema, type PrepInput, type PrepOutput } from "./prep-types"
 const RESUME_CHAR_CAP = 8000
 const JD_CHAR_CAP = 12000
 const LATEST_MESSAGE_CHAR_CAP = 4000
+const NOTE_CHAR_CAP = 4000
 const QUICK_MAX_TOKENS = 2048
 const DEEP_MAX_TOKENS = 4096
 
@@ -264,14 +265,28 @@ function buildUserPrompt(input: PrepInput): string {
   const resume = truncate(input.resume_text, RESUME_CHAR_CAP)
   const jd = truncate(input.jd_text, JD_CHAR_CAP)
   const message = truncate(input.latest_message, LATEST_MESSAGE_CHAR_CAP)
-  const interviewer = input.interviewer_name?.trim()
+  const note = truncate(input.note_text, NOTE_CHAR_CAP)
+  const interviewerName = input.interviewer_name?.trim()
+  const interviewerTitle = input.interviewer_title?.trim()
+  const interviewerLink = input.interviewer_link?.trim()
+
+  const interviewerBlock =
+    interviewerName || interviewerTitle || interviewerLink
+      ? [
+          "[INTERVIEWER]",
+          `  name: ${interviewerName && interviewerName.length > 0 ? interviewerName : "(not provided)"}`,
+          `  title: ${interviewerTitle && interviewerTitle.length > 0 ? interviewerTitle : "(not provided)"}`,
+          `  link: ${interviewerLink && interviewerLink.length > 0 ? interviewerLink : "(not provided)"}`,
+        ].join("\n")
+      : "[INTERVIEWER]: (not provided)"
 
   return [
     `[STAGE]: ${input.stage}`,
     `[COMPANY]: ${input.company_name}`,
     `[ROLE]: ${input.role_title}`,
-    `[INTERVIEWER]: ${interviewer && interviewer.length > 0 ? interviewer : "(not provided)"}`,
     `[TIER]: ${input.tier}`,
+    "",
+    interviewerBlock,
     "",
     "[RESUME]",
     resume ?? "(not provided)",
@@ -281,6 +296,9 @@ function buildUserPrompt(input: PrepInput): string {
     "",
     "[LATEST MESSAGE]",
     message ?? "(not provided)",
+    "",
+    "[ADDITIONAL CONTEXT]",
+    note ?? "(not provided)",
     "",
     `Generate ${input.tier} prep. Call the submit_prep tool with the structured output.`,
   ].join("\n")

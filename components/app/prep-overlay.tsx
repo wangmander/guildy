@@ -31,7 +31,11 @@ type Props = {
   job: PrepJob | null
   hasResume: boolean
   hasInterviewer: boolean
+  hasNote: boolean
   interviewerName: string | null
+  interviewerTitle: string | null
+  interviewerLink: string | null
+  noteText: string | null
   onClose: () => void
 }
 
@@ -42,18 +46,49 @@ type PrepState =
   | { status: "ready"; prep: PrepOutput }
   | { status: "error"; message: string }
 
+export type PopoverSection = "jd" | "message" | "interviewer" | "note"
+
+type PopoverState = {
+  open: boolean
+  section: PopoverSection | null
+  pulseToken: number
+}
+
 export function PrepOverlay({
   job,
   hasResume,
   hasInterviewer,
+  hasNote,
   interviewerName,
+  interviewerTitle,
+  interviewerLink,
+  noteText,
   onClose,
 }: Props) {
   const [prepState, setPrepState] = useState<PrepState>({
     status: "loading-cache",
   })
   const [tier, setTier] = useState<PrepTier>("quick")
+  const [popover, setPopover] = useState<PopoverState>({
+    open: false,
+    section: null,
+    pulseToken: 0,
+  })
   const [, startTransition] = useTransition()
+
+  const openPopover = useCallback(
+    (section: PopoverSection, options?: { pulse?: boolean }) => {
+      setPopover((prev) => ({
+        open: true,
+        section,
+        pulseToken: options?.pulse ? prev.pulseToken + 1 : prev.pulseToken,
+      }))
+    },
+    []
+  )
+  const closePopover = useCallback(() => {
+    setPopover((prev) => ({ ...prev, open: false }))
+  }, [])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -175,14 +210,16 @@ export function PrepOverlay({
                   jdSnippet={job.jd_text}
                 />
                 <InterviewerWidget
-                  jobId={job.id}
-                  initialName={interviewerName}
+                  name={interviewerName}
+                  title={interviewerTitle}
+                  link={interviewerLink}
                   tier={tier}
                   insights={
                     prepState.status === "ready"
                       ? prepState.prep.interviewer_insights
                       : null
                   }
+                  onEdit={() => openPopover("interviewer", { pulse: true })}
                 />
               </aside>
 
@@ -191,6 +228,7 @@ export function PrepOverlay({
                   stage={job.stage}
                   prepState={prepState}
                   hasResume={hasResume}
+                  hasJd={!!job.jd_text && job.jd_text.trim().length > 0}
                   tier={tier}
                   onTierChange={setTier}
                   onGenerate={onGenerate}
@@ -201,11 +239,17 @@ export function PrepOverlay({
                 <InputsWidget
                   jobId={job.id}
                   hasResume={hasResume}
-                  hasJd={!!job.jd_text && job.jd_text.trim().length > 0}
-                  hasLatestMessage={
-                    !!job.latest_message && job.latest_message.trim().length > 0
-                  }
+                  jdText={job.jd_text}
+                  latestMessage={job.latest_message}
+                  interviewerName={interviewerName}
+                  interviewerTitle={interviewerTitle}
+                  interviewerLink={interviewerLink}
+                  noteText={noteText}
                   hasInterviewer={hasInterviewer}
+                  hasNote={hasNote}
+                  popover={popover}
+                  onOpenPopover={openPopover}
+                  onClosePopover={closePopover}
                 />
                 <QuestionsWidget prepState={prepState} tier={tier} />
               </aside>

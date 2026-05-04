@@ -10,6 +10,7 @@ type Props = {
   stage: StageKey
   prepState: PrepState
   hasResume: boolean
+  hasJd: boolean
   tier: PrepTier
   onTierChange: (tier: PrepTier) => void
   onGenerate: () => void
@@ -37,6 +38,7 @@ export function PrepCanvas({
   stage,
   prepState,
   hasResume,
+  hasJd,
   tier,
   onTierChange,
   onGenerate,
@@ -55,6 +57,7 @@ export function PrepCanvas({
       <CanvasBody
         prepState={prepState}
         hasResume={hasResume}
+        hasJd={hasJd}
         tier={tier}
         onGenerate={onGenerate}
       />
@@ -104,11 +107,13 @@ function TierSelector({
 function CanvasBody({
   prepState,
   hasResume,
+  hasJd,
   tier,
   onGenerate,
 }: {
   prepState: PrepState
   hasResume: boolean
+  hasJd: boolean
   tier: PrepTier
   onGenerate: () => void
 }) {
@@ -126,22 +131,30 @@ function CanvasBody({
     return (
       <EmptyState
         hasResume={hasResume}
+        hasJd={hasJd}
         tier={tier}
         onGenerate={onGenerate}
       />
     )
   }
   return (
-    <PrepView prep={prepState.prep} tier={tier} onRegenerate={onGenerate} />
+    <PrepView
+      prep={prepState.prep}
+      tier={tier}
+      hasJd={hasJd}
+      onRegenerate={onGenerate}
+    />
   )
 }
 
 function EmptyState({
   hasResume,
+  hasJd,
   tier,
   onGenerate,
 }: {
   hasResume: boolean
+  hasJd: boolean
   tier: PrepTier
   onGenerate: () => void
 }) {
@@ -150,6 +163,13 @@ function EmptyState({
     tier === "deep"
       ? "Sonnet 4.6 with research-grade depth. Takes a few seconds."
       : "Pulls in your resume, the JD, and any context you've added. Takes about a second."
+  const deepBlocked = tier === "deep" && !hasJd
+  const buttonDisabled = !hasResume || deepBlocked
+  const buttonTitle = !hasResume
+    ? "Add your resume in onboarding before running prep."
+    : deepBlocked
+      ? "Paste the JD to generate Deep Prep"
+      : undefined
   return (
     <div className="mt-8 rounded-xl border border-dashed border-black/10 bg-white p-8 text-center">
       <Sparkles className="mx-auto size-6 text-[#482C4C]" />
@@ -157,12 +177,17 @@ function EmptyState({
         Generate {tierLabel}
       </h2>
       <p className="mx-auto mt-2 max-w-sm text-sm text-gray-500">
-        {hasResume ? subhead : "Add your resume in onboarding before running prep."}
+        {!hasResume
+          ? "Add your resume in onboarding before running prep."
+          : deepBlocked
+            ? "Deep Prep needs the JD. Paste it via Add context."
+            : subhead}
       </p>
       <button
         type="button"
         onClick={onGenerate}
-        disabled={!hasResume}
+        disabled={buttonDisabled}
+        title={buttonTitle}
         className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#482C4C] px-5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <Sparkles className="size-4" />
@@ -224,19 +249,28 @@ function LoadingSkeleton({ hint }: { hint?: string }) {
 function PrepView({
   prep,
   tier,
+  hasJd,
   onRegenerate,
 }: {
   prep: PrepOutput
   tier: PrepTier
+  hasJd: boolean
   onRegenerate: () => void
 }) {
+  const regenerateBlocked = tier === "deep" && !hasJd
   return (
     <div className="mt-6 space-y-6">
       <div className="flex items-center justify-end">
         <button
           type="button"
           onClick={onRegenerate}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-black/10 bg-white px-3 text-xs font-medium text-gray-700 transition-colors hover:border-black/20 hover:text-[#1C1E21]"
+          disabled={regenerateBlocked}
+          title={
+            regenerateBlocked
+              ? "Paste the JD to regenerate Deep Prep"
+              : undefined
+          }
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-black/10 bg-white px-3 text-xs font-medium text-gray-700 transition-colors hover:border-black/20 hover:text-[#1C1E21] disabled:cursor-not-allowed disabled:opacity-50"
         >
           <RefreshCw className="size-3.5" />
           Regenerate
