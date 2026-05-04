@@ -17,7 +17,7 @@ Always read these before starting work:
 Next.js 14 App Router, TypeScript, Tailwind, Supabase (Postgres + Auth + Storage), Vercel. Domain: guildy.ai.
 
 - Auth: Supabase magic link (no Google OAuth)
-- Models: GPT-5.4 nano for Quick Prep, Claude Sonnet 4.6 for Deep Prep
+- Models: Claude Haiku 4.5 (claude-haiku-4-5-20251001) for Quick Prep, Claude Sonnet 4.6 (claude-sonnet-4-6) for Deep Prep. extract-jd.ts uses gpt-4o-mini (separate concern, stays OpenAI for now).
 - Web research: Perplexity API behind lib/ai/research.ts
 - Payments: Stripe, $19.99/mo single tier
 
@@ -51,3 +51,28 @@ Track progress in .guildhall/quests.json. Update at end of each phase. Current p
 3. Confirm scope before implementing
 4. Update quest manifest at phase completion
 5. /clear between phases to reset context
+
+## Locked phase roadmap to V2.0 launch
+
+Order is locked. Do not reorder, do not skip, do not "helpfully" combine phases.
+
+1. Phase 4c-2 — Anthropic migration (Quick→Haiku 4.5, Deep→Sonnet 4.6, generate-prep.ts only) + paywall removal. extract-jd.ts stays OpenAI. ~2-3h
+2. Phase 4d — Multi-session Full Loop, Option C+ (per-session generations, own prep_versions row, context_hash includes session name). No schema change. ~3-4h
+3. Phase 5 — Perplexity web research for Deep Prep, cached per company 7d TTL, per interviewer name+company. ~5-7h
+4. Phase 6 — Polish + mobile responsive overlay + FTUE empty state + error states + loading states. ~5-6h
+5. Phase 6.5 — Legal (ToS/PP via Termly) + Resend transactional email + PostHog analytics + end-to-end QA on 10 real jobs. ~6h
+6. Phase 6b — Stripe checkout + webhook + subscription state + customer portal + grace period. ~8-12h
+7. Phase 7 — Production deploy, guildy.ai DNS, SSL, Vercel env vars, prod smoke test. ~3h
+
+Total: 32-41 hours, ~4-5 focused build sessions.
+
+Models locked:
+- QUICK_PREP_MODEL = "claude-haiku-4-5-20251001"
+- DEEP_PREP_MODEL = "claude-sonnet-4-6"
+- extract-jd.ts = gpt-4o-mini (stays)
+
+Deferred to V2.1 post-launch:
+- Fair-use rate limits
+- Hotlinks nav
+- Prep history viewer
+- FTUE iteration on real user data
