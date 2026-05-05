@@ -148,3 +148,85 @@ export function stageKeyToPrepStage(stage: StageKey): PrepStage {
       return "screen"
   }
 }
+
+// Phase 4f: per-job Full Loop session config. Persisted in
+// jobs.full_loop_session_config (jsonb, nullable). When null, callers use
+// DEFAULT_FULL_LOOP_SESSION_CONFIG via resolveFullLoopSessionConfig. The
+// shape lets a job override which sessions render in SessionTabs (enabled),
+// what label they show (label), and where the override came from (source).
+
+export const fullLoopSessionEntrySchema = z.object({
+  enabled: z.boolean(),
+  label: z.string().min(1),
+  // default = built-in fallback; parsed = filled by the LLM parser from
+  // recruiter context; user = manually edited in the UI.
+  source: z.enum(["default", "parsed", "user"]),
+})
+export type FullLoopSessionEntry = z.infer<typeof fullLoopSessionEntrySchema>
+
+// Strict: extra keys rejected. Each of the four roles must be present in a
+// fully-validated config. Partial DB JSON is reconciled to this shape via
+// resolveFullLoopSessionConfig before any Zod parse.
+export const fullLoopSessionConfigSchema = z
+  .object({
+    hiring_manager: fullLoopSessionEntrySchema,
+    cross_functional: fullLoopSessionEntrySchema,
+    skills_portfolio: fullLoopSessionEntrySchema,
+    bar_raiser: fullLoopSessionEntrySchema,
+  })
+  .strict()
+export type FullLoopSessionConfig = z.infer<typeof fullLoopSessionConfigSchema>
+
+// Built-in fallback. Mirrors the labels in components/app/widgets/session-
+// tabs.tsx ROLE_LABELS; if those drift the UI keeps showing the local copy
+// while persisted configs continue to serialize the resolved label. Acceptable
+// duplication: hoisting ROLE_LABELS into prep-types would create a cycle
+// risk and is out of scope for this prompt.
+export const DEFAULT_FULL_LOOP_SESSION_CONFIG: FullLoopSessionConfig = {
+  hiring_manager: {
+    enabled: true,
+    label: "Hiring Manager",
+    source: "default",
+  },
+  cross_functional: {
+    enabled: true,
+    label: "Cross-functional",
+    source: "default",
+  },
+  skills_portfolio: {
+    enabled: true,
+    label: "Skills/Portfolio",
+    source: "default",
+  },
+  bar_raiser: {
+    enabled: true,
+    label: "Bar Raiser",
+    source: "default",
+  },
+}
+
+// Reconcile a possibly-null, possibly-partial config against the default.
+// Always returns a complete FullLoopSessionConfig with all four roles
+// populated — every consumer can treat the result as authoritative.
+//
+// Runtime defense: even though the input type asserts a complete config,
+// older or hand-edited DB rows may be missing keys. The ?? merge keeps
+// downstream code simple at the cost of one nullish-coalesce per role.
+export function resolveFullLoopSessionConfig(
+  config: FullLoopSessionConfig | null | undefined
+): FullLoopSessionConfig {
+  if (!config) return DEFAULT_FULL_LOOP_SESSION_CONFIG
+  return {
+    hiring_manager:
+      config.hiring_manager ??
+      DEFAULT_FULL_LOOP_SESSION_CONFIG.hiring_manager,
+    cross_functional:
+      config.cross_functional ??
+      DEFAULT_FULL_LOOP_SESSION_CONFIG.cross_functional,
+    skills_portfolio:
+      config.skills_portfolio ??
+      DEFAULT_FULL_LOOP_SESSION_CONFIG.skills_portfolio,
+    bar_raiser:
+      config.bar_raiser ?? DEFAULT_FULL_LOOP_SESSION_CONFIG.bar_raiser,
+  }
+}
