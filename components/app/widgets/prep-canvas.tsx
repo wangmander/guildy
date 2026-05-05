@@ -10,6 +10,7 @@ import {
   LockedPreviewFooter,
   LockedPreviewModule,
 } from "./locked-preview-module"
+import { ProgressLoader } from "./progress-loader"
 import { QuestionsTheyAsk, QuestionsYouAsk } from "./questions-widget"
 
 type Props = {
@@ -185,12 +186,11 @@ function CanvasBody({
   onUpgrade: () => void
   onAddJd: () => void
 }) {
-  const tierLabel = tier === "deep" ? "Deep Prep" : "Quick Prep"
   if (prepState.status === "loading-cache") {
     return <LoadingSkeleton />
   }
   if (prepState.status === "generating") {
-    return <LoadingSkeleton hint={`Generating ${tierLabel}…`} />
+    return <ProgressLoader tier={tier} />
   }
   if (prepState.status === "error") {
     return <ErrorState message={prepState.message} onRetry={onGenerate} />

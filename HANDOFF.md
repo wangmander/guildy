@@ -26,7 +26,7 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
-- Last phase shipped: **Phase 4c-4 + patches 1, 2, 3 (rolled into 4), 4** — overlay layout v2, visual/UX corrections, typography + inline locked-preview footers, then this patch ungates Applied/Closed stages for prep, redesigns the tier selector (single pill row with model badges + inline Upgrade), surfaces friendly auth errors, ungates Deep generation when JD missing (inline amber warning instead of disabled button), and adds LinkedIn login-wall detection in extract-jd
+- Last phase shipped: **Phase 4c-4 + patches 1, 2, 3 (rolled into 4), 4, 5 (Z scope)** — overlay layout v2, visual/UX corrections, typography + inline locked-preview footers, ungate Applied/Closed + tier selector redesign + auth error handling + ungate Deep + LinkedIn wall defense, then a tier-aware ProgressLoader replaces the static skeleton during generation. Real streaming generation (modules arrive progressively) deferred to a follow-up patch.
 - Date: 2026-05-04
 - Project status: ready for Phase 4d (multi-session Full Loop)
 
@@ -47,6 +47,13 @@ Total realistic: ~32-41 hours, ~4-5 focused build sessions.
 - 4 default sessions: Hiring Manager, Cross-functional, Skills/Portfolio, Bar Raiser
 - LLM picks plausible names from JD/company context
 - No schema change
+
+### Phase 4c-4 patch 5 — DONE
+- Option Z (visual UX only). Blocking generation in `lib/ai/generate-prep.ts` and `generatePrepAction` preserved exactly as-is — no streaming refactor.
+- New `components/app/widgets/progress-loader.tsx`: tier-aware progress bar + rotating stage labels + tier badge. Bar fills 0 → 95% over the target duration via CSS transition (Quick: 12s, Deep: 90s); never reaches 100% until parent unmounts the loader. Stage labels rotate every 4s (Quick) / 13s (Deep) through the spec-locked phase descriptions. Tier badge matches TierSelector tokens (gray for Haiku, blurple for Sonnet).
+- `prep-canvas.tsx` swaps `<LoadingSkeleton hint="Generating ..." />` for `<ProgressLoader tier={tier} />` in the `generating` state. The `loading-cache` state still uses the lightweight `LoadingSkeleton` (cache check is fast, full progress UI would be overkill).
+- No backend, schema, AI, or model changes. TypeScript clean. Banned-copy grep clean.
+- Deferred: real streaming via Anthropic `messages.stream()` with `inputJson` snapshots and an SSE API route, partial-render per module as data arrives. SDK supports it (`v0.40.1` exposes the events), but the implementation is ~6-10h vs the ~1-1.5h ProgressLoader-only path. Track as a follow-up patch when the Sonnet wait time becomes a conversion blocker.
 
 ### Phase 4c-4 patch 4 — DONE
 - Rolls in the never-shipped patch 3 items (auth error handling, ungate Deep, LinkedIn login-wall defense) plus the patch 4 corrective scope (Applied stage ungate, tier selector redesign).
