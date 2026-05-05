@@ -26,7 +26,7 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
-- Last phase shipped: **Phase 4c-4 closed at `43f651e` (patches 1-9 rolled in).** Patch 9 removed the diagnostic logs added in a242b8f and during patch 7. Detail for every patch lives in the archive section below.
+- Last phase shipped: **Phase 4c-4 closed at `43f651e` (patches 1-9 rolled in). Patch 10 (Background editable inline from InputsWidget) at `<hash>`.** Patch 9 removed the diagnostic logs added in a242b8f and during patch 7. Detail for every patch lives in the archive section below.
 - Date: 2026-05-05
 - Project status: ready for Phase 4d (multi-session Full Loop, Option C+)
 
@@ -84,6 +84,16 @@ Total realistic: ~32-41 hours, ~4-5 focused build sessions.
 - Banned-copy audit (no "AI-powered" cliches)
 
 ## Phase 4c shipped — archive
+
+### Phase 4c-4 patch 10 — DONE (post-close)
+- Background row in InputsWidget is now editable inline. Same expand-on-click pattern as JD / Latest message / Interviewer / Additional context. Click row → section expands with textarea pre-filled from `user_profiles.resume_text`. Save persists; Cancel discards.
+- New `updateUserResumeAction({ resume_text })` in `app/app/actions.ts`. Zod validates non-empty trimmed (matches onboarding's gate at `app/onboarding/actions.ts:24`, no 50-char floor). Updates `user_profiles` where `id = auth.uid()`. `revalidatePath('/app')` so any open overlay re-fetches with fresh resume text. Onboarding's `saveResumeTextAction` left untouched — separate flow, separate concern.
+- No Clear button. Resume_text is required for prep generation across every job; clearing would break the system. New `BackgroundForm` reuses `FormShell` with `hasExisting={false}` (FormShell hides Clear in that branch). A no-op `onClear` closure satisfies the shared prop type.
+- Subhead copy: "Used for prep on every job. Editing updates your background everywhere." Sets expectation that this isn't a per-job edit.
+- Plumbed `resumeText: string | null` through the chain `app/app/page.tsx → Board → PrepOverlay → InputsWidget`. `app/app/page.tsx` already fetched `resume_text` (used to derive `hasResume`); now passes the full text alongside.
+- `InputsExpansionSection` union extended from `"jd" | "message" | "interviewer" | "note"` to also include `"background"`. New `sectionRefs.background` ref; new `<Section>` block wraps `<BackgroundForm>`. The Section appears above JD per row order.
+- Cache impact: `context_hash` already includes `resume_text` (verified at `app/app/actions.ts:696` in `generatePrepAction`). Editing background changes the hash for every job → next Generate runs fresh against Anthropic. Spec-aligned: user explicitly chose to update resume, fresh prep is the correct behavior.
+- TypeScript clean. Banned-copy clean.
 
 ### Phase 4c-4 patch 9 — DONE (closes 4c-4)
 - Removed all `[generatePrep]` diagnostic console statements added in a242b8f and during patch 7. Six log sites scrubbed: response-shape log, no-tool_use error, validation-failed raw-input dump, max_tokens-truncation warn, retry-firing warn, retry-also-failed error. Surrounding `// PATCH 6 DIAGNOSTIC:` comment blocks removed with their log blocks.

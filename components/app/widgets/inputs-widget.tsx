@@ -24,6 +24,7 @@ import {
   clearNoteAction,
   updateJobJdAction,
   updateJobLatestMessageAction,
+  updateUserResumeAction,
   upsertInterviewerAction,
   upsertNoteAction,
 } from "@/app/app/actions"
@@ -32,6 +33,7 @@ import type { InputsExpansionSection } from "@/components/app/prep-overlay"
 type Props = {
   jobId: string
   hasResume: boolean
+  resumeText: string | null
   jdText: string | null
   latestMessage: string | null
   interviewerName: string | null
@@ -67,6 +69,7 @@ const PREVIEW_CHARS = 50
 export function InputsWidget({
   jobId,
   hasResume,
+  resumeText,
   jdText,
   latestMessage,
   interviewerName,
@@ -88,10 +91,10 @@ export function InputsWidget({
     {
       key: "background",
       label: "Background",
-      preview: hasResume ? "From onboarding" : null,
+      preview: previewOf(resumeText),
       present: hasResume,
-      clickable: false,
-      section: null,
+      clickable: true,
+      section: "background",
     },
     {
       key: "jd",
@@ -145,6 +148,7 @@ export function InputsWidget({
   }, [expansion.pulseToken])
 
   const sectionRefs = {
+    background: useRef<HTMLDivElement | null>(null),
     jd: useRef<HTMLDivElement | null>(null),
     message: useRef<HTMLDivElement | null>(null),
     interviewer: useRef<HTMLDivElement | null>(null),
@@ -206,6 +210,16 @@ export function InputsWidget({
 
       {/* Inline-expand: section content lives directly in the widget, no popover. */}
       <div className="mt-3 space-y-1.5">
+        <Section
+          ref={sectionRefs.background}
+          isOpen={expansion.section === "background"}
+        >
+          <BackgroundForm
+            initial={resumeText ?? ""}
+            onSaved={onClose}
+          />
+        </Section>
+
         <Section
           ref={sectionRefs.jd}
           isOpen={expansion.section === "jd"}
@@ -362,6 +376,62 @@ const Section = forwardRef<HTMLDivElement, SectionProps>(function Section(
     </div>
   )
 })
+
+function BackgroundForm({
+  initial,
+  onSaved,
+}: {
+  initial: string
+  onSaved: () => void
+}) {
+  const router = useRouter()
+  const [value, setValue] = useState(initial)
+  const [error, setError] = useState<string | null>(null)
+  const [pending, startTransition] = useTransition()
+
+  useEffect(() => setValue(initial), [initial])
+
+  const onSave = useCallback(() => {
+    const trimmed = value.trim()
+    if (trimmed.length === 0) {
+      setError("Add some text first")
+      return
+    }
+    setError(null)
+    startTransition(async () => {
+      const res = await updateUserResumeAction({ resume_text: trimmed })
+      if (!res.ok) return setError(res.error)
+      router.refresh()
+      onSaved()
+    })
+  }, [value, router, onSaved])
+
+  // Background is required for prep generation across every job, so a Clear
+  // affordance would break the system. FormShell hides Clear when
+  // hasExisting is false; the no-op onClear is only there to satisfy the
+  // shared shell's prop type.
+  const noopClear = useCallback(() => {}, [])
+
+  return (
+    <FormShell
+      label="Used for prep on every job. Editing updates your background everywhere."
+      hasExisting={false}
+      onSave={onSave}
+      onClear={noopClear}
+      onCancel={onSaved}
+      pending={pending}
+      error={error}
+    >
+      <textarea
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder="Resume text, LinkedIn summary, or any background that frames your work…"
+        rows={12}
+        className="w-full resize-y rounded-md border border-black/10 bg-white px-3 py-2.5 text-sm leading-relaxed text-[#1C1E21] placeholder:text-gray-400 focus:border-[#482C4C] focus:outline-none focus:ring-2 focus:ring-[#482C4C]/15"
+      />
+    </FormShell>
+  )
+}
 
 function JdForm({
   jobId,

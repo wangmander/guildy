@@ -516,6 +516,49 @@ export async function clearNoteAction(
   return { ok: true }
 }
 
+// User profile -------------------------------------------------------------
+
+const updateUserResumeSchema = z.object({
+  resume_text: z.string().trim().min(1, "Add some text first").max(50000),
+})
+
+export type UpdateUserResumeInput = z.input<typeof updateUserResumeSchema>
+export type UpdateUserResumeResult =
+  | { ok: true }
+  | { ok: false; error: string }
+
+// Edits user_profiles.resume_text from the InputsWidget's Background row.
+// Onboarding writes resume_text via its own action; this is the in-app
+// inline edit path. Changing resume_text invalidates context_hash for every
+// future prep generation across all jobs, so the next Generate click runs
+// fresh against Anthropic.
+export async function updateUserResumeAction(
+  input: UpdateUserResumeInput
+): Promise<UpdateUserResumeResult> {
+  const parsed = updateUserResumeSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input",
+    }
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: "Not signed in" }
+
+  const { error } = await supabase
+    .from("user_profiles")
+    .update({ resume_text: parsed.data.resume_text })
+    .eq("id", user.id)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath("/app")
+  return { ok: true }
+}
+
 // Prep ---------------------------------------------------------------------
 
 const cachedPrepSchema = z.object({

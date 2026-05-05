@@ -80,6 +80,7 @@ export default async function AppPage({
         <Board
           jobs={(jobs ?? []) as JobRow[]}
           hasResume={hasResume}
+          resumeText={profile?.resume_text ?? null}
           interviewerByJobId={interviewerByJobId}
           noteByJobId={noteByJobId}
           initialOpenJobId={initialOpenJobId}

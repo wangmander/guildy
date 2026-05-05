@@ -30,6 +30,7 @@ export type PrepJob = {
 type Props = {
   job: PrepJob | null
   hasResume: boolean
+  resumeText: string | null
   hasInterviewer: boolean
   hasNote: boolean
   interviewerName: string | null
@@ -47,6 +48,7 @@ type PrepState =
   | { status: "error"; message: string }
 
 export type InputsExpansionSection =
+  | "background"
   | "jd"
   | "message"
   | "interviewer"
@@ -65,6 +67,7 @@ type InputsExpansionState = {
 export function PrepOverlay({
   job,
   hasResume,
+  resumeText,
   hasInterviewer,
   hasNote,
   interviewerName,
@@ -259,6 +262,7 @@ export function PrepOverlay({
                 <InputsWidget
                   jobId={job.id}
                   hasResume={hasResume}
+                  resumeText={resumeText}
                   jdText={job.jd_text}
                   latestMessage={job.latest_message}
                   interviewerName={interviewerName}

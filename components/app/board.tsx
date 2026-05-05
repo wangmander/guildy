@@ -39,6 +39,7 @@ export type InterviewerInfo = {
 type Props = {
   jobs: JobRow[]
   hasResume: boolean
+  resumeText: string | null
   interviewerByJobId: Record<string, InterviewerInfo>
   noteByJobId: Record<string, string>
   initialOpenJobId: string | null
@@ -47,6 +48,7 @@ type Props = {
 export function Board({
   jobs,
   hasResume,
+  resumeText,
   interviewerByJobId,
   noteByJobId,
   initialOpenJobId,
@@ -203,6 +205,7 @@ export function Board({
         <PrepOverlay
           job={openJob}
           hasResume={hasResume}
+          resumeText={resumeText}
           hasInterviewer={hasInterviewer}
           hasNote={hasNote}
           interviewerName={interviewer?.name ?? null}
