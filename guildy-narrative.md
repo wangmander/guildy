@@ -16,7 +16,7 @@ Guildy public content is product/design/founder content. Engineering is supporti
 
 The audience is product designers, founders, solo makers, and AI-native builders. NOT engineers.
 
-If the strongest available story for a day is purely technical, the routine should reframe it as a product reliability, design trust, user insight, or AI-maker workflow lesson — or abstain.
+If the strongest available story for a day is purely technical, the routine should reframe it as a product reliability, design trust, user insight, or AI-maker workflow lesson, or abstain.
 
 A backend engineer at any AI startup should never be able to write the same post.
 
