@@ -26,9 +26,9 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
-- Last phase shipped: **Phase 4c-4 + patches 1-8** — through patch 5 the overlay layout is final. Patch 6 added retry-with-hint on Zod failure but the diagnostic at a242b8f revealed the real blocker was `stop_reason: 'max_tokens'` — Haiku was hitting the 2048 cap before emitting `questions_they_ask` / `questions_you_ask`. Patch 7 raised max_tokens (Quick 4096, Deep 8192), tightened the Quick prompt to sketch-level brevity, made retry conditional (skipped on `max_tokens`), added a 120s Anthropic AbortController timeout, and shipped fair-use rate limits (Quick 10/day 75/mo, Deep 15/day 100/mo, hidden from UI). Patch 8 fixes a follow-on Zod blocker: Haiku correctly returned `category: null` for Quick per the new prompt, but the Zod schemas still required string. Made `category` nullable in both `prepQuestionThemSchema` / `prepQuestionYouSchema`, dropped `category` and `answer_plan` from `required[]` in the tool input_schema, and made the questions-widget grouping null-tolerant. Manual + Paste JD tabs only; default tab is Paste JD.
-- Date: 2026-05-04
-- Project status: ready for Phase 4d (multi-session Full Loop) once patch 7 verifies clean in browser
+- Last phase shipped: **Phase 4c-4 closed at `<hash>` (patches 1-9 rolled in).** Patch 9 removed the diagnostic logs added in a242b8f and during patch 7. Detail for every patch lives in the archive section below.
+- Date: 2026-05-05
+- Project status: ready for Phase 4d (multi-session Full Loop, Option C+)
 
 ## Locked models [LIVE]
 
@@ -47,6 +47,50 @@ Total realistic: ~32-41 hours, ~4-5 focused build sessions.
 - 4 default sessions: Hiring Manager, Cross-functional, Skills/Portfolio, Bar Raiser
 - LLM picks plausible names from JD/company context
 - No schema change
+
+### Phase 5 — Perplexity research for Deep Prep (~5-7h)
+- Company research cached per company, 7-day TTL
+- Interviewer research cached per (interviewer_name, company), no expiry
+- `lib/ai/research.ts` module
+- Failure surfaces retry/continue, never silent downgrade
+
+### Phase 6 — Polish (~5-6h)
+- FTUE empty state ("Add 3 jobs to unlock your pipeline")
+- Mobile responsive: overlay becomes full-screen takeover
+- Error states with clear retry paths
+- Loading states with progress feedback (not just spinners)
+
+### Phase 6.5 — Pre-launch infrastructure (~6h)
+- Legal: ToS + Privacy Policy via Termly (templated, ~1h)
+- Resend transactional email (receipts, magic link improvements, ~2h)
+- PostHog analytics (track NSM 1 + NSM 2, ~1h)
+- End-to-end QA pass on 10 real jobs (~2h)
+
+### Phase 6b — Stripe + paywall (~8-12h)
+- Stripe checkout session
+- Webhook handler: subscription.created, updated, deleted, invoice.payment_failed
+- Subscription state in user_profiles
+- Paywall gate on tier='deep' API call
+- Customer portal for cancellation
+- Grace period on payment failure
+- Test via Stripe CLI before deploy
+- $19.99/mo single tier
+
+### Phase 7 — Production deploy (~3h)
+- guildy.ai DNS to Vercel
+- SSL via Vercel
+- Production env vars (refer to .env.example for list — never list values here)
+- Production smoke test
+- Banned-copy audit (no "AI-powered" cliches)
+
+## Phase 4c shipped — archive
+
+### Phase 4c-4 patch 9 — DONE (closes 4c-4)
+- Removed all `[generatePrep]` diagnostic console statements added in a242b8f and during patch 7. Six log sites scrubbed: response-shape log, no-tool_use error, validation-failed raw-input dump, max_tokens-truncation warn, retry-firing warn, retry-also-failed error. Surrounding `// PATCH 6 DIAGNOSTIC:` comment blocks removed with their log blocks.
+- Inner try/catch wrapper around the retry call removed — its only purpose was to log "retry also failed:" before re-throwing. With the log gone, the wrapper added no value; retryErr now propagates naturally to the parent catch.
+- Load-bearing logic preserved: `PrepTruncatedError` distinction (skip retry on `stop_reason: 'max_tokens'`), retry-with-RETRY_HINT branch on plain `PrepValidationError`, AbortController timeout, AuthenticationError handling. Comments rewritten without phase-number prefixes.
+- `[rate-limit]` operational logs from patch 7 stay — they're cap-tuning signal, not diagnostic for the resolved bug.
+- Patches 1-9 rolled in at the close. TypeScript clean.
 
 ### Phase 4c-4 patch 8 — DONE
 - Bug from patch 7 prompt: Quick brevity rules say "questions_they_ask: NO category labels (return null)". Haiku obeyed and emitted `category: null`. Zod rejected because `prepQuestionThemSchema.category` was `z.string()` (non-nullable). Server log: `questions_they_ask.0.category: Expected string, received null` (×5 they_ask + ×4 you_ask).
@@ -139,41 +183,6 @@ Total realistic: ~32-41 hours, ~4-5 focused build sessions.
 - InterviewerWidget renders `interviewer_insights` when tier=deep + present
 - QuestionsWidget renders expandable `answer_plan` per Deep question (collapsed by default)
 - Phase 6b marker comment lives in `generatePrepAction` for the future subscription gate
-
-### Phase 5 — Perplexity research for Deep Prep (~5-7h)
-- Company research cached per company, 7-day TTL
-- Interviewer research cached per (interviewer_name, company), no expiry
-- `lib/ai/research.ts` module
-- Failure surfaces retry/continue, never silent downgrade
-
-### Phase 6 — Polish (~5-6h)
-- FTUE empty state ("Add 3 jobs to unlock your pipeline")
-- Mobile responsive: overlay becomes full-screen takeover
-- Error states with clear retry paths
-- Loading states with progress feedback (not just spinners)
-
-### Phase 6.5 — Pre-launch infrastructure (~6h)
-- Legal: ToS + Privacy Policy via Termly (templated, ~1h)
-- Resend transactional email (receipts, magic link improvements, ~2h)
-- PostHog analytics (track NSM 1 + NSM 2, ~1h)
-- End-to-end QA pass on 10 real jobs (~2h)
-
-### Phase 6b — Stripe + paywall (~8-12h)
-- Stripe checkout session
-- Webhook handler: subscription.created, updated, deleted, invoice.payment_failed
-- Subscription state in user_profiles
-- Paywall gate on tier='deep' API call
-- Customer portal for cancellation
-- Grace period on payment failure
-- Test via Stripe CLI before deploy
-- $19.99/mo single tier
-
-### Phase 7 — Production deploy (~3h)
-- guildy.ai DNS to Vercel
-- SSL via Vercel
-- Production env vars (refer to .env.example for list — never list values here)
-- Production smoke test
-- Banned-copy audit (no "AI-powered" cliches)
 
 ## Deferred to V2.1 post-launch
 
