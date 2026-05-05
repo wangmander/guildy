@@ -145,9 +145,6 @@ function TierSelector({
           (tier === "deep" ? compartmentSelected : compartmentUnselected)
         }
       >
-        <span className="inline-flex items-center rounded bg-[#EDE9FE] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-[#4E3BDD]">
-          Sonnet 4.6
-        </span>
         {tier === "quick" ? (
           <button
             type="button"
@@ -155,11 +152,17 @@ function TierSelector({
               e.stopPropagation()
               onUpgrade()
             }}
-            className="rounded-sm bg-[#4E3BDD] px-1.5 py-0.5 text-[10px] font-medium text-white transition-colors hover:bg-[#4332C2]"
+            className="inline-flex items-center rounded bg-[#EDE9FE] px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-[#4E3BDD] transition-colors hover:bg-[#E0DAF8] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4E3BDD]/40"
           >
-            Upgrade
+            <span className="font-medium">Sonnet 4.6</span>
+            <span aria-hidden="true" className="px-1 opacity-60">·</span>
+            <span className="font-semibold">Upgrade</span>
           </button>
-        ) : null}
+        ) : (
+          <span className="inline-flex items-center rounded bg-[#EDE9FE] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-[#4E3BDD]">
+            Sonnet 4.6
+          </span>
+        )}
         <span className="font-medium">Deep Prep</span>
       </div>
     </div>
