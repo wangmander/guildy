@@ -24,7 +24,7 @@ const ROLE_LABELS: Record<PrepSessionRole, string> = {
   bar_raiser: "Bar Raiser",
 }
 
-export default function SessionTabs({
+export function SessionTabs({
   sessions,
   selectedRole,
   onSelect,
