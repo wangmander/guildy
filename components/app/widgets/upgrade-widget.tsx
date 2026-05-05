@@ -51,7 +51,7 @@ export function UpgradeWidget({ onUpgrade }: Props) {
           onClick={onUpgrade}
           className="mt-4 inline-flex h-9 w-full items-center justify-center rounded-md bg-[#4E3BDD] text-sm font-medium text-white transition-colors hover:bg-[#4332C2]"
         >
-          Upgrade to Deep Prep
+          Upgrade all Prep
         </button>
         <button
           type="button"

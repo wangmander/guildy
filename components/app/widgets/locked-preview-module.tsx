@@ -23,7 +23,7 @@ export function LockedPreviewModule({ title, teaser, onUpgrade }: Props) {
           <button
             type="button"
             onClick={onUpgrade}
-            className="mt-3 inline-flex h-7 items-center gap-1.5 rounded-md bg-[#4E3BDD] px-2.5 text-xs font-medium text-white transition-colors hover:bg-[#4332C2]"
+            className="mt-3 inline-flex h-7 items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 text-xs font-medium text-[#4E3BDD] transition-colors hover:bg-gray-50"
           >
             <Sparkles className="size-3" />
             Upgrade to Deep Prep
@@ -51,7 +51,7 @@ export function LockedPreviewFooter({ title, teaser, onUpgrade }: Props) {
         <button
           type="button"
           onClick={onUpgrade}
-          className="ml-auto inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md bg-[#4E3BDD] px-2.5 text-xs font-medium text-white transition-colors hover:bg-[#4332C2]"
+          className="ml-auto inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 text-xs font-medium text-[#4E3BDD] transition-colors hover:bg-gray-50"
         >
           <Sparkles className="size-3" />
           Upgrade
