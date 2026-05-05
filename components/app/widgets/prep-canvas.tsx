@@ -124,34 +124,30 @@ function TierSelector({
         <span className="font-medium">Quick Prep</span>
       </button>
 
-      {/* Deep compartment: button for the body + sibling Upgrade button when
-          on Quick tier. Buttons can't nest, so they're siblings inside a
-          flex row. Upgrade click stops propagation so it doesn't toggle. */}
+      {/* Deep compartment: div with role=tab so a real <button> Upgrade chip
+          can nest inside without invalid button-in-button HTML. Enter/Space
+          mirrors native button behavior for tier toggle. The chip's onClick
+          stops propagation so chip clicks don't double as compartment clicks. */}
       <div
+        role="tab"
+        aria-selected={tier === "deep"}
+        tabIndex={0}
+        onClick={() => onTierChange("deep")}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault()
+            onTierChange("deep")
+          }
+        }}
         className={
-          tier === "deep"
-            ? "inline-flex items-center gap-1 rounded-full bg-white py-0 pl-0 pr-0 shadow-sm transition-colors"
-            : "inline-flex items-center gap-1 rounded-full transition-colors"
+          compartmentBase +
+          " cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4E3BDD]/40 " +
+          (tier === "deep" ? compartmentSelected : compartmentUnselected)
         }
       >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tier === "deep"}
-          onClick={() => onTierChange("deep")}
-          className={
-            compartmentBase +
-            " " +
-            (tier === "deep"
-              ? "text-[#1C1E21]"
-              : compartmentUnselected)
-          }
-        >
-          <span className="inline-flex items-center rounded bg-[#EDE9FE] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-[#4E3BDD]">
-            Sonnet 4.6
-          </span>
-          <span className="font-medium">Deep Prep</span>
-        </button>
+        <span className="inline-flex items-center rounded bg-[#EDE9FE] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-[#4E3BDD]">
+          Sonnet 4.6
+        </span>
         {tier === "quick" ? (
           <button
             type="button"
@@ -159,11 +155,12 @@ function TierSelector({
               e.stopPropagation()
               onUpgrade()
             }}
-            className="mr-0.5 inline-flex h-6 items-center rounded-full bg-[#4E3BDD] px-2.5 text-[10px] font-medium text-white transition-colors hover:bg-[#4332C2]"
+            className="rounded-sm bg-[#4E3BDD] px-1.5 py-0.5 text-[10px] font-medium text-white transition-colors hover:bg-[#4332C2]"
           >
             Upgrade
           </button>
         ) : null}
+        <span className="font-medium">Deep Prep</span>
       </div>
     </div>
   )

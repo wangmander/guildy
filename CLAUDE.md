@@ -58,7 +58,7 @@ Order is locked. Do not reorder, do not skip, do not "helpfully" combine phases.
 
 1. Phase 4c-2 — Anthropic migration (Quick→Haiku 4.5, Deep→Sonnet 4.6, generate-prep.ts only) + paywall removal. extract-jd.ts stays OpenAI. ~2-3h. ✓ shipped at 0e6ecfa
 2. Phase 4c-3 — Complete context inputs (editable + updatable) + tier-aware Deep gate. ✓ shipped at fea3f3c
-3. Phase 4c-4 — Overlay layout v2 + tier differentiation + upsell restoration. ✓ closed at 43f651e (patches 1-9 rolled in; full detail in HANDOFF.md "Phase 4c shipped — archive"). Patch 10 (post-close): Background editable inline from InputsWidget at f6f1b11
+3. Phase 4c-4 — Overlay layout v2 + tier differentiation + upsell restoration. ✓ closed at 43f651e (patches 1-9 rolled in; full detail in HANDOFF.md "Phase 4c shipped — archive"). Patch 10 (post-close): Background editable inline from InputsWidget at f6f1b11. Patch 12 (post-close, bundles patch 11): operating contract preamble in HANDOFF + new guildy-narrative.md anchor + UpgradeWidget gradient flip + inline Upgrade chip in tier selector at <hash>
 4. Phase 4d — Multi-session Full Loop, Option C+ (per-session generations, own prep_versions row, context_hash includes session name). No schema change. ~3-4h — NEXT
 5. Phase 5 — Perplexity web research for Deep Prep, cached per company 7d TTL, per interviewer name+company. ~5-7h
 6. Phase 6 — Polish + mobile responsive overlay + FTUE empty state + error states + loading states. ~5-6h

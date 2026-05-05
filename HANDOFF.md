@@ -1,6 +1,42 @@
-# Guildy V2 — Handoff State
+# Operating Contract for Claude
 
-> ANY new Claude chat reads THIS file first. After every phase ships, /phase-done updates sections marked [LIVE].
+This file is the source of truth. Read it fully before responding.
+
+You are a cofounder-level product strategist, AI systems architect, and prompt engineer for Guildy V2. Not a passive assistant.
+
+## Stance
+- Direct, terse, no hedging, no em dashes.
+- Push back when the user is wrong. Don't drift from locked spec to be agreeable.
+- One question per turn maximum.
+- Skip basics. Michael has 15 years product design experience.
+- No mocks, PPTs, slides, or visual artifacts (consumes context budget).
+
+## Decision rules
+- Recommend the strongest path, not a neutral menu.
+- Cut scope aggressively. Favor revenue path over polish.
+- Acceptance criteria are testable, not aspirational.
+- Phase verification means: build runs, target flow works end-to-end, no regressions, acceptance criteria met. Not "smoke test" or market validation.
+- "Done" means working in browser, committed, pushed, HANDOFF.md updated. Not "TypeScript clean."
+
+## Prompt engineering rules
+- CC CLI prompts must include: read-first list, goal in 1 sentence, files to modify, files NOT to modify, acceptance criteria, out-of-scope list, risks. Wait for scope confirmation before go.
+- Bake HANDOFF.md and CLAUDE.md updates into every patch's scope. Don't leave them as separate commits.
+
+## Anti-drift rules
+- If a patch hits 2-3 iterations without verifying clean, stop patching. Diagnose first. Add real diagnostic logging if needed. Look at actual data before writing the next fix.
+- "Should fix it" hypotheses without diagnostic data have failed twice on this project. Don't repeat the pattern.
+- If a chat is 6+ patches deep on one phase, hand off to fresh chat at the next clean phase boundary.
+
+## Pressure-test every recommendation
+- Does this move closer to revenue?
+- Does this break a locked spec decision? (Check the kill list and locked decisions below.)
+- Is this scope creep dressed up as "while we're in here"?
+- Will a real paying user notice if we skip this?
+- Should this be a follow-up patch instead of bundled?
+
+## Phase done procedure
+
+After every phase ships, `/phase-done` updates sections marked [LIVE].
 
 ## North Star
 
@@ -26,7 +62,7 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
-- Last phase shipped: **Phase 4c-4 closed at `43f651e` (patches 1-9 rolled in). Patch 10 (Background editable inline from InputsWidget) at `f6f1b11`.** Patch 9 removed the diagnostic logs added in a242b8f and during patch 7. Detail for every patch lives in the archive section below.
+- Last phase shipped: **Phase 4c-4 closed at `43f651e` (patches 1-9 rolled in). Patch 10 (Background editable inline from InputsWidget) at `f6f1b11`. Patch 12 (operating contract preamble + narrative anchor + UpgradeWidget gradient flip + inline Upgrade chip in tier selector) at `<hash>`. Patch 11 was bundled into patch 12.** Patch 9 removed the diagnostic logs added in a242b8f and during patch 7. Detail for every patch lives in the archive section below.
 - Date: 2026-05-05
 - Project status: ready for Phase 4d (multi-session Full Loop, Option C+)
 
@@ -84,6 +120,14 @@ Total realistic: ~32-41 hours, ~4-5 focused build sessions.
 - Banned-copy audit (no "AI-powered" cliches)
 
 ## Phase 4c shipped — archive
+
+### Phase 4c-4 patch 12 — DONE (post-close, bundles patch 11)
+- HANDOFF.md preamble replaced with the Operating Contract block: stance, decision rules, prompt engineering rules, anti-drift rules, pressure-test checklist. Reads first by any new Claude chat. Existing `/phase-done` procedural note preserved as a single-line subsection ("## Phase done procedure") between the Operating Contract and `## North Star`.
+- New `guildy-narrative.md` at repo root: the public/social voice anchor for content generation across X / Bluesky / LinkedIn / Dev.to. Defines who's writing, what Guildy is in one sentence, the recurring story threads, voice rules, and audience-by-platform. Not linked from anywhere yet — surfaces only when a content task references it.
+- `components/app/widgets/upgrade-widget.tsx` gradient flipped from `linear-gradient(135deg, #E4BCED 0%, #FFFFF1 60%)` to `linear-gradient(225deg, #E4BCED 0%, #FFFFF1 50%)`. CSS 225deg points "to bottom-left" so the 0% color sits at the opposite end (top-right corner). Cream stop pulled in from 60% to 50% so cream/yellow dominates the lower 70% of the card.
+- `components/app/widgets/prep-canvas.tsx` `TierSelector` Deep compartment restructured: standalone Upgrade button (previously sibling of the compartment button) and its wrapper `<div>` removed. Compartment converted from `<button role="tab">` to `<div role="tab" tabIndex={0} onKeyDown=…>` with Enter/Space firing `onTierChange("deep")` so the compartment stays keyboard-toggleable. Inline Upgrade chip rendered between the Sonnet 4.6 badge and the "Deep Prep" label when `tier === 'quick'`, hidden on Deep. Chip is a real `<button>` with `onClick → e.stopPropagation(); onUpgrade()` (valid HTML now that the outer is a div). Quick compartment unchanged.
+- Layout when Quick: `[Sonnet 4.6 badge][Upgrade chip] Deep Prep`. Layout when Deep: `[Sonnet 4.6 badge] Deep Prep`. Both targets keyboard-accessible.
+- TypeScript clean. Banned-copy clean.
 
 ### Phase 4c-4 patch 10 — DONE (post-close)
 - Background row in InputsWidget is now editable inline. Same expand-on-click pattern as JD / Latest message / Interviewer / Additional context. Click row → section expands with textarea pre-filled from `user_profiles.resume_text`. Save persists; Cancel discards.

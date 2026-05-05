@@ -24,7 +24,7 @@ export function UpgradeWidget({ onUpgrade }: Props) {
         className="rounded-2xl border border-[#4E3BDD]/15 p-4 shadow-sm"
         style={{
           background:
-            "linear-gradient(135deg, #E4BCED 0%, #FFFFF1 60%)",
+            "linear-gradient(225deg, #E4BCED 0%, #FFFFF1 50%)",
         }}
       >
         <h3 className="font-display text-xl font-medium tracking-tight text-[#4E3BDD]">
