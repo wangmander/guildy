@@ -197,9 +197,11 @@ const PREP_OUTPUT_TOOL_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["category", "question", "answer_plan"],
+        // Patch 8: category and answer_plan dropped from required so Quick
+        // can omit them; Deep populates both. `question` stays required.
+        required: ["question"],
         properties: {
-          category: { type: "string" },
+          category: { type: ["string", "null"] },
           question: { type: "string" },
           answer_plan: { type: ["string", "null"] },
         },
@@ -210,9 +212,9 @@ const PREP_OUTPUT_TOOL_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["category", "question"],
+        required: ["question"],
         properties: {
-          category: { type: "string" },
+          category: { type: ["string", "null"] },
           question: { type: "string" },
         },
       },

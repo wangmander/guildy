@@ -55,14 +55,18 @@ export const prepChecklistItemSchema = z.object({
 export type PrepChecklistItem = z.infer<typeof prepChecklistItemSchema>
 
 export const prepQuestionThemSchema = z.object({
-  category: z.string(),
+  // Nullable: Deep emits 8 spec-defined categories; Quick is uncategorized
+  // (returns null per the system prompt). UI groups by category in Deep and
+  // renders flat in Quick.
+  category: z.string().nullable(),
   question: z.string(),
   answer_plan: z.string().nullable(), // Deep-only
 })
 export type PrepQuestionThey = z.infer<typeof prepQuestionThemSchema>
 
 export const prepQuestionYouSchema = z.object({
-  category: z.string(),
+  // Nullable for the same reason as questions_they_ask.
+  category: z.string().nullable(),
   question: z.string(),
 })
 export type PrepQuestionYou = z.infer<typeof prepQuestionYouSchema>

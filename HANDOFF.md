@@ -26,7 +26,7 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
-- Last phase shipped: **Phase 4c-4 + patches 1-7** — through patch 5 the overlay layout is final. Patch 6 added retry-with-hint on Zod failure but the diagnostic at a242b8f revealed the real blocker was `stop_reason: 'max_tokens'` — Haiku was hitting the 2048 cap before emitting `questions_they_ask` / `questions_you_ask`. Patch 7 raises max_tokens (Quick 4096, Deep 8192), tightens the Quick prompt to sketch-level brevity (length budgets per field), makes retry conditional (skipped on `max_tokens` so we don't waste tokens), adds a 120s Anthropic AbortController timeout, and ships fair-use rate limits server-side (Quick 10/day 75/mo, Deep 15/day 100/mo, hidden from UI per spec section 8). Manual + Paste JD tabs only; default tab is Paste JD.
+- Last phase shipped: **Phase 4c-4 + patches 1-8** — through patch 5 the overlay layout is final. Patch 6 added retry-with-hint on Zod failure but the diagnostic at a242b8f revealed the real blocker was `stop_reason: 'max_tokens'` — Haiku was hitting the 2048 cap before emitting `questions_they_ask` / `questions_you_ask`. Patch 7 raised max_tokens (Quick 4096, Deep 8192), tightened the Quick prompt to sketch-level brevity, made retry conditional (skipped on `max_tokens`), added a 120s Anthropic AbortController timeout, and shipped fair-use rate limits (Quick 10/day 75/mo, Deep 15/day 100/mo, hidden from UI). Patch 8 fixes a follow-on Zod blocker: Haiku correctly returned `category: null` for Quick per the new prompt, but the Zod schemas still required string. Made `category` nullable in both `prepQuestionThemSchema` / `prepQuestionYouSchema`, dropped `category` and `answer_plan` from `required[]` in the tool input_schema, and made the questions-widget grouping null-tolerant. Manual + Paste JD tabs only; default tab is Paste JD.
 - Date: 2026-05-04
 - Project status: ready for Phase 4d (multi-session Full Loop) once patch 7 verifies clean in browser
 
@@ -47,6 +47,15 @@ Total realistic: ~32-41 hours, ~4-5 focused build sessions.
 - 4 default sessions: Hiring Manager, Cross-functional, Skills/Portfolio, Bar Raiser
 - LLM picks plausible names from JD/company context
 - No schema change
+
+### Phase 4c-4 patch 8 — DONE
+- Bug from patch 7 prompt: Quick brevity rules say "questions_they_ask: NO category labels (return null)". Haiku obeyed and emitted `category: null`. Zod rejected because `prepQuestionThemSchema.category` was `z.string()` (non-nullable). Server log: `questions_they_ask.0.category: Expected string, received null` (×5 they_ask + ×4 you_ask).
+- Fix: `category` made nullable in both `prepQuestionThemSchema` and `prepQuestionYouSchema` in `lib/ai/prep-types.ts`. Matches spec §7 — Quick is uncategorized, Deep groups by 8 model-defined categories.
+- Tool `input_schema` in `lib/ai/generate-prep.ts`: `category` and `answer_plan` removed from `questions_they_ask.items.required[]`; `category` removed from `questions_you_ask.items.required[]`. Property types relaxed to `["string", "null"]`. `question` stays required. `additionalProperties: false` keeps the schema closed.
+- `components/app/widgets/questions-widget.tsx` made null-tolerant: `groupByCategory<T extends { category: string | null }>` returns `[string | null, T[]][]`. Both `QuestionsTheyAsk` (Deep render path) and `QuestionsYouAsk` skip the category header when `category` is null and key the list item with a `_uncategorized` sentinel. Quick path in `QuestionsTheyAsk` was already flat (`tier === "deep" ? grouped.map : items.map`) so no functional change there. `QuestionsYouAsk` will now render all Quick items in a single header-less block — same visual effect as flat.
+- Old cached Quick `prep_versions` rows with non-null string categories continue to validate (`.nullable()` accepts both null and string). No data migration.
+- Prompts unchanged. Diagnostic logs from a242b8f still in place. TypeScript clean. Banned-copy clean.
+- `interviewer_type` field on `questions_you_ask` not added — never existed in the schema; the Quick prompt's "NO interviewer_type" line has been a no-op since 4c-2. Tracked as feature work, not bug work.
 
 ### Phase 4c-4 patch 7 — DONE
 - Root cause from a242b8f diagnostic: `stop_reason: 'max_tokens'` on both first attempt and retry. Haiku hit the 2048 cap mid-output. Patch 6's retry path made it worse (longer prompt → less output room → still truncated, sometimes worse). Schema validation rejected truncated output because `questions_they_ask` / `questions_you_ask` / `prep_checklist` never made it into the tool call.

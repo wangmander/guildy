@@ -47,10 +47,12 @@ export function QuestionsTheyAsk({ items, tier, footer }: TheyAskProps) {
       <ul className="mt-4 space-y-4">
         {tier === "deep"
           ? grouped.map(([category, group]) => (
-              <li key={category}>
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-[#482C4C]">
-                  {category}
-                </p>
+              <li key={category ?? "_uncategorized"}>
+                {category ? (
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-[#482C4C]">
+                    {category}
+                  </p>
+                ) : null}
                 <ul className="mt-1.5 space-y-1.5">
                   {group.map((q) => (
                     <TheyAskItem key={q.question} q={q} tier={tier} />
@@ -95,10 +97,12 @@ export function QuestionsYouAsk({ items }: YouAskProps) {
       </div>
       <ul className="mt-4 space-y-4">
         {grouped.map(([category, group]) => (
-          <li key={category}>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-[#482C4C]">
-              {category}
-            </p>
+          <li key={category ?? "_uncategorized"}>
+            {category ? (
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-[#482C4C]">
+                {category}
+              </p>
+            ) : null}
             <ul className="mt-1.5 space-y-1.5">
               {group.map((q) => (
                 <li
@@ -161,11 +165,14 @@ function TheyAskItem({
   )
 }
 
-function groupByCategory<T extends { category: string }>(
+// Group questions by their model-supplied category. Quick tier returns null
+// categories per spec; the renderer skips the category header in that case
+// (single null group → all items render in one block, header omitted).
+function groupByCategory<T extends { category: string | null }>(
   items: T[]
-): [string, T[]][] {
-  const order: string[] = []
-  const map = new Map<string, T[]>()
+): [string | null, T[]][] {
+  const order: (string | null)[] = []
+  const map = new Map<string | null, T[]>()
   for (const item of items) {
     if (!map.has(item.category)) {
       order.push(item.category)
