@@ -91,7 +91,10 @@ export const prepOutputSchema = z.object({
   prep_checklist: z.array(prepChecklistItemSchema),
   questions_they_ask: z.array(prepQuestionThemSchema),
   questions_you_ask: z.array(prepQuestionYouSchema),
-  interviewer_insights: z.string().nullable(), // Deep-only
+  // Deep-only. `.optional()` accepts model omission when no interviewer is
+  // provided; `.nullable()` accepts an explicit null. UI handles both as
+  // "no insights yet" via the locked placeholder.
+  interviewer_insights: z.string().nullable().optional(),
 })
 export type PrepOutput = z.infer<typeof prepOutputSchema>
 

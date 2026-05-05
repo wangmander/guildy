@@ -26,7 +26,7 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
-- Last phase shipped: **Phase 4c-4 + patches 1, 2, 3 (rolled into 4), 4, 5 (Z scope)** — overlay layout v2, visual/UX corrections, typography + inline locked-preview footers, ungate Applied/Closed + tier selector redesign + auth error handling + ungate Deep + LinkedIn wall defense, then a tier-aware ProgressLoader replaces the static skeleton during generation. Real streaming generation (modules arrive progressively) deferred to a follow-up patch.
+- Last phase shipped: **Phase 4c-4 + patches 1-6** — through patch 5 the overlay layout is final; patch 6 fixes a Sonnet schema-validation blocker (interviewer_insights now optional in both Zod and tool input_schema, single retry-with-strengthened-prompt on Zod failure) and removes URL intake from Add Job (extraction unreliable across LinkedIn / Greenhouse / Lever). Manual + Paste JD tabs only; default tab is Paste JD.
 - Date: 2026-05-04
 - Project status: ready for Phase 4d (multi-session Full Loop)
 
@@ -47,6 +47,15 @@ Total realistic: ~32-41 hours, ~4-5 focused build sessions.
 - 4 default sessions: Hiring Manager, Cross-functional, Skills/Portfolio, Bar Raiser
 - LLM picks plausible names from JD/company context
 - No schema change
+
+### Phase 4c-4 patch 6 — DONE
+- Schema validation blocker fixed: `interviewer_insights` is now `.nullable().optional()` in `prepOutputSchema` and removed from the tool `input_schema.required` array. Three shapes validate: present-string, present-null, missing. Sonnet sometimes omits the field entirely when no interviewer is provided — that no longer breaks generation.
+- System prompt strengthened with explicit REQUIRED FIELDS / OPTIONAL FIELDS enumeration so Sonnet doesn't drop `questions_they_ask` / `questions_you_ask` either. Both stay required; both must be non-empty.
+- Single retry on Zod validation failure (not on Anthropic API errors). On first `PrepValidationError`, the user prompt is re-sent with an appended hint enumerating the missing fields. If the second attempt also fails, the original error surfaces. Costs at most 2× tokens on the rare validation failure path.
+- URL intake removed from Add Job modal: tabs go from `Manual | Paste URL | Paste JD` to `Paste JD | Manual`. Default tab is Paste JD. URL state, ref, and extract path deleted from the modal. `createJobAction` still accepts `source_url` (existing rows display fine) but new modal submissions always send `""`.
+- `/api/extract/route.ts` returns 410 Gone for `kind: "url"` with the message "URL extraction temporarily disabled. Paste JD text directly." Defensive for direct callers; the modal no longer calls URL.
+- `lib/ai/extract-jd.ts` and the URL fetch helpers were dropped from route.ts but `htmlToText` + `JdExtractionError` + `extractJobFields` stay in extract-jd.ts intact for the V2.1 revisit.
+- TypeScript clean. Banned-copy grep clean.
 
 ### Phase 4c-4 patch 5 — DONE
 - Option Z (visual UX only). Blocking generation in `lib/ai/generate-prep.ts` and `generatePrepAction` preserved exactly as-is — no streaming refactor.

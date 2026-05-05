@@ -1,49 +1,25 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
-import {
-  JdExtractionError,
-  extractJobFields,
-  htmlToText,
-} from "@/lib/ai/extract-jd"
+import { JdExtractionError, extractJobFields } from "@/lib/ai/extract-jd"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 export const runtime = "nodejs"
 
+// URL intake is removed from the Add Job modal in patch 6 — extraction is
+// unreliable across LinkedIn (auth wall), Greenhouse / Lever (JS-rendered).
+// The discriminator still accepts `kind: "url"` so direct callers
+// (devtools, future re-enable) get a clean 410 instead of a 400. The
+// `htmlToText` helper and `lib/ai/extract-jd.ts` URL fetch path are kept
+// for the V2.1 revisit.
 const bodySchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("url"), url: z.string().url() }),
   z.object({ kind: z.literal("jd"), jd_text: z.string().min(20) }),
 ])
 
-const FETCH_TIMEOUT_MS = 5000
-
 function serializeError(err: unknown): string {
   if (err instanceof Error) return `${err.name}: ${err.message}`
   return String(err)
-}
-
-async function fetchUrlText(url: string): Promise<string> {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-  try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      redirect: "follow",
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
-        Accept:
-          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      },
-    })
-    if (!res.ok) throw new Error(`status ${res.status}`)
-    const html = await res.text()
-    const text = htmlToText(html)
-    if (text.length < 80) throw new Error("body too short")
-    return text
-  } finally {
-    clearTimeout(timeout)
-  }
 }
 
 export async function POST(req: Request) {
@@ -66,42 +42,15 @@ export async function POST(req: Request) {
     }
 
     if (parsed.kind === "url") {
-      let text: string
-      try {
-        text = await fetchUrlText(parsed.url)
-      } catch (err) {
-        console.error("[extract] url fetch failed:", err)
-        return NextResponse.json({
-          ok: false,
-          reason: "fetch_failed",
-          error: serializeError(err),
-        })
-      }
-      try {
-        const fields = await extractJobFields(text)
-        return NextResponse.json({
-          ok: true,
-          fields,
-          jd_text: text.slice(0, 20000),
-        })
-      } catch (err) {
-        console.error("[extract] extract failed (url):", err)
-        // Login wall (LinkedIn et al): never write the gate text back to the
-        // client as jd_text. User must paste the JD manually.
-        if (err instanceof JdExtractionError) {
-          return NextResponse.json({
-            ok: false,
-            reason: "login_wall",
-            error: err.message,
-          })
-        }
-        return NextResponse.json({
+      return NextResponse.json(
+        {
           ok: false,
           reason: "extract_failed",
-          error: serializeError(err),
-          jd_text: text.slice(0, 20000),
-        })
-      }
+          error:
+            "URL extraction temporarily disabled. Paste JD text directly.",
+        },
+        { status: 410 }
+      )
     }
 
     try {

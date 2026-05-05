@@ -229,7 +229,7 @@ export function PrepOverlay({
                   tier={tier}
                   insights={
                     prepState.status === "ready"
-                      ? prepState.prep.interviewer_insights
+                      ? prepState.prep.interviewer_insights ?? null
                       : null
                   }
                   onEdit={() =>

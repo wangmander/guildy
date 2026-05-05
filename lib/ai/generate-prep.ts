@@ -60,9 +60,26 @@ Weave resume-to-JD comparison into existing fields:
 - At least 2 of the risks.items must come from specific resume gaps versus JD asks (e.g., "JD asks for B2B SaaS scale; your most recent shipped work is consumer — bridge with the X project").
 - Do not generate filler. If no clear gap exists, surface scope or seniority mismatches instead.
 
-OUTPUT
-Call the submit_prep tool with the structured prep. The "stage" field in your output must equal the input stage value.`
+REQUIRED FIELDS — every call must return ALL of:
+- stage
+- purpose (object)
+- positioning (object)
+- risks (object)
+- prep_checklist (array, non-empty)
+- questions_they_ask (array of question objects, non-empty — never omit, never empty)
+- questions_you_ask (array of question objects, non-empty — never omit, never empty)
 
+OPTIONAL FIELDS:
+- interviewer_insights (Deep tier only, when interviewer is provided. Set to null or omit when no interviewer.)
+
+OUTPUT
+Call the submit_prep tool with the structured prep. The "stage" field in your output must equal the input stage value. Do not omit any required field.`
+
+// `interviewer_insights` is deliberately NOT in required[]. Sonnet sometimes
+// omits the field entirely when no interviewer is provided (interpreting
+// "must be null" as "skip the key"). The Zod schema mirrors this with
+// `.nullable().optional()` so all three shapes validate: present-string,
+// present-null, and missing.
 const PREP_OUTPUT_TOOL_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -74,7 +91,6 @@ const PREP_OUTPUT_TOOL_SCHEMA = {
     "prep_checklist",
     "questions_they_ask",
     "questions_you_ask",
-    "interviewer_insights",
   ],
   properties: {
     stage: {
@@ -186,13 +202,33 @@ const PREP_OUTPUT_TOOL_SCHEMA = {
   },
 } as const
 
-export async function generatePrep(input: PrepInput): Promise<PrepOutput> {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error("ANTHROPIC_API_KEY is missing from environment")
-  }
+// Hint appended to the user prompt on the retry path. Sonnet sometimes
+// omits required array fields on the first pass; a fresh call with this
+// hint usually produces a complete output.
+const RETRY_HINT = `
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  const userPrompt = buildUserPrompt(input)
+Your previous response was missing one or more required fields. This time, return ALL required fields:
+- questions_they_ask: a non-empty array of question objects (NEVER omit, NEVER empty)
+- questions_you_ask: a non-empty array of question objects (NEVER omit, NEVER empty)
+- purpose, positioning, risks, prep_checklist all present and complete
+
+interviewer_insights remains optional and may be null when no interviewer is provided.`
+
+class PrepValidationError extends Error {
+  issues: string
+  constructor(issues: string) {
+    super(`Anthropic prep output failed schema validation: ${issues}`)
+    this.name = "PrepValidationError"
+    this.issues = issues
+  }
+}
+
+async function generateOnce(
+  client: Anthropic,
+  input: PrepInput,
+  retryHint: string
+): Promise<PrepOutput> {
+  const userPrompt = buildUserPrompt(input) + retryHint
   const model = input.tier === "deep" ? DEEP_PREP_MODEL : QUICK_PREP_MODEL
   const maxTokens = input.tier === "deep" ? DEEP_MAX_TOKENS : QUICK_MAX_TOKENS
 
@@ -244,11 +280,10 @@ export async function generatePrep(input: PrepInput): Promise<PrepOutput> {
 
   const result = prepOutputSchema.safeParse(toolUse.input)
   if (!result.success) {
-    throw new Error(
-      `Anthropic prep output failed schema validation: ${result.error.issues
-        .map((i) => `${i.path.join(".")}: ${i.message}`)
-        .join("; ")}`
-    )
+    const issues = result.error.issues
+      .map((i) => `${i.path.join(".")}: ${i.message}`)
+      .join("; ")
+    throw new PrepValidationError(issues)
   }
 
   if (input.tier === "quick") {
@@ -269,6 +304,29 @@ export async function generatePrep(input: PrepInput): Promise<PrepOutput> {
   result.data.stage = input.stage
 
   return result.data
+}
+
+export async function generatePrep(input: PrepInput): Promise<PrepOutput> {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error("ANTHROPIC_API_KEY is missing from environment")
+  }
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+  try {
+    return await generateOnce(client, input, "")
+  } catch (err) {
+    if (err instanceof PrepValidationError) {
+      // Single retry with the strengthened user prompt. If this also fails,
+      // the original error surfaces to the caller's error UI.
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[generatePrep] first attempt failed validation, retrying:",
+        err.issues
+      )
+      return await generateOnce(client, input, RETRY_HINT)
+    }
+    throw err
+  }
 }
 
 function buildUserPrompt(input: PrepInput): string {

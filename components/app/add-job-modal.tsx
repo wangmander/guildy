@@ -33,37 +33,33 @@ type ExtractResponse = {
 const DEBOUNCE_MS = 500
 
 export function AddJobModal({ open, onOpenChange }: Props) {
-  const [tab, setTab] = useState<"manual" | "url" | "jd">("manual")
+  const [tab, setTab] = useState<"manual" | "jd">("jd")
   const [company, setCompany] = useState("")
   const [role, setRole] = useState("")
   const [tc, setTc] = useState("")
-  const [url, setUrl] = useState("")
   const [jdText, setJdText] = useState("")
   const [jdCollapsed, setJdCollapsed] = useState(false)
-  const [extracting, setExtracting] = useState<null | "url" | "jd">(null)
+  const [extracting, setExtracting] = useState<null | "jd">(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const lastExtractedRef = useRef<{ url: string; jd: string }>({ url: "", jd: "" })
-  const urlRef = useRef("")
+  const lastExtractedRef = useRef<{ jd: string }>({ jd: "" })
   const jdRef = useRef("")
   const extractedFieldsActiveRef = useRef(false)
 
   function reset() {
-    setTab("manual")
+    setTab("jd")
     setCompany("")
     setRole("")
     setTc("")
-    setUrl("")
     setJdText("")
     setJdCollapsed(false)
     setExtracting(null)
     setNotice(null)
     setError(null)
-    lastExtractedRef.current = { url: "", jd: "" }
-    urlRef.current = ""
+    lastExtractedRef.current = { jd: "" }
     jdRef.current = ""
     extractedFieldsActiveRef.current = false
     if (debounceRef.current) {
@@ -85,18 +81,16 @@ export function AddJobModal({ open, onOpenChange }: Props) {
     onOpenChange(next)
   }
 
-  async function runExtract(kind: "url" | "jd", content: string) {
+  async function runExtract(content: string) {
     setNotice(null)
     setError(null)
-    setExtracting(kind)
-    lastExtractedRef.current[kind] = content
+    setExtracting("jd")
+    lastExtractedRef.current.jd = content
     try {
-      const body =
-        kind === "url" ? { kind: "url", url: content } : { kind: "jd", jd_text: content }
       const res = await fetch("/api/extract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ kind: "jd", jd_text: content }),
       })
       const data: ExtractResponse = await res.json()
 
@@ -108,29 +102,7 @@ export function AddJobModal({ open, onOpenChange }: Props) {
         if (data.fields.role_title) setRole(data.fields.role_title)
         if (data.fields.tc) setTc(data.fields.tc)
         if (populatedAny) extractedFieldsActiveRef.current = true
-        if (data.jd_text) {
-          if (kind === "url") {
-            setJdText(data.jd_text)
-            jdRef.current = data.jd_text
-          }
-          setJdCollapsed(true)
-        } else if (kind === "jd") {
-          setJdCollapsed(true)
-        }
-        return
-      }
-
-      if (kind === "url" && data.reason === "fetch_failed") {
-        clearExtractedFieldsIfStale()
-        setNotice("Couldn't read this URL. Fill in the fields manually below — your URL is saved.")
-        return
-      }
-
-      if (data.reason === "login_wall") {
-        clearExtractedFieldsIfStale()
-        setNotice(
-          "Could not extract JD from that URL. Paste the job description text directly."
-        )
+        setJdCollapsed(true)
         return
       }
 
@@ -138,7 +110,7 @@ export function AddJobModal({ open, onOpenChange }: Props) {
       setNotice(
         "Couldn't extract details. Fill in the fields manually below — what you pasted is saved."
       )
-      if (data.jd_text && kind === "jd") {
+      if (data.jd_text) {
         setJdText(data.jd_text)
         jdRef.current = data.jd_text
       }
@@ -150,19 +122,13 @@ export function AddJobModal({ open, onOpenChange }: Props) {
     }
   }
 
-  function scheduleExtract(kind: "url" | "jd") {
+  function scheduleExtract() {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
-      const content = (kind === "url" ? urlRef.current : jdRef.current).trim()
-      if (kind === "url") {
-        if (!/^https?:\/\//i.test(content)) return
-        if (content === lastExtractedRef.current.url) return
-        runExtract("url", content)
-      } else {
-        if (content.length < 20) return
-        if (content === lastExtractedRef.current.jd) return
-        runExtract("jd", content)
-      }
+      const content = jdRef.current.trim()
+      if (content.length < 20) return
+      if (content === lastExtractedRef.current.jd) return
+      runExtract(content)
     }, DEBOUNCE_MS)
   }
 
@@ -187,7 +153,9 @@ export function AddJobModal({ open, onOpenChange }: Props) {
         company_name: company.trim(),
         role_title: role.trim(),
         tc: tc.trim(),
-        source_url: url.trim(),
+        // URL intake removed (V2.1 — extraction unreliable). Existing jobs
+        // with source_url still display fine; new jobs leave it null.
+        source_url: "",
         jd_text: jdText.trim(),
       })
       if (!result.ok) {
@@ -204,7 +172,7 @@ export function AddJobModal({ open, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle>Add a job</DialogTitle>
           <DialogDescription>
-            Paste a URL or JD to auto-fill, or fill in fields manually.
+            Paste a JD to auto-fill, or fill in fields manually.
           </DialogDescription>
         </DialogHeader>
 
@@ -214,41 +182,10 @@ export function AddJobModal({ open, onOpenChange }: Props) {
         >
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
             <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="manual">Manual</TabsTrigger>
-                <TabsTrigger value="url">Paste URL</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="jd">Paste JD</TabsTrigger>
+                <TabsTrigger value="manual">Manual</TabsTrigger>
               </TabsList>
-
-              <TabsContent value="url" className="space-y-1.5">
-                <Label htmlFor="url">Job posting URL</Label>
-                <Input
-                  id="url"
-                  type="url"
-                  placeholder="https://jobs.example.com/listings/123"
-                  value={url}
-                  onChange={(e) => {
-                    urlRef.current = e.target.value
-                    setUrl(e.target.value)
-                  }}
-                  onPaste={() => scheduleExtract("url")}
-                  onBlur={() => scheduleExtract("url")}
-                  disabled={extracting !== null}
-                />
-                <p className="flex items-center gap-2 text-xs text-gray-500">
-                  {extracting === "url" ? (
-                    <>
-                      <Spinner />
-                      <span>Extracting...</span>
-                    </>
-                  ) : (
-                    <span>
-                      We'll auto-fill from the page. Some sites block this — paste the JD if it
-                      doesn't work.
-                    </span>
-                  )}
-                </p>
-              </TabsContent>
 
               <TabsContent value="jd" className="space-y-1.5">
                 {jdCollapsed ? (
@@ -277,8 +214,8 @@ export function AddJobModal({ open, onOpenChange }: Props) {
                         jdRef.current = e.target.value
                         setJdText(e.target.value)
                       }}
-                      onPaste={() => scheduleExtract("jd")}
-                      onBlur={() => scheduleExtract("jd")}
+                      onPaste={() => scheduleExtract()}
+                      onBlur={() => scheduleExtract()}
                       disabled={extracting !== null}
                       className="max-h-[300px] min-h-[160px] resize-none overflow-y-auto"
                     />
@@ -298,7 +235,7 @@ export function AddJobModal({ open, onOpenChange }: Props) {
 
               <TabsContent value="manual">
                 <p className="text-xs text-gray-500">
-                  Fill these in directly, or use Paste URL / Paste JD to auto-fill.
+                  Fill these in directly, or use Paste JD to auto-fill.
                 </p>
               </TabsContent>
             </Tabs>
