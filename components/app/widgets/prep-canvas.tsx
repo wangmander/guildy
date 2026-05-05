@@ -1,9 +1,14 @@
 "use client"
 
-import { RefreshCw, Sparkles } from "lucide-react" // RefreshCw used in ErrorState
+import { RefreshCw, Sparkles } from "lucide-react"
 
-import type { PrepState } from "@/components/app/prep-overlay"
-import type { PrepOutput, PrepTier } from "@/lib/ai/prep-types"
+import type { PrepStatesMap, PrepStateEntry } from "@/app/app/actions"
+import {
+  PREP_SESSION_ROLES,
+  type PrepOutput,
+  type PrepSessionRole,
+  type PrepTier,
+} from "@/lib/ai/prep-types"
 import type { StageKey } from "@/lib/stages"
 
 import {
@@ -12,20 +17,34 @@ import {
 } from "./locked-preview-module"
 import { ProgressLoader } from "./progress-loader"
 import { QuestionsTheyAsk, QuestionsYouAsk } from "./questions-widget"
+import {
+  SessionTabs,
+  type SessionTabEntry,
+  type SessionTabState,
+} from "./session-tabs"
+
+const SINGLE_GENERATING_KEY = "_single"
+const QUICK_POSITIONING_VISIBLE_FRAMES = 2
 
 type Props = {
   stage: StageKey
-  prepState: PrepState
+  statesMap: PrepStatesMap | null
+  generatingRoles: Set<string>
+  selectedRole: PrepSessionRole
+  onSelectRole: (role: PrepSessionRole) => void
+  error: string | null
   hasResume: boolean
   hasJd: boolean
   tier: PrepTier
   onTierChange: (tier: PrepTier) => void
-  onGenerate: () => void
+  onGenerate: (role: PrepSessionRole | null) => void
   onUpgrade: () => void
   onAddJd: () => void
 }
 
-const QUICK_POSITIONING_VISIBLE_FRAMES = 2
+function isFullLoopStage(stage: StageKey): boolean {
+  return stage === "interview_loop" || stage === "final"
+}
 
 function stageHeading(stage: StageKey): string {
   switch (stage) {
@@ -47,7 +66,11 @@ function stageHeading(stage: StageKey): string {
 
 export function PrepCanvas({
   stage,
-  prepState,
+  statesMap,
+  generatingRoles,
+  selectedRole,
+  onSelectRole,
+  error,
   hasResume,
   hasJd,
   tier,
@@ -56,6 +79,31 @@ export function PrepCanvas({
   onUpgrade,
   onAddJd,
 }: Props) {
+  const fullLoop = isFullLoopStage(stage)
+  const currentKey: keyof PrepStatesMap = fullLoop ? selectedRole : "single"
+  const generatingKey = fullLoop ? selectedRole : SINGLE_GENERATING_KEY
+  const isGenerating = generatingRoles.has(generatingKey)
+  const currentEntry: PrepStateEntry | undefined = statesMap?.[currentKey]
+  const currentOutput = currentEntry?.output ?? null
+
+  // Heading: prefer the session-specific title (Full Loop sessions populate
+  // it via the prompt); fall back to the stage heading otherwise.
+  const sessionTitle = currentOutput?.session_title?.trim()
+  const heading = sessionTitle && sessionTitle.length > 0
+    ? sessionTitle
+    : stageHeading(stage)
+
+  const sessions: SessionTabEntry[] = PREP_SESSION_ROLES.map((role) => {
+    const state: SessionTabState = generatingRoles.has(role)
+      ? "generating"
+      : statesMap?.[role].state ?? "empty"
+    return { role, state }
+  })
+
+  const triggerGenerate = () => {
+    onGenerate(fullLoop ? selectedRole : null)
+  }
+
   return (
     <div className="px-4 pb-12 pt-6 md:px-7">
       {/* Compact top row: title (left) + tier toggle (right). Regenerate
@@ -63,7 +111,7 @@ export function PrepCanvas({
           input edit happens, so manual regenerate is unnecessary. */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-2xl font-semibold tracking-tight text-[#1C1E21] md:text-[1.625rem]">
-          {stageHeading(stage)}
+          {heading}
         </h1>
         <TierSelector
           tier={tier}
@@ -72,12 +120,26 @@ export function PrepCanvas({
         />
       </div>
 
+      {fullLoop ? (
+        <div className="mt-4">
+          <SessionTabs
+            sessions={sessions}
+            selectedRole={selectedRole}
+            onSelect={onSelectRole}
+          />
+        </div>
+      ) : null}
+
       <CanvasBody
-        prepState={prepState}
+        statesMap={statesMap}
+        currentEntry={currentEntry}
+        currentOutput={currentOutput}
+        isGenerating={isGenerating}
+        error={error}
         hasResume={hasResume}
         hasJd={hasJd}
         tier={tier}
-        onGenerate={onGenerate}
+        onGenerate={triggerGenerate}
         onUpgrade={onUpgrade}
         onAddJd={onAddJd}
       />
@@ -170,7 +232,11 @@ function TierSelector({
 }
 
 function CanvasBody({
-  prepState,
+  statesMap,
+  currentEntry,
+  currentOutput,
+  isGenerating,
+  error,
   hasResume,
   hasJd,
   tier,
@@ -178,7 +244,11 @@ function CanvasBody({
   onUpgrade,
   onAddJd,
 }: {
-  prepState: PrepState
+  statesMap: PrepStatesMap | null
+  currentEntry: PrepStateEntry | undefined
+  currentOutput: PrepOutput | null
+  isGenerating: boolean
+  error: string | null
   hasResume: boolean
   hasJd: boolean
   tier: PrepTier
@@ -186,16 +256,16 @@ function CanvasBody({
   onUpgrade: () => void
   onAddJd: () => void
 }) {
-  if (prepState.status === "loading-cache") {
-    return <LoadingSkeleton />
+  if (error) {
+    return <ErrorState message={error} onRetry={onGenerate} />
   }
-  if (prepState.status === "generating") {
+  if (isGenerating) {
     return <ProgressLoader tier={tier} />
   }
-  if (prepState.status === "error") {
-    return <ErrorState message={prepState.message} onRetry={onGenerate} />
+  if (statesMap === null) {
+    return <LoadingSkeleton />
   }
-  if (prepState.status === "empty") {
+  if (!currentEntry || currentEntry.state === "empty" || !currentOutput) {
     return (
       <EmptyState
         hasResume={hasResume}
@@ -208,10 +278,37 @@ function CanvasBody({
   }
   return (
     <PrepView
-      prep={prepState.prep}
+      prep={currentOutput}
       tier={tier}
       onUpgrade={onUpgrade}
+      stale={currentEntry.state === "stale"}
+      onRegenerate={onGenerate}
     />
+  )
+}
+
+function StaleBanner({
+  tier,
+  onRegenerate,
+}: {
+  tier: PrepTier
+  onRegenerate: () => void
+}) {
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm leading-relaxed text-amber-900">
+          Inputs changed since this prep was generated.
+        </p>
+        <button
+          type="button"
+          onClick={onRegenerate}
+          className="inline-flex h-8 items-center rounded-md bg-[#482C4C] px-3 text-xs font-medium text-white transition-opacity hover:opacity-90"
+        >
+          Regenerate {tier === "deep" ? "Deep" : "Quick"}
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -355,14 +452,21 @@ function PrepView({
   prep,
   tier,
   onUpgrade,
+  stale,
+  onRegenerate,
 }: {
   prep: PrepOutput
   tier: PrepTier
   onUpgrade: () => void
+  stale?: boolean
+  onRegenerate?: () => void
 }) {
   const isQuick = tier === "quick"
   return (
     <div className="mt-6 space-y-5">
+      {stale && onRegenerate ? (
+        <StaleBanner tier={tier} onRegenerate={onRegenerate} />
+      ) : null}
       <PurposeSection purpose={prep.purpose} />
 
       <PositioningSection

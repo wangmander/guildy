@@ -5,9 +5,14 @@ import { X } from "lucide-react"
 
 import {
   generatePrepAction,
-  getCachedPrepAction,
+  getPrepStatesAction,
+  type PrepStatesMap,
 } from "@/app/app/actions"
-import type { PrepOutput, PrepTier } from "@/lib/ai/prep-types"
+import type {
+  PrepOutput,
+  PrepSessionRole,
+  PrepTier,
+} from "@/lib/ai/prep-types"
 import type { StageKey } from "@/lib/stages"
 
 import { InputsWidget } from "./widgets/inputs-widget"
@@ -40,12 +45,20 @@ type Props = {
   onClose: () => void
 }
 
-type PrepState =
-  | { status: "loading-cache" }
-  | { status: "empty" }
-  | { status: "generating" }
-  | { status: "ready"; prep: PrepOutput }
-  | { status: "error"; message: string }
+// Phase 4d: orchestration switched from per-tier latest-row reads
+// (getCachedPrepAction) to a 5-key states map. The map drives both the
+// SessionTabs strip on Full Loop and the single-prep view on every other
+// stage. PrepCanvas receives the map + selected role + in-flight set and
+// derives display state internally.
+
+const SINGLE_GENERATING_KEY = "_single"
+
+// Full Loop multi-session stages. Both interview_loop and final map to the
+// same PrepStage (interview_loop) per stageKeyToPrepStage, so both surface
+// the SessionTabs strip and the per-session generate flow.
+function isFullLoopStage(stage: StageKey | undefined): boolean {
+  return stage === "interview_loop" || stage === "final"
+}
 
 export type InputsExpansionSection =
   | "background"
@@ -76,9 +89,13 @@ export function PrepOverlay({
   noteText,
   onClose,
 }: Props) {
-  const [prepState, setPrepState] = useState<PrepState>({
-    status: "loading-cache",
-  })
+  const [statesMap, setStatesMap] = useState<PrepStatesMap | null>(null)
+  const [generatingRoles, setGeneratingRoles] = useState<Set<string>>(
+    () => new Set()
+  )
+  const [selectedRole, setSelectedRole] =
+    useState<PrepSessionRole>("hiring_manager")
+  const [error, setError] = useState<string | null>(null)
   const [tier, setTier] = useState<PrepTier>("quick")
   const [inputsExpansion, setInputsExpansion] = useState<InputsExpansionState>({
     section: null,
@@ -133,52 +150,104 @@ export function PrepOverlay({
     }
   }, [])
 
-  // Reset tier to Quick whenever a different job opens. Kept in its own
-  // effect so it doesn't fight the cache-fetch effect (which now depends
-  // on tier and would loop if it also reset tier).
+  // Reset session state whenever a different job opens or tier flips. Cleared
+  // map produces a clean LoadingSkeleton on first paint of the new context.
+  useEffect(() => {
+    setStatesMap(null)
+    setError(null)
+    setGeneratingRoles(new Set())
+  }, [job?.id, tier])
+
+  // Reset tier and inputs widget on job change. Kept separate so it doesn't
+  // fight the states-fetch effect.
   useEffect(() => {
     setTier("quick")
+    setSelectedRole("hiring_manager")
     setInputsExpansion({ section: null, pulseToken: 0 })
   }, [job?.id])
 
-  // Fetch cached prep for the current tier. Re-runs when job or tier
-  // changes. Depending on the `job` object reference would re-fire on every
-  // parent re-render (parent recomputes openJob from its jobs array),
-  // causing a double skeleton flash — that's why we key on job?.id only.
+  // Fetch the 5-key states map. Re-fires on job/tier change (loading flash)
+  // and silently in the background when input props change (resume, JD, etc.)
+  // so stale rows surface as "stale" without blanking the prep view.
   useEffect(() => {
     if (!job) return
     let cancelled = false
-    setPrepState({ status: "loading-cache" })
-    getCachedPrepAction({ job_id: job.id, tier }).then((res) => {
+    getPrepStatesAction({ job_id: job.id, tier }).then((res) => {
       if (cancelled) return
       if (!res.ok) {
-        setPrepState({ status: "error", message: res.error })
+        setError(res.error)
         return
       }
-      if (res.prep) {
-        setPrepState({ status: "ready", prep: res.prep })
-      } else {
-        setPrepState({ status: "empty" })
-      }
+      setStatesMap(res.states)
+      setError(null)
     })
     return () => {
       cancelled = true
     }
+    // Input-related deps (jd_text, latest_message, resume, interviewer, note)
+    // intentionally included so input edits trigger a state refresh and the
+    // current view reclassifies as stale or cached. eslint warns about the
+    // job object dep stability but we read primitives off it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [job?.id, tier])
+  }, [
+    job?.id,
+    tier,
+    job?.jd_text,
+    job?.latest_message,
+    resumeText,
+    interviewerName,
+    interviewerTitle,
+    interviewerLink,
+    noteText,
+  ])
 
-  const onGenerate = useCallback(() => {
-    if (!job) return
-    setPrepState({ status: "generating" })
-    startTransition(async () => {
-      const res = await generatePrepAction({ job_id: job.id, tier })
-      if (!res.ok) {
-        setPrepState({ status: "error", message: res.error })
-        return
-      }
-      setPrepState({ status: "ready", prep: res.prep })
-    })
-  }, [job, tier])
+  const onGenerate = useCallback(
+    (role: PrepSessionRole | null) => {
+      if (!job) return
+      const generatingKey = role ?? SINGLE_GENERATING_KEY
+      setGeneratingRoles((prev) => {
+        const next = new Set(prev)
+        next.add(generatingKey)
+        return next
+      })
+      setError(null)
+      startTransition(async () => {
+        const res = await generatePrepAction({
+          job_id: job.id,
+          tier,
+          session_role: role ?? undefined,
+        })
+        setGeneratingRoles((prev) => {
+          const next = new Set(prev)
+          next.delete(generatingKey)
+          return next
+        })
+        if (!res.ok) {
+          setError(res.error)
+          return
+        }
+        // Optimistic local update so the just-finished session flips from
+        // generating → cached without waiting for the next states refetch.
+        const mapKey: keyof PrepStatesMap = role ?? "single"
+        setStatesMap((prev) =>
+          prev
+            ? { ...prev, [mapKey]: { state: "cached", output: res.prep } }
+            : prev
+        )
+      })
+    },
+    [job, tier]
+  )
+
+  // Output backing the Interviewer widget's insights field. Single view uses
+  // the "single" entry; Full Loop uses the selected session's output.
+  const currentOutput: PrepOutput | null = (() => {
+    if (!statesMap) return null
+    const key: keyof PrepStatesMap = isFullLoopStage(job?.stage)
+      ? selectedRole
+      : "single"
+    return statesMap[key].output ?? null
+  })()
 
   return (
     <div
@@ -230,11 +299,7 @@ export function PrepOverlay({
                   title={interviewerTitle}
                   link={interviewerLink}
                   tier={tier}
-                  insights={
-                    prepState.status === "ready"
-                      ? prepState.prep.interviewer_insights ?? null
-                      : null
-                  }
+                  insights={currentOutput?.interviewer_insights ?? null}
                   onEdit={() =>
                     expandInputsSection("interviewer", { pulse: true })
                   }
@@ -247,7 +312,11 @@ export function PrepOverlay({
               <main className="pointer-events-auto rounded-2xl border border-black/5 bg-[#F8F9FA] shadow-sm md:max-h-[calc(100dvh-3rem)] md:overflow-y-auto">
                 <PrepCanvas
                   stage={job.stage}
-                  prepState={prepState}
+                  statesMap={statesMap}
+                  generatingRoles={generatingRoles}
+                  selectedRole={selectedRole}
+                  onSelectRole={setSelectedRole}
+                  error={error}
                   hasResume={hasResume}
                   hasJd={!!job.jd_text && job.jd_text.trim().length > 0}
                   tier={tier}
@@ -303,4 +372,3 @@ function ErrorCard({ onClose }: { onClose: () => void }) {
   )
 }
 
-export type { PrepState }
