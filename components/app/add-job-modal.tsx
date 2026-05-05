@@ -24,7 +24,7 @@ type Props = {
 
 type ExtractResponse = {
   ok: boolean
-  reason?: "fetch_failed" | "extract_failed"
+  reason?: "fetch_failed" | "extract_failed" | "login_wall"
   error?: string
   fields?: { company_name: string | null; role_title: string | null; tc: string | null }
   jd_text?: string
@@ -123,6 +123,14 @@ export function AddJobModal({ open, onOpenChange }: Props) {
       if (kind === "url" && data.reason === "fetch_failed") {
         clearExtractedFieldsIfStale()
         setNotice("Couldn't read this URL. Fill in the fields manually below — your URL is saved.")
+        return
+      }
+
+      if (data.reason === "login_wall") {
+        clearExtractedFieldsIfStale()
+        setNotice(
+          "Could not extract JD from that URL. Paste the job description text directly."
+        )
         return
       }
 

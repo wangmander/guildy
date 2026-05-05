@@ -251,6 +251,7 @@ export function PrepOverlay({
                   onTierChange={setTier}
                   onGenerate={onGenerate}
                   onUpgrade={onUpgradeClick}
+                  onAddJd={() => expandInputsSection("jd", { pulse: true })}
                 />
               </main>
 

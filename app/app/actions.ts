@@ -609,21 +609,11 @@ export async function generatePrepAction(
   if (!job) return { ok: false, error: "Job not found" }
 
   const prepStage = stageKeyToPrepStage(job.stage as StageKey)
-  if (!prepStage) {
-    return {
-      ok: false,
-      error: "Prep is only available once the job is active.",
-    }
-  }
-
   const tier = parsed.data.tier
 
-  // Defense in depth: UI disables the Generate Deep button when JD is empty.
-  // This guard catches direct action calls (browser devtools, mistaken
-  // client code, etc) so Sonnet is never dispatched without JD context.
-  if (tier === "deep" && (!job.jd_text || job.jd_text.trim().length === 0)) {
-    return { ok: false, error: "Paste the JD to generate Deep Prep" }
-  }
+  // Phase 4c-4 patch 4: Deep Prep is no longer gated on jd_text. The UI
+  // shows an inline warning when JD is missing and offers "Generate anyway".
+  // Resume presence is still the only hard gate (enforced at onboarding).
 
   const [{ data: interviewerRow }, { data: noteRow }] = await Promise.all([
     supabase

@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
-import { extractJobFields, htmlToText } from "@/lib/ai/extract-jd"
+import {
+  JdExtractionError,
+  extractJobFields,
+  htmlToText,
+} from "@/lib/ai/extract-jd"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 export const runtime = "nodejs"
@@ -82,6 +86,15 @@ export async function POST(req: Request) {
         })
       } catch (err) {
         console.error("[extract] extract failed (url):", err)
+        // Login wall (LinkedIn et al): never write the gate text back to the
+        // client as jd_text. User must paste the JD manually.
+        if (err instanceof JdExtractionError) {
+          return NextResponse.json({
+            ok: false,
+            reason: "login_wall",
+            error: err.message,
+          })
+        }
         return NextResponse.json({
           ok: false,
           reason: "extract_failed",
@@ -96,6 +109,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, fields, jd_text: parsed.jd_text })
     } catch (err) {
       console.error("[extract] extract failed (jd):", err)
+      if (err instanceof JdExtractionError) {
+        return NextResponse.json({
+          ok: false,
+          reason: "login_wall",
+          error: err.message,
+        })
+      }
       return NextResponse.json({
         ok: false,
         reason: "extract_failed",

@@ -196,33 +196,43 @@ export async function generatePrep(input: PrepInput): Promise<PrepOutput> {
   const model = input.tier === "deep" ? DEEP_PREP_MODEL : QUICK_PREP_MODEL
   const maxTokens = input.tier === "deep" ? DEEP_MAX_TOKENS : QUICK_MAX_TOKENS
 
-  const response = await client.messages.create({
-    model,
-    max_tokens: maxTokens,
-    temperature: 0.4,
-    system: [
-      {
-        type: "text",
-        text: SYSTEM_PROMPT,
-        // ephemeral cache lasts ~5 min — pays off across regenerations of
-        // the same job within a session.
-        cache_control: { type: "ephemeral" },
-      },
-    ],
-    messages: [{ role: "user", content: userPrompt }],
-    tools: [
-      {
-        name: "submit_prep",
-        description:
-          "Submit the structured interview prep output. Always use this tool for the response.",
-        // Anthropic's input_schema accepts standard JSON Schema; we reuse
-        // the same shape we used with OpenAI.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        input_schema: PREP_OUTPUT_TOOL_SCHEMA as any,
-      },
-    ],
-    tool_choice: { type: "tool", name: "submit_prep" },
-  })
+  let response: Anthropic.Messages.Message
+  try {
+    response = await client.messages.create({
+      model,
+      max_tokens: maxTokens,
+      temperature: 0.4,
+      system: [
+        {
+          type: "text",
+          text: SYSTEM_PROMPT,
+          // ephemeral cache lasts ~5 min — pays off across regenerations of
+          // the same job within a session.
+          cache_control: { type: "ephemeral" },
+        },
+      ],
+      messages: [{ role: "user", content: userPrompt }],
+      tools: [
+        {
+          name: "submit_prep",
+          description:
+            "Submit the structured interview prep output. Always use this tool for the response.",
+          // Anthropic's input_schema accepts standard JSON Schema; we reuse
+          // the same shape we used with OpenAI.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          input_schema: PREP_OUTPUT_TOOL_SCHEMA as any,
+        },
+      ],
+      tool_choice: { type: "tool", name: "submit_prep" },
+    })
+  } catch (err) {
+    if (err instanceof Anthropic.AuthenticationError) {
+      throw new Error(
+        "Server config error. Check ANTHROPIC_API_KEY in .env.local and restart dev server."
+      )
+    }
+    throw err
+  }
 
   const toolUse = response.content.find(
     (block): block is Anthropic.Messages.ToolUseBlock =>

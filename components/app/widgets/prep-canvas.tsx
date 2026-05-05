@@ -21,6 +21,7 @@ type Props = {
   onTierChange: (tier: PrepTier) => void
   onGenerate: () => void
   onUpgrade: () => void
+  onAddJd: () => void
 }
 
 const QUICK_POSITIONING_VISIBLE_FRAMES = 2
@@ -52,6 +53,7 @@ export function PrepCanvas({
   onTierChange,
   onGenerate,
   onUpgrade,
+  onAddJd,
 }: Props) {
   return (
     <div className="px-4 pb-12 pt-6 md:px-7">
@@ -62,7 +64,11 @@ export function PrepCanvas({
         <h1 className="font-display text-2xl font-semibold tracking-tight text-[#1C1E21] md:text-[1.625rem]">
           {stageHeading(stage)}
         </h1>
-        <TierSelector tier={tier} onTierChange={onTierChange} />
+        <TierSelector
+          tier={tier}
+          onTierChange={onTierChange}
+          onUpgrade={onUpgrade}
+        />
       </div>
 
       <CanvasBody
@@ -72,6 +78,7 @@ export function PrepCanvas({
         tier={tier}
         onGenerate={onGenerate}
         onUpgrade={onUpgrade}
+        onAddJd={onAddJd}
       />
     </div>
   )
@@ -80,34 +87,83 @@ export function PrepCanvas({
 function TierSelector({
   tier,
   onTierChange,
+  onUpgrade,
 }: {
   tier: PrepTier
   onTierChange: (tier: PrepTier) => void
+  onUpgrade: () => void
 }) {
-  const baseSelected =
-    "inline-flex items-center gap-1.5 rounded-full bg-[#482C4C] px-3 py-1 text-xs font-medium text-white shadow-sm"
-  const baseUnselected =
-    "inline-flex items-center gap-1.5 rounded-full border border-[#482C4C]/20 bg-white px-3 py-1 text-xs font-medium text-[#482C4C] transition-colors hover:bg-[#482C4C]/5"
+  const compartmentBase =
+    "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-colors"
+  const compartmentSelected =
+    "bg-white text-[#1C1E21] shadow-sm"
+  const compartmentUnselected =
+    "text-gray-500 hover:text-[#1C1E21]"
+
   return (
-    <div role="tablist" aria-label="Prep tier" className="flex items-center gap-1.5">
+    <div
+      role="tablist"
+      aria-label="Prep tier"
+      className="inline-flex flex-nowrap items-center gap-0.5 rounded-full border border-black/10 bg-gray-50 p-0.5 whitespace-nowrap"
+    >
       <button
         type="button"
         role="tab"
         aria-selected={tier === "quick"}
         onClick={() => onTierChange("quick")}
-        className={tier === "quick" ? baseSelected : baseUnselected}
+        className={
+          compartmentBase +
+          " " +
+          (tier === "quick" ? compartmentSelected : compartmentUnselected)
+        }
       >
-        Haiku 4.5 · Quick
+        <span className="inline-flex items-center rounded bg-gray-200/70 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-gray-700">
+          Haiku 4.5
+        </span>
+        <span className="font-medium">Quick Prep</span>
       </button>
-      <button
-        type="button"
-        role="tab"
-        aria-selected={tier === "deep"}
-        onClick={() => onTierChange("deep")}
-        className={tier === "deep" ? baseSelected : baseUnselected}
+
+      {/* Deep compartment: button for the body + sibling Upgrade button when
+          on Quick tier. Buttons can't nest, so they're siblings inside a
+          flex row. Upgrade click stops propagation so it doesn't toggle. */}
+      <div
+        className={
+          tier === "deep"
+            ? "inline-flex items-center gap-1 rounded-full bg-white py-0 pl-0 pr-0 shadow-sm transition-colors"
+            : "inline-flex items-center gap-1 rounded-full transition-colors"
+        }
       >
-        Sonnet 4.6 · Deep
-      </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tier === "deep"}
+          onClick={() => onTierChange("deep")}
+          className={
+            compartmentBase +
+            " " +
+            (tier === "deep"
+              ? "text-[#1C1E21]"
+              : compartmentUnselected)
+          }
+        >
+          <span className="inline-flex items-center rounded bg-[#EDE9FE] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-[#4E3BDD]">
+            Sonnet 4.6
+          </span>
+          <span className="font-medium">Deep Prep</span>
+        </button>
+        {tier === "quick" ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onUpgrade()
+            }}
+            className="mr-0.5 inline-flex h-6 items-center rounded-full bg-[#4E3BDD] px-2.5 text-[10px] font-medium text-white transition-colors hover:bg-[#4332C2]"
+          >
+            Upgrade
+          </button>
+        ) : null}
+      </div>
     </div>
   )
 }
@@ -119,6 +175,7 @@ function CanvasBody({
   tier,
   onGenerate,
   onUpgrade,
+  onAddJd,
 }: {
   prepState: PrepState
   hasResume: boolean
@@ -126,6 +183,7 @@ function CanvasBody({
   tier: PrepTier
   onGenerate: () => void
   onUpgrade: () => void
+  onAddJd: () => void
 }) {
   const tierLabel = tier === "deep" ? "Deep Prep" : "Quick Prep"
   if (prepState.status === "loading-cache") {
@@ -144,6 +202,7 @@ function CanvasBody({
         hasJd={hasJd}
         tier={tier}
         onGenerate={onGenerate}
+        onAddJd={onAddJd}
       />
     )
   }
@@ -161,47 +220,84 @@ function EmptyState({
   hasJd,
   tier,
   onGenerate,
+  onAddJd,
 }: {
   hasResume: boolean
   hasJd: boolean
   tier: PrepTier
   onGenerate: () => void
+  onAddJd: () => void
 }) {
   const tierLabel = tier === "deep" ? "Deep Prep" : "Quick Prep"
   const subhead =
     tier === "deep"
       ? "Sonnet 4.6 with research-grade depth. Takes a few seconds."
       : "Pulls in your resume, the JD, and any context you've added. Takes about a second."
-  const deepBlocked = tier === "deep" && !hasJd
-  const buttonDisabled = !hasResume || deepBlocked
-  const buttonTitle = !hasResume
-    ? "Add your resume in onboarding before running prep."
-    : deepBlocked
-      ? "Paste the JD to generate Deep Prep"
-      : undefined
+  const showJdWarning = tier === "deep" && hasJd === false && hasResume
+
   return (
-    <div className="mt-8 rounded-xl border border-dashed border-black/10 bg-white p-8 text-center">
-      <Sparkles className="mx-auto size-6 text-[#482C4C]" />
-      <h2 className="mt-3 text-lg font-semibold text-[#1C1E21]">
-        Generate {tierLabel}
-      </h2>
-      <p className="mx-auto mt-2 max-w-sm text-sm text-gray-500">
-        {!hasResume
-          ? "Add your resume in onboarding before running prep."
-          : deepBlocked
-            ? "Deep Prep needs the JD. Paste it via Add context."
+    <div className="mt-8 space-y-4">
+      {showJdWarning ? (
+        <JdMissingWarning onAddJd={onAddJd} onGenerateAnyway={onGenerate} />
+      ) : null}
+      <div className="rounded-xl border border-dashed border-black/10 bg-white p-8 text-center">
+        <Sparkles className="mx-auto size-6 text-[#482C4C]" />
+        <h2 className="mt-3 text-lg font-semibold text-[#1C1E21]">
+          Generate {tierLabel}
+        </h2>
+        <p className="mx-auto mt-2 max-w-sm text-sm text-gray-500">
+          {!hasResume
+            ? "Add your resume in onboarding before running prep."
             : subhead}
+        </p>
+        <button
+          type="button"
+          onClick={onGenerate}
+          disabled={!hasResume}
+          title={
+            !hasResume
+              ? "Add your resume in onboarding before running prep."
+              : undefined
+          }
+          className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#482C4C] px-5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Sparkles className="size-4" />
+          Generate {tierLabel}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function JdMissingWarning({
+  onAddJd,
+  onGenerateAnyway,
+}: {
+  onAddJd: () => void
+  onGenerateAnyway: () => void
+}) {
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+      <p className="text-sm leading-relaxed text-amber-900">
+        Deep Prep is much sharper with the job description. Add it for a
+        stronger result, or generate anyway.
       </p>
-      <button
-        type="button"
-        onClick={onGenerate}
-        disabled={buttonDisabled}
-        title={buttonTitle}
-        className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#482C4C] px-5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        <Sparkles className="size-4" />
-        Generate {tierLabel}
-      </button>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={onAddJd}
+          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#4E3BDD] px-3 text-xs font-medium text-white transition-colors hover:bg-[#4332C2]"
+        >
+          Add JD
+        </button>
+        <button
+          type="button"
+          onClick={onGenerateAnyway}
+          className="inline-flex h-8 items-center rounded-md border border-amber-300 bg-white px-3 text-xs font-medium text-amber-900 transition-colors hover:border-amber-400 hover:bg-amber-50"
+        >
+          Generate anyway
+        </button>
+      </div>
     </div>
   )
 }

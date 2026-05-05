@@ -20,12 +20,38 @@ Rules:
 - When in doubt, return null. Hallucinated values are worse than missing ones.
 - Return raw JSON only, no commentary, no markdown fences.`
 
+// Patterns that show up on the LinkedIn login wall (and similar) when a URL
+// fetch returns the auth gate instead of the actual JD body. If we see all
+// of these markers — or if the extracted text is too short to be a real JD —
+// we surface a clear error instead of feeding the gate text to the model.
+const MIN_JD_LENGTH = 200
+const LOGIN_WALL_MARKERS = ["Sign in", "passkey", "Privacy Policy"] as const
+
+function looksLikeLoginWall(text: string): boolean {
+  if (text.length < MIN_JD_LENGTH) return true
+  return LOGIN_WALL_MARKERS.every((marker) =>
+    text.toLowerCase().includes(marker.toLowerCase())
+  )
+}
+
+export class JdExtractionError extends Error {
+  constructor() {
+    super(
+      "Could not extract JD from that URL. Paste the job description text directly."
+    )
+    this.name = "JdExtractionError"
+  }
+}
+
 export async function extractJobFields(rawText: string): Promise<ExtractedJob> {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY is missing from environment")
   }
 
   const trimmed = rawText.slice(0, 12000)
+  if (looksLikeLoginWall(trimmed)) {
+    throw new JdExtractionError()
+  }
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
   const completion = await client.chat.completions.create({

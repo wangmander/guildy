@@ -95,9 +95,12 @@ export const prepOutputSchema = z.object({
 })
 export type PrepOutput = z.infer<typeof prepOutputSchema>
 
-// Map a DB StageKey to the PrepStage we generate against. Returns null for
-// stages that don't get prep (applied / closed).
-export function stageKeyToPrepStage(stage: StageKey): PrepStage | null {
+// Map a DB StageKey to the PrepStage we generate against. Active-board
+// Applied (per spec section 2 — manually-created jobs that skipped passive)
+// and Closed both fall back to Screen-level prep so prep generation never
+// blocks. Heading reads "Screening round" in those cases — cosmetic
+// mismatch, acceptable until a dedicated PrepStage variant is added.
+export function stageKeyToPrepStage(stage: StageKey): PrepStage {
   switch (stage) {
     case "screen":
       return "screen"
@@ -110,6 +113,6 @@ export function stageKeyToPrepStage(stage: StageKey): PrepStage | null {
       return "offer"
     case "applied":
     case "closed":
-      return null
+      return "screen"
   }
 }

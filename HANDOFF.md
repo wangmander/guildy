@@ -26,7 +26,7 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
-- Last phase shipped: **Phase 4c-4 + patches 1 and 2** — overlay layout v2, visual + UX corrections, then typography pass (Geist Sans display + Inter body) plus inline locked-preview footers plus inputs breathing room (right column 360px, JD textarea 12 rows, latent font bug fixed)
+- Last phase shipped: **Phase 4c-4 + patches 1, 2, 3 (rolled into 4), 4** — overlay layout v2, visual/UX corrections, typography + inline locked-preview footers, then this patch ungates Applied/Closed stages for prep, redesigns the tier selector (single pill row with model badges + inline Upgrade), surfaces friendly auth errors, ungates Deep generation when JD missing (inline amber warning instead of disabled button), and adds LinkedIn login-wall detection in extract-jd
 - Date: 2026-05-04
 - Project status: ready for Phase 4d (multi-session Full Loop)
 
@@ -47,6 +47,15 @@ Total realistic: ~32-41 hours, ~4-5 focused build sessions.
 - 4 default sessions: Hiring Manager, Cross-functional, Skills/Portfolio, Bar Raiser
 - LLM picks plausible names from JD/company context
 - No schema change
+
+### Phase 4c-4 patch 4 — DONE
+- Rolls in the never-shipped patch 3 items (auth error handling, ungate Deep, LinkedIn login-wall defense) plus the patch 4 corrective scope (Applied stage ungate, tier selector redesign).
+- Active-board Applied + Closed stages no longer block prep generation. `stageKeyToPrepStage` now maps both to `screen` and returns non-nullable `PrepStage`. Dead `if (!prepStage)` check in `generatePrepAction` removed. Heading reads "Screening round" when stage is Applied — cosmetic mismatch acceptable until a dedicated PrepStage variant lands.
+- Deep generation no longer gated on `jobs.jd_text`. Server-side guard removed from `generatePrepAction`. UI ungate: Generate Deep button always enabled when resume present. When tier=deep AND jd_text empty, an inline amber warning renders above the button with two CTAs — primary "Add JD" (calls `expandInputsSection("jd", { pulse: true })`, opens InputsWidget JD section with cross-column pulse) and secondary "Generate anyway" (calls onGenerate). Warning hides when JD present.
+- Anthropic auth error handling: `lib/ai/generate-prep.ts` wraps `messages.create` in try/catch. `Anthropic.AuthenticationError` surfaces "Server config error. Check ANTHROPIC_API_KEY in .env.local and restart dev server." instead of dumping raw 401 JSON. Other errors re-throw as-is.
+- LinkedIn login-wall detection in `extract-jd.ts`: new `looksLikeLoginWall` precheck in `extractJobFields` rejects text < 200 chars OR text containing all three of "Sign in" / "passkey" / "Privacy Policy". Throws new `JdExtractionError` (exported). `/api/extract/route.ts` catches and returns `reason: "login_wall"` without echoing the gate text back as `jd_text`. `add-job-modal.tsx` renders the friendly notice "Could not extract JD from that URL. Paste the job description text directly." for that reason.
+- TierSelector redesigned: single rounded-full pill container with two compartments. Quick = "[Haiku 4.5 gray badge] Quick Prep". Deep = "[Sonnet 4.6 blurple badge] Deep Prep" with an inline Upgrade button (`bg-[#4E3BDD]`, h-6) shown only when tier=quick. Selected compartment gets white background + shadow inside the gray container. Click compartment body toggles tier; click Upgrade button calls `onUpgrade` with `e.stopPropagation()` to prevent double-toggle. `flex-nowrap` + `whitespace-nowrap` so the pill never splits at narrow widths.
+- TypeScript clean. Banned-copy grep clean. Stale label grep clean.
 
 ### Phase 4c-4 patch 2 — DONE
 - Latent font bug fixed: `globals.css` was pointing `--font-sans` at undefined `--font-geist-sans`, falling back to system sans. Now `--font-sans: var(--font-inter)` (body becomes Inter as originally intended). Added `--font-display: var(--font-geist-sans)` for headers; `GeistSans.variable` wired in `app/layout.tsx` from the already-installed `geist` package. Tailwind v4 picks the variable up automatically as `font-display` utility.
