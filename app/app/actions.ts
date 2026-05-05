@@ -9,10 +9,13 @@ import { z } from "zod"
 import { generatePrep } from "@/lib/ai/generate-prep"
 import { DEEP_PREP_MODEL, QUICK_PREP_MODEL } from "@/lib/ai/models"
 import {
+  PREP_SESSION_ROLES,
   prepTierSchema,
   stageKeyToPrepStage,
   type PrepOutput,
+  type PrepStage,
   type PrepTier,
+  type PrepSessionRole,
 } from "@/lib/ai/prep-types"
 import { checkRateLimit } from "@/lib/ai/rate-limit"
 import type { StageKey } from "@/lib/stages"
@@ -559,11 +562,50 @@ export async function updateUserResumeAction(
   return { ok: true }
 }
 
+// Single-source builder for prep_versions.context_hash. Both
+// generatePrepAction (writer) and getCachedPrepAction (session-aware reader)
+// must produce byte-identical hashes for identical inputs, otherwise cache
+// rows fail to resolve.
+//
+// session_role is appended to the hash material only when defined. With
+// session_role undefined the JSON.stringify object preserves its pre-Phase-4d
+// key set in pre-Phase-4d insertion order — existing prep_versions rows
+// resolve byte-identical.
+function buildContextHash(inputs: {
+  tier: PrepTier
+  stage: PrepStage
+  resume_text: string | null
+  jd_text: string | null
+  latest_message: string | null
+  interviewer_name: string | null
+  interviewer_title: string | null
+  interviewer_link: string | null
+  note_text: string | null
+  session_role?: PrepSessionRole
+}): string {
+  const obj: Record<string, unknown> = {
+    tier: inputs.tier,
+    stage: inputs.stage,
+    resume: inputs.resume_text ?? "",
+    jd: inputs.jd_text ?? "",
+    msg: inputs.latest_message ?? "",
+    interviewer_name: inputs.interviewer_name ?? "",
+    interviewer_title: inputs.interviewer_title ?? "",
+    interviewer_link: inputs.interviewer_link ?? "",
+    note: inputs.note_text ?? "",
+  }
+  if (inputs.session_role) {
+    obj.session_role = inputs.session_role
+  }
+  return createHash("sha256").update(JSON.stringify(obj)).digest("hex")
+}
+
 // Prep ---------------------------------------------------------------------
 
 const cachedPrepSchema = z.object({
   job_id: z.string().uuid("Invalid job id"),
   tier: prepTierSchema,
+  session_role: z.enum(PREP_SESSION_ROLES).optional(),
 })
 
 export type GetCachedPrepInput = z.input<typeof cachedPrepSchema>
@@ -584,6 +626,87 @@ export async function getCachedPrepAction(
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return { ok: false, error: "Not signed in" }
+
+  // Phase 4d: session-aware lookup filters prep_versions by context_hash so
+  // each session in a Full Loop resolves to its own cached row. Non-session
+  // path below is byte-identical to the pre-Phase-4d implementation.
+  if (parsed.data.session_role) {
+    const sessionRole = parsed.data.session_role
+
+    const [{ data: job, error: jobError }, { data: profile }] = await Promise.all([
+      supabase
+        .from("jobs")
+        .select("id, stage, jd_text, latest_message")
+        .eq("id", parsed.data.job_id)
+        .eq("user_id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("user_profiles")
+        .select("resume_text")
+        .eq("id", user.id)
+        .maybeSingle(),
+    ])
+    if (jobError) return { ok: false, error: jobError.message }
+    if (!job) return { ok: false, error: "Job not found" }
+
+    const [{ data: interviewerRow }, { data: noteRow }] = await Promise.all([
+      supabase
+        .from("job_context")
+        .select("content, metadata")
+        .eq("job_id", parsed.data.job_id)
+        .eq("user_id", user.id)
+        .eq("type", "interviewer")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("job_context")
+        .select("content")
+        .eq("job_id", parsed.data.job_id)
+        .eq("user_id", user.id)
+        .eq("type", "note")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ])
+
+    const interviewerMeta =
+      (interviewerRow?.metadata as
+        | { name?: string | null; title?: string | null; link?: string | null }
+        | null) ?? null
+    const interviewerName =
+      interviewerMeta?.name ?? interviewerRow?.content ?? null
+    const interviewerTitle = interviewerMeta?.title ?? null
+    const interviewerLink = interviewerMeta?.link ?? null
+    const noteText = noteRow?.content ?? null
+
+    const contextHash = buildContextHash({
+      tier: parsed.data.tier,
+      stage: stageKeyToPrepStage(job.stage as StageKey),
+      resume_text: profile?.resume_text ?? null,
+      jd_text: job.jd_text,
+      latest_message: job.latest_message,
+      interviewer_name: interviewerName,
+      interviewer_title: interviewerTitle,
+      interviewer_link: interviewerLink,
+      note_text: noteText,
+      session_role: sessionRole,
+    })
+
+    const { data: row, error: prepError } = await supabase
+      .from("prep_versions")
+      .select("output")
+      .eq("job_id", parsed.data.job_id)
+      .eq("user_id", user.id)
+      .eq("tier", parsed.data.tier)
+      .eq("context_hash", contextHash)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (prepError) return { ok: false, error: prepError.message }
+
+    return { ok: true, prep: (row?.output ?? null) as PrepOutput | null }
+  }
 
   const { data: job, error: jobError } = await supabase
     .from("jobs")
@@ -611,6 +734,7 @@ export async function getCachedPrepAction(
 const generatePrepSchema = z.object({
   job_id: z.string().uuid("Invalid job id"),
   tier: prepTierSchema,
+  session_role: z.enum(PREP_SESSION_ROLES).optional(),
 })
 
 export type GeneratePrepInput = z.input<typeof generatePrepSchema>
@@ -720,6 +844,7 @@ export async function generatePrepAction(
       interviewer_title: interviewerTitle,
       interviewer_link: interviewerLink,
       note_text: noteText,
+      session_role: parsed.data.session_role,
       tier,
     })
   } catch (err) {
@@ -728,24 +853,18 @@ export async function generatePrepAction(
     return { ok: false, error: message }
   }
 
-  // Hash includes every input the model sees so any change invalidates cache
-  // naturally on the next generate. Resume in full (truncation only happens
-  // in prompt assembly).
-  const contextHash = createHash("sha256")
-    .update(
-      JSON.stringify({
-        tier,
-        stage: prepStage,
-        resume: profile?.resume_text ?? "",
-        jd: job.jd_text ?? "",
-        msg: job.latest_message ?? "",
-        interviewer_name: interviewerName ?? "",
-        interviewer_title: interviewerTitle ?? "",
-        interviewer_link: interviewerLink ?? "",
-        note: noteText ?? "",
-      })
-    )
-    .digest("hex")
+  const contextHash = buildContextHash({
+    tier,
+    stage: prepStage,
+    resume_text: profile?.resume_text ?? null,
+    jd_text: job.jd_text,
+    latest_message: job.latest_message,
+    interviewer_name: interviewerName,
+    interviewer_title: interviewerTitle,
+    interviewer_link: interviewerLink,
+    note_text: noteText,
+    session_role: parsed.data.session_role,
+  })
 
   const { error: insertError } = await supabase.from("prep_versions").insert({
     job_id: parsed.data.job_id,
