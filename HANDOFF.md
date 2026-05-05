@@ -26,9 +26,9 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
-- Last phase shipped: **Phase 4c-4 + patches 1-6** — through patch 5 the overlay layout is final; patch 6 fixes a Sonnet schema-validation blocker (interviewer_insights now optional in both Zod and tool input_schema, single retry-with-strengthened-prompt on Zod failure) and removes URL intake from Add Job (extraction unreliable across LinkedIn / Greenhouse / Lever). Manual + Paste JD tabs only; default tab is Paste JD.
+- Last phase shipped: **Phase 4c-4 + patches 1-7** — through patch 5 the overlay layout is final. Patch 6 added retry-with-hint on Zod failure but the diagnostic at a242b8f revealed the real blocker was `stop_reason: 'max_tokens'` — Haiku was hitting the 2048 cap before emitting `questions_they_ask` / `questions_you_ask`. Patch 7 raises max_tokens (Quick 4096, Deep 8192), tightens the Quick prompt to sketch-level brevity (length budgets per field), makes retry conditional (skipped on `max_tokens` so we don't waste tokens), adds a 120s Anthropic AbortController timeout, and ships fair-use rate limits server-side (Quick 10/day 75/mo, Deep 15/day 100/mo, hidden from UI per spec section 8). Manual + Paste JD tabs only; default tab is Paste JD.
 - Date: 2026-05-04
-- Project status: ready for Phase 4d (multi-session Full Loop)
+- Project status: ready for Phase 4d (multi-session Full Loop) once patch 7 verifies clean in browser
 
 ## Locked models [LIVE]
 
@@ -47,6 +47,18 @@ Total realistic: ~32-41 hours, ~4-5 focused build sessions.
 - 4 default sessions: Hiring Manager, Cross-functional, Skills/Portfolio, Bar Raiser
 - LLM picks plausible names from JD/company context
 - No schema change
+
+### Phase 4c-4 patch 7 — DONE
+- Root cause from a242b8f diagnostic: `stop_reason: 'max_tokens'` on both first attempt and retry. Haiku hit the 2048 cap mid-output. Patch 6's retry path made it worse (longer prompt → less output room → still truncated, sometimes worse). Schema validation rejected truncated output because `questions_they_ask` / `questions_you_ask` / `prep_checklist` never made it into the tool call.
+- Raised `QUICK_MAX_TOKENS` 2048 → 4096, `DEEP_MAX_TOKENS` 4096 → 8192 in `lib/ai/generate-prep.ts`. 8192 is a hard ceiling well within Sonnet's per-request limit; covers full Deep output with all 8 question categories + answer plans + interviewer insights + risks-with-counters.
+- Quick prompt rewritten with explicit length budgets per field (`purpose.summary` ≤ 3 sentences, `positioning.frames` exactly 2 items, `questions_they_ask` 3-5 items with `answer_plan: null`, etc.) plus the directive "Aim for under 3000 output tokens total." Quick is "useful sketch," not essay. Deep prompt unchanged — Deep is the comprehensive paid promise.
+- New `PrepTruncatedError extends PrepValidationError`. When Zod fails AND `response.stop_reason === 'max_tokens'`, that subclass is thrown and the `generatePrep` catch surfaces "Generation exceeded length limits. Try regenerating, or simplify context (shorter JD/resume)." — no retry. The plain `PrepValidationError` path still retries once with the strengthened hint. Retrying truncation cannot succeed (longer input = even less output room) and just doubles the wasted call cost.
+- New `PrepTimeoutError` + `AbortController` with 120s timeout on `client.messages.create`. SDK throws `Anthropic.APIUserAbortError` on abort; that's caught and re-thrown as the friendly timeout message. `clearTimeout` in `finally` so successful calls don't leak the timer.
+- `lib/ai/rate-limit.ts` (NEW) — `checkRateLimit({ userId, tier })`. Counts existing `prep_versions` rows with `(user_id, tier, created_at)` filters. Daily window is rolling 24h, monthly is calendar UTC (`date_trunc('month', now())`). Failure mode: fail open with `console.error` so an infra hiccup never blocks legit users. Limits: Quick 10/day 75/mo, Deep 15/day 100/mo. Logged on hit with `userId` / `tier` / `reason` / `currentCount` / `limit` for future cap tuning.
+- `generatePrepAction` calls `checkRateLimit` after auth + ownership check, before any heavy data fetch or model call. On `allowed: false`: returns `{ ok: false, error: "You've hit a high-volume threshold, please try again later." }` — no Anthropic call, no DB write. Cache hits never reach this path (handled upstream by `getCachedPrepAction`).
+- New migration `20260504000001_prep_versions_rate_limit_idx.sql` — `create index if not exists prep_versions_user_tier_created_idx on public.prep_versions (user_id, tier, created_at desc);`. Existing `(job_id)` and `(job_id, tier, context_hash)` indexes don't lead with `user_id` so the rate-limit count query would seq-scan without this index. Apply manually after merge: `supabase db push` or run the SQL via the Supabase dashboard SQL editor.
+- All `[generatePrep]` diagnostic logs from a242b8f preserved. They stay until patch 7 verifies clean in browser; a follow-up patch removes them.
+- TypeScript clean.
 
 ### Phase 4c-4 patch 6 — DONE
 - Schema validation blocker fixed: `interviewer_insights` is now `.nullable().optional()` in `prepOutputSchema` and removed from the tool `input_schema.required` array. Three shapes validate: present-string, present-null, missing. Sonnet sometimes omits the field entirely when no interviewer is provided — that no longer breaks generation.
@@ -156,7 +168,6 @@ Total realistic: ~32-41 hours, ~4-5 focused build sessions.
 
 ## Deferred to V2.1 post-launch
 
-- Fair-use rate limits (no users = no abusers)
 - Hotlinks nav inside overlay
 - Prep history viewer
 - FTUE iteration based on real user data

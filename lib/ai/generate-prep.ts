@@ -9,8 +9,19 @@ const RESUME_CHAR_CAP = 8000
 const JD_CHAR_CAP = 12000
 const LATEST_MESSAGE_CHAR_CAP = 4000
 const NOTE_CHAR_CAP = 4000
-const QUICK_MAX_TOKENS = 2048
-const DEEP_MAX_TOKENS = 4096
+// Patch 7: raised from 2048/4096. Diagnostic logs at a242b8f confirmed Haiku
+// was hitting the old 2048 cap mid-output (stop_reason=max_tokens) and dropping
+// questions_they_ask / questions_you_ask / prep_checklist before the tool call
+// closed. New ceilings cover worst-case Haiku verbose output (Quick) and full
+// Sonnet Deep output (8 question categories with answer plans + full
+// positioning + risks-with-counters + interviewer insights).
+const QUICK_MAX_TOKENS = 4096
+const DEEP_MAX_TOKENS = 8192
+
+// 2-minute hard timeout on the Anthropic call. Beyond this the SDK promise is
+// aborted via AbortController and the user sees a "timed out, try again"
+// message instead of a hung UI.
+const ANTHROPIC_TIMEOUT_MS = 120_000
 
 const SYSTEM_PROMPT = `You are a senior interview prep coach with 15+ years guiding candidates through interviews at top tech companies. You produce sharp, candidate-specific prep — never generic boilerplate.
 
@@ -35,14 +46,22 @@ QUALITY BAR
 6. Do not invent facts about the company that aren't in the JD or message.
 
 QUICK PREP TIER RULES (when tier === "quick")
-- 3 to 5 items in questions_they_ask, plain category labels
-- 2 to 3 items in questions_you_ask
-- Exactly 3 items in risks.items, each with counter set to null
-- Exactly 4 items in positioning.frames
-- Exactly 4 items in prep_checklist, each with done set to false
-- 3 to 4 items in purpose.criteria; integer weights 0-100 summing to roughly 100
-- Each questions_they_ask item must set answer_plan to null
-- interviewer_insights must be null
+
+Quick Prep is a USEFUL SKETCH, not a comprehensive plan. Be specific but concise.
+
+Length budgets:
+- purpose.summary: max 3 sentences
+- purpose.criteria: 3-4 items, each description 1 sentence; integer weights 0-100 summing to roughly 100
+- positioning.summary: max 2 sentences
+- positioning.frames: exactly 2 items, each description max 2 sentences
+- risks.items: 2-3 items, each rationale 1 sentence, NO counters in Quick (set counter to null)
+- questions_they_ask: 3-5 items, NO answer_plan (return null), NO category labels (return null)
+- questions_you_ask: 3-4 items, NO interviewer_type (return null)
+- prep_checklist: 4-6 short items, each one line, each with done set to false
+
+Aim for under 3000 output tokens total. Content should still be specific and grounded in resume/JD/context — concise does not mean generic.
+
+interviewer_insights must be null in Quick.
 
 DEEP PREP TIER RULES (when tier === "deep")
 - 8 to 12 items in questions_they_ask distributed across these categories — use the labels meaningfully, do not force every category if the stage doesn't warrant it: Background, Role fit, Behavioral, Product/design judgment, Leadership/conflict, Weakness/gaps, Company motivation, Bar raiser
@@ -223,6 +242,26 @@ class PrepValidationError extends Error {
   }
 }
 
+// Subclass of PrepValidationError for the specific case where Zod failed AND
+// the model stopped because it ran out of output tokens. Retrying with a
+// strengthened hint just appends to the prompt and leaves even less room for
+// output, so we surface a friendly error instead.
+class PrepTruncatedError extends PrepValidationError {
+  constructor(issues: string) {
+    super(issues)
+    this.name = "PrepTruncatedError"
+    this.message =
+      "Generation exceeded length limits. Try regenerating, or simplify context (shorter JD/resume)."
+  }
+}
+
+class PrepTimeoutError extends Error {
+  constructor() {
+    super("Generation timed out, please try again.")
+    this.name = "PrepTimeoutError"
+  }
+}
+
 async function generateOnce(
   client: Anthropic,
   input: PrepInput,
@@ -232,42 +271,53 @@ async function generateOnce(
   const model = input.tier === "deep" ? DEEP_PREP_MODEL : QUICK_PREP_MODEL
   const maxTokens = input.tier === "deep" ? DEEP_MAX_TOKENS : QUICK_MAX_TOKENS
 
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), ANTHROPIC_TIMEOUT_MS)
+
   let response: Anthropic.Messages.Message
   try {
-    response = await client.messages.create({
-      model,
-      max_tokens: maxTokens,
-      temperature: 0.4,
-      system: [
-        {
-          type: "text",
-          text: SYSTEM_PROMPT,
-          // ephemeral cache lasts ~5 min — pays off across regenerations of
-          // the same job within a session.
-          cache_control: { type: "ephemeral" },
-        },
-      ],
-      messages: [{ role: "user", content: userPrompt }],
-      tools: [
-        {
-          name: "submit_prep",
-          description:
-            "Submit the structured interview prep output. Always use this tool for the response.",
-          // Anthropic's input_schema accepts standard JSON Schema; we reuse
-          // the same shape we used with OpenAI.
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          input_schema: PREP_OUTPUT_TOOL_SCHEMA as any,
-        },
-      ],
-      tool_choice: { type: "tool", name: "submit_prep" },
-    })
+    response = await client.messages.create(
+      {
+        model,
+        max_tokens: maxTokens,
+        temperature: 0.4,
+        system: [
+          {
+            type: "text",
+            text: SYSTEM_PROMPT,
+            // ephemeral cache lasts ~5 min — pays off across regenerations of
+            // the same job within a session.
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+        messages: [{ role: "user", content: userPrompt }],
+        tools: [
+          {
+            name: "submit_prep",
+            description:
+              "Submit the structured interview prep output. Always use this tool for the response.",
+            // Anthropic's input_schema accepts standard JSON Schema; we reuse
+            // the same shape we used with OpenAI.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            input_schema: PREP_OUTPUT_TOOL_SCHEMA as any,
+          },
+        ],
+        tool_choice: { type: "tool", name: "submit_prep" },
+      },
+      { signal: controller.signal }
+    )
   } catch (err) {
+    if (err instanceof Anthropic.APIUserAbortError) {
+      throw new PrepTimeoutError()
+    }
     if (err instanceof Anthropic.AuthenticationError) {
       throw new Error(
         "Server config error. Check ANTHROPIC_API_KEY in .env.local and restart dev server."
       )
     }
     throw err
+  } finally {
+    clearTimeout(timeoutId)
   }
 
   // PATCH 6 DIAGNOSTIC: log stop_reason + usage on every Deep call so we
@@ -315,6 +365,12 @@ async function generateOnce(
       "\nraw input (truncated to 4000 chars):",
       JSON.stringify(rawInput, null, 2).slice(0, 4000)
     )
+    // Patch 7: distinguish "model truncated" from "model returned malformed
+    // structure within budget". Retrying the truncated case wastes tokens —
+    // the second prompt is longer and leaves even less room for output.
+    if (response.stop_reason === "max_tokens") {
+      throw new PrepTruncatedError(issues)
+    }
     throw new PrepValidationError(issues)
   }
 
@@ -347,6 +403,18 @@ export async function generatePrep(input: PrepInput): Promise<PrepOutput> {
   try {
     return await generateOnce(client, input, "")
   } catch (err) {
+    if (err instanceof PrepTruncatedError) {
+      // Patch 7: truncation cannot be fixed by retrying with a longer prompt
+      // (longer input → less room for output). Surface the friendly message
+      // immediately. The user can retry manually, optionally with shorter
+      // context.
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[generatePrep] max_tokens truncation, NOT retrying:",
+        err.issues
+      )
+      throw err
+    }
     if (err instanceof PrepValidationError) {
       // Single retry with the strengthened user prompt. If this also fails,
       // the original error surfaces to the caller's error UI.

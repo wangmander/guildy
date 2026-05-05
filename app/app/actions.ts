@@ -14,6 +14,7 @@ import {
   type PrepOutput,
   type PrepTier,
 } from "@/lib/ai/prep-types"
+import { checkRateLimit } from "@/lib/ai/rate-limit"
 import type { StageKey } from "@/lib/stages"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
@@ -591,6 +592,19 @@ export async function generatePrepAction(
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return { ok: false, error: "Not signed in" }
+
+  // Patch 7: fair-use cap before any data fetch or model call. Cache hits
+  // never reach this path — getCachedPrepAction handles those upstream.
+  const rateLimit = await checkRateLimit({
+    userId: user.id,
+    tier: parsed.data.tier,
+  })
+  if (!rateLimit.allowed) {
+    return {
+      ok: false,
+      error: "You've hit a high-volume threshold, please try again later.",
+    }
+  }
 
   const [{ data: job, error: jobError }, { data: profile }] = await Promise.all([
     supabase
