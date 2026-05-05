@@ -9,9 +9,14 @@ import { z } from "zod"
 import { generatePrep } from "@/lib/ai/generate-prep"
 import { DEEP_PREP_MODEL, QUICK_PREP_MODEL } from "@/lib/ai/models"
 import {
+  parseFullLoopRounds,
+  type ParserOutput,
+} from "@/lib/ai/parse-full-loop-rounds"
+import {
   PREP_SESSION_ROLES,
   prepTierSchema,
   stageKeyToPrepStage,
+  type FullLoopSessionConfig,
   type PrepOutput,
   type PrepStage,
   type PrepTier,
@@ -1084,4 +1089,106 @@ export async function getPrepStatesAction(
       bar_raiser: classify("bar_raiser"),
     },
   }
+}
+
+// Phase 4f: parse the recruiter context for a job and persist the resulting
+// FullLoopSessionConfig. One Haiku call per invocation; the action layer
+// owns the auth + ownership check and the early-exit on empty inputs. No
+// rate limit (cheap and infrequent). Trigger wiring (when this fires
+// automatically) lands in prompt 3.
+
+const parseFullLoopRoundsSchema = z.object({
+  job_id: z.string().uuid("Invalid job id"),
+})
+
+export type ParseFullLoopRoundsActionInput = z.input<
+  typeof parseFullLoopRoundsSchema
+>
+
+export type ParseFullLoopRoundsActionResult =
+  | { ok: true; config: FullLoopSessionConfig; raw: ParserOutput }
+  | { ok: false; error: string }
+
+export async function parseFullLoopRoundsAction(
+  input: ParseFullLoopRoundsActionInput
+): Promise<ParseFullLoopRoundsActionResult> {
+  const parsed = parseFullLoopRoundsSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input",
+    }
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: "Not signed in" }
+
+  const [{ data: job, error: jobError }, { data: interviewerRow }] =
+    await Promise.all([
+      supabase
+        .from("jobs")
+        .select("id, latest_message, jd_text")
+        .eq("id", parsed.data.job_id)
+        .eq("user_id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("job_context")
+        .select("content, metadata")
+        .eq("job_id", parsed.data.job_id)
+        .eq("user_id", user.id)
+        .eq("type", "interviewer")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ])
+  if (jobError) return { ok: false, error: jobError.message }
+  if (!job) return { ok: false, error: "Job not found" }
+
+  const interviewerMeta =
+    (interviewerRow?.metadata as
+      | { name?: string | null; title?: string | null; link?: string | null }
+      | null) ?? null
+  const interviewerName =
+    interviewerMeta?.name ?? interviewerRow?.content ?? null
+
+  if (!job.latest_message && !job.jd_text && !interviewerName) {
+    return {
+      ok: false,
+      error: "No context to parse. Add a recruiter message or JD first.",
+    }
+  }
+
+  let result: { config: FullLoopSessionConfig; raw: ParserOutput }
+  try {
+    result = await parseFullLoopRounds({
+      latest_message: job.latest_message,
+      jd_text: job.jd_text,
+      interviewer_name: interviewerName,
+    })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Parse failed"
+    return { ok: false, error: message }
+  }
+
+  // eslint-disable-next-line no-console
+  console.log("[parseFullLoopRoundsAction]", {
+    jobId: parsed.data.job_id,
+    overall_confidence: result.raw.overall_confidence,
+    detected_rounds: result.raw.detected_rounds.length,
+    missing_roles: result.raw.missing_roles.length,
+    extra_rounds: result.raw.extra_rounds.length,
+  })
+
+  const { error: updateError } = await supabase
+    .from("jobs")
+    .update({ full_loop_session_config: result.config })
+    .eq("id", parsed.data.job_id)
+    .eq("user_id", user.id)
+  if (updateError) return { ok: false, error: updateError.message }
+
+  revalidatePath("/app")
+  return { ok: true, config: result.config, raw: result.raw }
 }
