@@ -15,6 +15,17 @@ export const prepStageSchema = z.enum([
 ])
 export type PrepStage = z.infer<typeof prepStageSchema>
 
+// Phase 4d: a single Full Loop stage hosts multiple sessions, each with its
+// own focus. The role identifies which lens the model should adopt when
+// generating prep. Threading through happens in prompt 3 / 4.
+export const PREP_SESSION_ROLES = [
+  "hiring_manager",
+  "cross_functional",
+  "skills_portfolio",
+  "bar_raiser",
+] as const
+export type PrepSessionRole = (typeof PREP_SESSION_ROLES)[number]
+
 export type PrepInput = {
   resume_text: string | null
   jd_text: string | null
@@ -26,6 +37,7 @@ export type PrepInput = {
   interviewer_title: string | null
   interviewer_link: string | null
   note_text: string | null
+  session_role?: PrepSessionRole
   tier: PrepTier
 }
 
@@ -76,6 +88,11 @@ export const prepOutputSchema = z.object({
   // prep_versions table has no stage column. Used to show staleness if
   // the job has since moved.
   stage: prepStageSchema,
+
+  // Phase 4d: human-readable label for the session this prep was generated
+  // for, e.g. "Engineering Bar Raiser". Optional and nullable so single-
+  // session prep (Screen, Hiring Manager, etc.) leaves it unset.
+  session_title: z.string().nullable().optional(),
 
   purpose: z.object({
     headline: z.string(),

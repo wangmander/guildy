@@ -3,7 +3,12 @@ import "server-only"
 import Anthropic from "@anthropic-ai/sdk"
 
 import { DEEP_PREP_MODEL, QUICK_PREP_MODEL } from "./models"
-import { prepOutputSchema, type PrepInput, type PrepOutput } from "./prep-types"
+import {
+  prepOutputSchema,
+  type PrepInput,
+  type PrepOutput,
+  type PrepSessionRole,
+} from "./prep-types"
 
 const RESUME_CHAR_CAP = 8000
 const JD_CHAR_CAP = 12000
@@ -116,6 +121,9 @@ const PREP_OUTPUT_TOOL_SCHEMA = {
       type: "string",
       enum: ["screen", "hiring_manager", "interview_loop", "offer"],
     },
+    // Phase 4d: optional + nullable, mirrors the interviewer_insights pattern
+    // from patch 6. Not in required[]. Single-session prep leaves it unset.
+    session_title: { type: ["string", "null"] },
     purpose: {
       type: "object",
       additionalProperties: false,
@@ -386,6 +394,105 @@ export async function generatePrep(input: PrepInput): Promise<PrepOutput> {
   }
 }
 
+// Phase 4d: per-session emphasis injected into the user prompt when
+// input.session_role is set. Each role gets its own focus / emphasize /
+// defer block so a single Full Loop stage produces materially distinct
+// prep across sessions. Threading from the action layer happens in prompt 3.
+const SESSION_ROLE_EMPHASIS = {
+  hiring_manager: {
+    focus:
+      "Leadership lens. Conversation about how the candidate operates, prioritizes, and grows a function under this hiring manager.",
+    emphasize: [
+      "management philosophy and style",
+      "team fit and collaboration patterns with leadership",
+      "project priorities and scope tradeoffs",
+      "calibration on the bar and what success looks like in 90 days",
+      "why this role and why now",
+      "expectations setting and 1:1 cadence",
+    ],
+    exclude: [
+      "deep technical or craft drill (skills_portfolio covers it)",
+      "peer-level collab scenarios (cross_functional covers it)",
+    ],
+    session_title_examples: [
+      "VP Engineering Hiring Manager",
+      "Director of Design Hiring Manager",
+      "Head of Product Hiring Manager",
+    ],
+  },
+  cross_functional: {
+    focus:
+      "Peer and stakeholder lens. Conversation with partners across PM, Engineering, Design, or Data about how the candidate operates across functions.",
+    emphasize: [
+      "collaboration patterns and rituals",
+      "scope negotiation",
+      "conflict resolution and disagreement handling",
+      "influence without authority",
+      "cross-team failure modes and what was learned",
+      "working with PM/Eng/Design/Data counterparts",
+    ],
+    exclude: [
+      "leadership philosophy (hiring_manager covers it)",
+      "pure technical or craft depth (skills_portfolio covers it)",
+    ],
+    session_title_examples: [
+      "Cross-functional Partner Round",
+      "PM and Eng Panel",
+      "Cross-team Collaboration Round",
+    ],
+  },
+  skills_portfolio: {
+    focus:
+      "Craft lens. Deep technical or portfolio walkthrough. Past artifacts, methodology, and decisions at the artifact level.",
+    emphasize: [
+      "technical or design depth",
+      "system design or design judgment",
+      "portfolio walkthrough structure",
+      "specific past project deep-dives",
+      "methodology and tradeoffs at the decision level",
+      "code or critique judgment",
+    ],
+    exclude: [
+      "people or leadership topics (hiring_manager covers it)",
+      "cross-team dynamics (cross_functional covers it)",
+    ],
+    session_title_examples: [
+      "Portfolio Deep Dive",
+      "Technical Design Round",
+      "Craft and Methodology Round",
+    ],
+  },
+  bar_raiser: {
+    focus:
+      "Calibration lens. Senior interviewer probing vision, principles, judgment under ambiguity, and intellectual horsepower.",
+    emphasize: [
+      "vision and long-horizon thinking",
+      "principles and tradeoffs",
+      "judgment under ambiguity",
+      "raw intellectual signal",
+      "alignment with the company's bar",
+      "hard-call past decisions",
+    ],
+    exclude: [
+      "tactical execution detail (skills_portfolio covers it)",
+      "mundane day-to-day collab (cross_functional covers it)",
+    ],
+    session_title_examples: [
+      "Bar Raiser Round",
+      "Senior Calibration Round",
+      "Director-level Bar Raiser",
+    ],
+  },
+} as const satisfies Record<
+  PrepSessionRole,
+  {
+    focus: string
+    emphasize: readonly string[]
+    exclude: readonly string[]
+    session_title_examples: readonly string[]
+  }
+>
+
 function buildUserPrompt(input: PrepInput): string {
   const resume = truncate(input.resume_text, RESUME_CHAR_CAP)
   const jd = truncate(input.jd_text, JD_CHAR_CAP)
@@ -405,7 +512,7 @@ function buildUserPrompt(input: PrepInput): string {
         ].join("\n")
       : "[INTERVIEWER]: (not provided)"
 
-  return [
+  const lines: string[] = [
     `[STAGE]: ${input.stage}`,
     `[COMPANY]: ${input.company_name}`,
     `[ROLE]: ${input.role_title}`,
@@ -418,6 +525,25 @@ function buildUserPrompt(input: PrepInput): string {
     "",
     "[JOB DESCRIPTION]",
     jd ?? "(not provided)",
+  ]
+
+  if (input.session_role) {
+    const cfg = SESSION_ROLE_EMPHASIS[input.session_role]
+    lines.push(
+      "",
+      "[SESSION]",
+      `Session role: ${input.session_role}`,
+      `Focus: ${cfg.focus}`,
+      "Emphasize in this session:",
+      ...cfg.emphasize.map((s) => `  - ${s}`),
+      "Defer (other sessions cover):",
+      ...cfg.exclude.map((s) => `  - ${s}`),
+      "Populate session_title in the output with a contextualized label fitting this role and the JD or company. Examples:",
+      ...cfg.session_title_examples.map((s) => `  - ${s}`)
+    )
+  }
+
+  lines.push(
     "",
     "[LATEST MESSAGE]",
     message ?? "(not provided)",
@@ -425,8 +551,10 @@ function buildUserPrompt(input: PrepInput): string {
     "[ADDITIONAL CONTEXT]",
     note ?? "(not provided)",
     "",
-    `Generate ${input.tier} prep. Call the submit_prep tool with the structured output.`,
-  ].join("\n")
+    `Generate ${input.tier} prep. Call the submit_prep tool with the structured output.`
+  )
+
+  return lines.join("\n")
 }
 
 function truncate(text: string | null, cap: number): string | null {
