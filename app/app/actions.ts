@@ -831,6 +831,7 @@ export async function generatePrepAction(
   // during test mode; production should require active subscription before
   // dispatching the Sonnet call.
 
+
   let prep: PrepOutput
   try {
     prep = await generatePrep({
@@ -853,6 +854,15 @@ export async function generatePrepAction(
     return { ok: false, error: message }
   }
 
+  // Server-authoritative role tag. The LLM tool schema does not include
+  // session_role; we set it here from the action input so it never depends
+  // on model behavior. Null for non-Full-Loop calls so JSONB filters can
+  // rely on the field's presence.
+  const persistedOutput: PrepOutput = {
+    ...prep,
+    session_role: parsed.data.session_role ?? null,
+  }
+
   const contextHash = buildContextHash({
     tier,
     stage: prepStage,
@@ -872,7 +882,7 @@ export async function generatePrepAction(
     tier,
     model_used: modelForTier(tier),
     context_hash: contextHash,
-    output: prep,
+    output: persistedOutput,
   })
   if (insertError) return { ok: false, error: insertError.message }
 
@@ -884,5 +894,194 @@ export async function generatePrepAction(
     .eq("id", parsed.data.job_id)
     .eq("user_id", user.id)
 
-  return { ok: true, prep }
+  return { ok: true, prep: persistedOutput }
+}
+
+// Phase 4d: state inquiry for Full Loop SessionTabs. Returns one entry per
+// "session key" (single + the four roles) classifying each as cached / stale
+// / empty. UI uses the result to render tab indicators and decide whether
+// to read from cache or trigger generation. No rate limit (read-only).
+//
+// Classification per key:
+//   - cached: a row's context_hash matches the hash recomputed from current
+//     job inputs + the key's session_role.
+//   - stale:  no hash match, but a row exists whose persisted
+//     output.session_role matches the key (null for "single", role string
+//     otherwise). Returns the most recent such row by created_at.
+//   - empty:  neither match.
+
+const getPrepStatesSchema = z.object({
+  job_id: z.string().uuid("Invalid job id"),
+  tier: prepTierSchema,
+})
+
+export type GetPrepStatesInput = z.input<typeof getPrepStatesSchema>
+
+export type PrepStateEntry = {
+  state: "empty" | "cached" | "stale"
+  output?: PrepOutput
+}
+
+export type PrepStatesMap = {
+  single: PrepStateEntry
+  hiring_manager: PrepStateEntry
+  cross_functional: PrepStateEntry
+  skills_portfolio: PrepStateEntry
+  bar_raiser: PrepStateEntry
+}
+
+export type GetPrepStatesResult =
+  | { ok: true; states: PrepStatesMap }
+  | { ok: false; error: string }
+
+type StateKey = keyof PrepStatesMap
+
+export async function getPrepStatesAction(
+  input: GetPrepStatesInput
+): Promise<GetPrepStatesResult> {
+  const parsed = getPrepStatesSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input",
+    }
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: "Not signed in" }
+
+  const [{ data: job, error: jobError }, { data: profile }] = await Promise.all(
+    [
+      supabase
+        .from("jobs")
+        .select("id, stage, jd_text, latest_message")
+        .eq("id", parsed.data.job_id)
+        .eq("user_id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("user_profiles")
+        .select("resume_text")
+        .eq("id", user.id)
+        .maybeSingle(),
+    ]
+  )
+  if (jobError) return { ok: false, error: jobError.message }
+  if (!job) return { ok: false, error: "Job not found" }
+
+  const [{ data: interviewerRow }, { data: noteRow }] = await Promise.all([
+    supabase
+      .from("job_context")
+      .select("content, metadata")
+      .eq("job_id", parsed.data.job_id)
+      .eq("user_id", user.id)
+      .eq("type", "interviewer")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("job_context")
+      .select("content")
+      .eq("job_id", parsed.data.job_id)
+      .eq("user_id", user.id)
+      .eq("type", "note")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ])
+
+  const interviewerMeta =
+    (interviewerRow?.metadata as
+      | { name?: string | null; title?: string | null; link?: string | null }
+      | null) ?? null
+  const interviewerName =
+    interviewerMeta?.name ?? interviewerRow?.content ?? null
+  const interviewerTitle = interviewerMeta?.title ?? null
+  const interviewerLink = interviewerMeta?.link ?? null
+  const noteText = noteRow?.content ?? null
+  const prepStage = stageKeyToPrepStage(job.stage as StageKey)
+
+  const baseHashInput = {
+    tier: parsed.data.tier,
+    stage: prepStage,
+    resume_text: profile?.resume_text ?? null,
+    jd_text: job.jd_text,
+    latest_message: job.latest_message,
+    interviewer_name: interviewerName,
+    interviewer_title: interviewerTitle,
+    interviewer_link: interviewerLink,
+    note_text: noteText,
+  } as const
+
+  const expectedHashes: Record<StateKey, string> = {
+    single: buildContextHash(baseHashInput),
+    hiring_manager: buildContextHash({
+      ...baseHashInput,
+      session_role: "hiring_manager",
+    }),
+    cross_functional: buildContextHash({
+      ...baseHashInput,
+      session_role: "cross_functional",
+    }),
+    skills_portfolio: buildContextHash({
+      ...baseHashInput,
+      session_role: "skills_portfolio",
+    }),
+    bar_raiser: buildContextHash({
+      ...baseHashInput,
+      session_role: "bar_raiser",
+    }),
+  }
+
+  const { data: rows, error: rowsError } = await supabase
+    .from("prep_versions")
+    .select("output, context_hash, created_at")
+    .eq("job_id", parsed.data.job_id)
+    .eq("user_id", user.id)
+    .eq("tier", parsed.data.tier)
+    .order("created_at", { ascending: false })
+  if (rowsError) return { ok: false, error: rowsError.message }
+
+  // Pre-extract the session_role coerced to null|string for each row so the
+  // stale-fallback comparison handles old rows that lack the field.
+  type Row = {
+    output: PrepOutput
+    context_hash: string | null
+    role: PrepSessionRole | null
+  }
+  const fetched: Row[] = (rows ?? []).map((r) => {
+    const output = r.output as PrepOutput
+    const role = (output.session_role ?? null) as PrepSessionRole | null
+    return {
+      output,
+      context_hash: r.context_hash as string | null,
+      role,
+    }
+  })
+
+  function classify(key: StateKey): PrepStateEntry {
+    const expected = expectedHashes[key]
+    const cachedRow = fetched.find((r) => r.context_hash === expected)
+    if (cachedRow) return { state: "cached", output: cachedRow.output }
+
+    const targetRole: PrepSessionRole | null =
+      key === "single" ? null : key
+    const staleRow = fetched.find((r) => r.role === targetRole)
+    if (staleRow) return { state: "stale", output: staleRow.output }
+
+    return { state: "empty" }
+  }
+
+  return {
+    ok: true,
+    states: {
+      single: classify("single"),
+      hiring_manager: classify("hiring_manager"),
+      cross_functional: classify("cross_functional"),
+      skills_portfolio: classify("skills_portfolio"),
+      bar_raiser: classify("bar_raiser"),
+    },
+  }
 }

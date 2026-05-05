@@ -94,6 +94,14 @@ export const prepOutputSchema = z.object({
   // session prep (Screen, Hiring Manager, etc.) leaves it unset.
   session_title: z.string().nullable().optional(),
 
+  // Phase 4d: server-authoritative role tag, written by generatePrepAction
+  // after the LLM returns. Identifies which Full Loop session a row belongs
+  // to so getPrepStatesAction can classify rows for stale fallback lookup.
+  // Null for non-Full-Loop ("single") generations. Old rows lacking the
+  // field validate via .optional() and are treated as "single" by the
+  // state-inquiry path.
+  session_role: z.enum(PREP_SESSION_ROLES).nullable().optional(),
+
   purpose: z.object({
     headline: z.string(),
     summary: z.string(),
