@@ -270,11 +270,29 @@ async function generateOnce(
     throw err
   }
 
+  // PATCH 6 DIAGNOSTIC: log stop_reason + usage on every Deep call so we
+  // can see if max_tokens is being hit before the questions_*_ask fields
+  // are emitted. Cheap to leave on; remove once root cause is locked.
+  // eslint-disable-next-line no-console
+  console.log("[generatePrep] response", {
+    tier: input.tier,
+    model,
+    max_tokens_param: maxTokens,
+    stop_reason: response.stop_reason,
+    usage: response.usage,
+    content_block_types: response.content.map((b) => b.type),
+  })
+
   const toolUse = response.content.find(
     (block): block is Anthropic.Messages.ToolUseBlock =>
       block.type === "tool_use" && block.name === "submit_prep"
   )
   if (!toolUse) {
+    // eslint-disable-next-line no-console
+    console.error(
+      "[generatePrep] no tool_use block. Full content blocks:",
+      JSON.stringify(response.content, null, 2)
+    )
     throw new Error("Anthropic did not return a submit_prep tool call")
   }
 
@@ -283,6 +301,20 @@ async function generateOnce(
     const issues = result.error.issues
       .map((i) => `${i.path.join(".")}: ${i.message}`)
       .join("; ")
+    // PATCH 6 DIAGNOSTIC: dump the raw tool input + which top-level keys
+    // arrived. If stop_reason above was "max_tokens" AND the keys list is
+    // missing questions_they_ask / questions_you_ask, root cause is the
+    // max_tokens cap, not a schema bug.
+    const rawInput = toolUse.input as Record<string, unknown>
+    // eslint-disable-next-line no-console
+    console.error(
+      "[generatePrep] validation failed. issues:",
+      issues,
+      "\ntop-level keys returned:",
+      Object.keys(rawInput),
+      "\nraw input (truncated to 4000 chars):",
+      JSON.stringify(rawInput, null, 2).slice(0, 4000)
+    )
     throw new PrepValidationError(issues)
   }
 
@@ -320,10 +352,19 @@ export async function generatePrep(input: PrepInput): Promise<PrepOutput> {
       // the original error surfaces to the caller's error UI.
       // eslint-disable-next-line no-console
       console.warn(
-        "[generatePrep] first attempt failed validation, retrying:",
+        "[generatePrep] first attempt failed validation, retrying with hint:",
         err.issues
       )
-      return await generateOnce(client, input, RETRY_HINT)
+      try {
+        return await generateOnce(client, input, RETRY_HINT)
+      } catch (retryErr) {
+        // eslint-disable-next-line no-console
+        console.error(
+          "[generatePrep] retry also failed:",
+          retryErr instanceof PrepValidationError ? retryErr.issues : retryErr
+        )
+        throw retryErr
+      }
     }
     throw err
   }
