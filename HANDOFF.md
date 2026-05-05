@@ -26,7 +26,7 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
-- Last phase shipped: **Phase 4c-4 closed at `43f651e` (patches 1-9 rolled in). Patch 10 (Background editable inline from InputsWidget) at `<hash>`.** Patch 9 removed the diagnostic logs added in a242b8f and during patch 7. Detail for every patch lives in the archive section below.
+- Last phase shipped: **Phase 4c-4 closed at `43f651e` (patches 1-9 rolled in). Patch 10 (Background editable inline from InputsWidget) at `f6f1b11`.** Patch 9 removed the diagnostic logs added in a242b8f and during patch 7. Detail for every patch lives in the archive section below.
 - Date: 2026-05-05
 - Project status: ready for Phase 4d (multi-session Full Loop, Option C+)
 
