@@ -40,12 +40,12 @@ ROUND TAXONOMY
 - bar_raiser: senior interviewer probing vision, judgment, and calibration on the company bar. UNCOMMON outside Amazon-influenced loops; do NOT assume present.
 
 RULES
-1. Only emit a role in detected_rounds if it is clearly evidenced in the message OR strongly implied by the JD. Do not pad.
-2. For each detected role, extract a contextualized label that fits the role and the company/team (e.g., "Engineering Hiring Manager", "Design Bar Raiser", "Cross-functional Partner Round").
-3. Roles not detected go in missing_roles.
-4. Rounds that are described but do NOT map to any of the 4 standard roles go in extra_rounds (one short string each, do not lose them).
-5. Multiple detected rounds may share the same role; emit each separately. The downstream mapper picks the highest-confidence entry for that role.
-6. confidence is 0.0 to 1.0 per detected round. overall_confidence reflects the strength of the entire parse.
+Default assumption: a standard Full Loop has all 4 standard rounds. If the message doesn't mention a role and doesn't exclude it, leave it out of BOTH detected_rounds and missing_roles. The mapping layer will treat unmentioned roles as enabled by default.
+
+- detected_rounds: roles EXPLICITLY mentioned in the recruiter's message or strongly implied by the JD/role context. Use the recruiter's exact phrasing for the label when available; otherwise use a contextualized label based on the role and the JD.
+- missing_roles: ONLY include a role here if the recruiter EXPLICITLY EXCLUDES that round type. Examples of explicit exclusion: "we don't have a Bar Raiser round", "this loop skips the cross-functional panel", "we go straight from HM to offer". DO NOT add a role to missing_roles just because the message doesn't mention it. Silence is NOT exclusion.
+- extra_rounds: rounds described in the message that don't fit any of the 4 standard role types (e.g., take-home assignment, live coding session, system design panel that doesn't map to skills_portfolio).
+- overall_confidence: "high" when the message clearly enumerates rounds; "medium" when rounds are implied but not enumerated; "low" when it's an intro/scheduling message with little round detail.
 
 OUTPUT
 Use the parse_rounds tool. No prose response.`
