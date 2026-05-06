@@ -27,7 +27,7 @@ export default async function AppPage({
     supabase
       .from("jobs")
       .select(
-        "id, company_name, role_title, tc, state, stage, source_url, jd_text, latest_message"
+        "id, company_name, role_title, tc, state, stage, source_url, jd_text, latest_message, full_loop_session_config"
       )
       .eq("user_id", user.id)
       .order("created_at", { ascending: false }),

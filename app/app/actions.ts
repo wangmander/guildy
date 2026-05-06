@@ -136,7 +136,7 @@ export async function moveJobStageAction(
 
   const { data: job, error: fetchError } = await supabase
     .from("jobs")
-    .select("id, stage, state, full_loop_session_config")
+    .select("id, stage, state")
     .eq("id", parsed.data.job_id)
     .eq("user_id", user.id)
     .single()
@@ -170,39 +170,6 @@ export async function moveJobStageAction(
     to_stage: toStage,
     note: parsed.data.source,
   })
-
-  // Phase 4f: when transitioning into Full Loop without an existing config,
-  // parse the recruiter context to populate full_loop_session_config.
-  // stageKeyToPrepStage maps both interview_loop and final → interview_loop,
-  // so the check covers both DB stages naturally. Parser failures must NOT
-  // block the stage transition — caught + logged, return success regardless.
-  const enteringFullLoop =
-    stageKeyToPrepStage(toStage as StageKey) === "interview_loop"
-  if (enteringFullLoop && job.full_loop_session_config === null) {
-    // eslint-disable-next-line no-console
-    console.log("parseFullLoopRoundsAction trigger", {
-      jobId: parsed.data.job_id,
-      reason: "stage_into_full_loop",
-    })
-    try {
-      const parseResult = await parseFullLoopRoundsAction({
-        job_id: parsed.data.job_id,
-      })
-      if (!parseResult.ok) {
-        // eslint-disable-next-line no-console
-        console.error("parseFullLoopRoundsAction failed", {
-          jobId: parsed.data.job_id,
-          error: parseResult.error,
-        })
-      }
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error("parseFullLoopRoundsAction failed", {
-        jobId: parsed.data.job_id,
-        error: err instanceof Error ? err.message : String(err),
-      })
-    }
-  }
 
   revalidatePath("/app")
   return { ok: true }

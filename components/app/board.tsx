@@ -1,9 +1,20 @@
 "use client"
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react"
 
-import { moveJobStageAction } from "@/app/app/actions"
+import {
+  moveJobStageAction,
+  parseFullLoopRoundsAction,
+} from "@/app/app/actions"
+import type { FullLoopSessionConfig } from "@/lib/ai/prep-types"
 import {
   columnToWriteStage,
   leftOfColumn,
@@ -28,6 +39,7 @@ export type JobRow = {
   source_url: string | null
   jd_text: string | null
   latest_message: string | null
+  full_loop_session_config: FullLoopSessionConfig | null
 }
 
 export type InterviewerInfo = {
@@ -74,6 +86,51 @@ export function Board({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlJobId])
+
+  // Phase 4f patch 3.5: client-side parser trigger. The earlier server-side
+  // hookup inside moveJobStageAction blocked the drag-drop response by ~3s.
+  // Now the card lands instantly; on next render we scan jobs needing a
+  // parse and fire the action without awaiting. parseFullLoopRoundsAction
+  // calls revalidatePath('/app') on success, which refreshes the jobs prop
+  // with the populated config and naturally exits the trigger condition on
+  // the subsequent render.
+  //
+  // parserFiredJobsRef guards against re-fires when the jobs array reference
+  // changes but the underlying state for a given job hasn't progressed.
+  // Reload resets the ref; if the parser failed, the second attempt fires.
+  const parserFiredJobsRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    for (const job of jobs) {
+      const inFullLoop =
+        job.stage === "final" || job.stage === "interview_loop"
+      if (!inFullLoop) continue
+      if (job.full_loop_session_config !== null) continue
+      if (parserFiredJobsRef.current.has(job.id)) continue
+      parserFiredJobsRef.current.add(job.id)
+      // eslint-disable-next-line no-console
+      console.log("parseFullLoopRoundsAction trigger", {
+        jobId: job.id,
+        reason: "client_full_loop_no_config",
+      })
+      parseFullLoopRoundsAction({ job_id: job.id })
+        .then((res) => {
+          if (!res.ok) {
+            // eslint-disable-next-line no-console
+            console.error("parseFullLoopRoundsAction failed", {
+              jobId: job.id,
+              error: res.error,
+            })
+          }
+        })
+        .catch((err) => {
+          // eslint-disable-next-line no-console
+          console.error("parseFullLoopRoundsAction failed", {
+            jobId: job.id,
+            error: err instanceof Error ? err.message : String(err),
+          })
+        })
+    }
+  }, [jobs])
 
   const open = useCallback(
     (jobId: string) => {
