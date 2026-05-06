@@ -5,6 +5,7 @@ import { RefreshCw, Sparkles } from "lucide-react"
 import type { PrepStatesMap, PrepStateEntry } from "@/app/app/actions"
 import {
   PREP_SESSION_ROLES,
+  type FullLoopSessionConfig,
   type PrepOutput,
   type PrepSessionRole,
   type PrepTier,
@@ -28,6 +29,7 @@ const QUICK_POSITIONING_VISIBLE_FRAMES = 2
 
 type Props = {
   stage: StageKey
+  sessionConfig: FullLoopSessionConfig
   statesMap: PrepStatesMap | null
   generatingRoles: Set<string>
   selectedRole: PrepSessionRole
@@ -66,6 +68,7 @@ function stageHeading(stage: StageKey): string {
 
 export function PrepCanvas({
   stage,
+  sessionConfig,
   statesMap,
   generatingRoles,
   selectedRole,
@@ -100,6 +103,9 @@ export function PrepCanvas({
     return { role, state }
   })
 
+  const noneEnabled =
+    fullLoop && !PREP_SESSION_ROLES.some((r) => sessionConfig[r].enabled)
+
   const triggerGenerate = () => {
     onGenerate(fullLoop ? selectedRole : null)
   }
@@ -120,29 +126,40 @@ export function PrepCanvas({
         />
       </div>
 
-      {fullLoop ? (
-        <div className="mt-4">
-          <SessionTabs
-            sessions={sessions}
-            selectedRole={selectedRole}
-            onSelect={onSelectRole}
-          />
+      {noneEnabled ? (
+        <div className="mt-6 rounded-xl border border-dashed border-black/10 bg-white p-6 text-center">
+          <p className="text-sm text-gray-500">
+            No rounds configured. Customize rounds to set up your loop.
+          </p>
         </div>
-      ) : null}
+      ) : (
+        <>
+          {fullLoop ? (
+            <div className="mt-4">
+              <SessionTabs
+                sessions={sessions}
+                sessionConfig={sessionConfig}
+                selectedRole={selectedRole}
+                onSelect={onSelectRole}
+              />
+            </div>
+          ) : null}
 
-      <CanvasBody
-        statesMap={statesMap}
-        currentEntry={currentEntry}
-        currentOutput={currentOutput}
-        isGenerating={isGenerating}
-        error={error}
-        hasResume={hasResume}
-        hasJd={hasJd}
-        tier={tier}
-        onGenerate={triggerGenerate}
-        onUpgrade={onUpgrade}
-        onAddJd={onAddJd}
-      />
+          <CanvasBody
+            statesMap={statesMap}
+            currentEntry={currentEntry}
+            currentOutput={currentOutput}
+            isGenerating={isGenerating}
+            error={error}
+            hasResume={hasResume}
+            hasJd={hasJd}
+            tier={tier}
+            onGenerate={triggerGenerate}
+            onUpgrade={onUpgrade}
+            onAddJd={onAddJd}
+          />
+        </>
+      )}
     </div>
   )
 }

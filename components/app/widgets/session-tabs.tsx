@@ -1,8 +1,12 @@
 "use client"
 
-import { useRef } from "react"
+import { useMemo, useRef } from "react"
 
-import { PREP_SESSION_ROLES, type PrepSessionRole } from "@/lib/ai/prep-types"
+import {
+  PREP_SESSION_ROLES,
+  type FullLoopSessionConfig,
+  type PrepSessionRole,
+} from "@/lib/ai/prep-types"
 
 export type SessionTabState = "empty" | "generating" | "cached" | "stale"
 
@@ -13,19 +17,14 @@ export type SessionTabEntry = {
 
 export type SessionTabsProps = {
   sessions: SessionTabEntry[]
+  sessionConfig: FullLoopSessionConfig
   selectedRole: PrepSessionRole
   onSelect: (role: PrepSessionRole) => void
 }
 
-const ROLE_LABELS: Record<PrepSessionRole, string> = {
-  hiring_manager: "Hiring Manager",
-  cross_functional: "Cross-functional",
-  skills_portfolio: "Skills/Portfolio",
-  bar_raiser: "Bar Raiser",
-}
-
 export function SessionTabs({
   sessions,
+  sessionConfig,
   selectedRole,
   onSelect,
 }: SessionTabsProps) {
@@ -33,6 +32,13 @@ export function SessionTabs({
 
   const stateByRole = new Map<PrepSessionRole, SessionTabState>()
   for (const s of sessions) stateByRole.set(s.role, s.state)
+
+  // Render order is canonical (PREP_SESSION_ROLES) but filtered to only
+  // enabled roles. The visible list drives the arrow-key index space too.
+  const visibleRoles = useMemo(
+    () => PREP_SESSION_ROLES.filter((r) => sessionConfig[r].enabled),
+    [sessionConfig]
+  )
 
   // Manual activation on arrow keys — moves focus only. Each tab can fire
   // an LLM generation when activated, so accidental keyboard nav must not
@@ -44,12 +50,15 @@ export function SessionTabs({
   ) => {
     if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
       e.preventDefault()
+      const len = visibleRoles.length
+      if (len === 0) return
       const dir = e.key === "ArrowRight" ? 1 : -1
-      const len = PREP_SESSION_ROLES.length
       const next = (index + dir + len) % len
       tabRefs.current[next]?.focus()
     }
   }
+
+  if (visibleRoles.length === 0) return null
 
   return (
     <div
@@ -57,7 +66,7 @@ export function SessionTabs({
       aria-label="Full Loop sessions"
       className="flex flex-nowrap items-center gap-1.5 whitespace-nowrap border-b border-gray-100"
     >
-      {PREP_SESSION_ROLES.map((role, index) => {
+      {visibleRoles.map((role, index) => {
         const state = stateByRole.get(role) ?? "empty"
         const isSelected = role === selectedRole
 
@@ -91,7 +100,7 @@ export function SessionTabs({
                 className="size-1.5 rounded-full bg-amber-500"
               />
             ) : null}
-            {ROLE_LABELS[role]}
+            {sessionConfig[role].label}
           </button>
         )
       })}

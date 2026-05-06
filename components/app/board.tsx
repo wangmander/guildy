@@ -203,6 +203,7 @@ export function Board({
           jd_text: j.jd_text,
           latest_message: j.latest_message,
           stage: j.stage,
+          full_loop_session_config: j.full_loop_session_config,
         }
       })()
     : null

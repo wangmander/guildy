@@ -1,6 +1,12 @@
 "use client"
 
-import { useCallback, useEffect, useState, useTransition } from "react"
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+} from "react"
 import { X } from "lucide-react"
 
 import {
@@ -8,10 +14,13 @@ import {
   getPrepStatesAction,
   type PrepStatesMap,
 } from "@/app/app/actions"
-import type {
-  PrepOutput,
-  PrepSessionRole,
-  PrepTier,
+import {
+  PREP_SESSION_ROLES,
+  resolveFullLoopSessionConfig,
+  type FullLoopSessionConfig,
+  type PrepOutput,
+  type PrepSessionRole,
+  type PrepTier,
 } from "@/lib/ai/prep-types"
 import type { StageKey } from "@/lib/stages"
 
@@ -30,6 +39,7 @@ export type PrepJob = {
   jd_text: string | null
   latest_message: string | null
   stage: StageKey
+  full_loop_session_config: FullLoopSessionConfig | null
 }
 
 type Props = {
@@ -58,6 +68,18 @@ const SINGLE_GENERATING_KEY = "_single"
 // the SessionTabs strip and the per-session generate flow.
 function isFullLoopStage(stage: StageKey | undefined): boolean {
   return stage === "interview_loop" || stage === "final"
+}
+
+// First role marked enabled in the resolved config. Falls back to
+// "hiring_manager" when zero roles are enabled (defensive — UI also handles
+// the zero-enabled case via the empty-state branch in PrepCanvas).
+function firstEnabledRole(
+  config: FullLoopSessionConfig
+): PrepSessionRole {
+  for (const role of PREP_SESSION_ROLES) {
+    if (config[role].enabled) return role
+  }
+  return "hiring_manager"
 }
 
 export type InputsExpansionSection =
@@ -150,6 +172,14 @@ export function PrepOverlay({
     }
   }, [])
 
+  // Phase 4f: resolve the per-job session config once per render. null +
+  // partial DB rows are filled with DEFAULT_FULL_LOOP_SESSION_CONFIG, so
+  // every consumer can treat sessionConfig as authoritative.
+  const sessionConfig = useMemo(
+    () => resolveFullLoopSessionConfig(job?.full_loop_session_config ?? null),
+    [job?.full_loop_session_config]
+  )
+
   // Reset session state whenever a different job opens or tier flips. Cleared
   // map produces a clean LoadingSkeleton on first paint of the new context.
   useEffect(() => {
@@ -158,13 +188,28 @@ export function PrepOverlay({
     setGeneratingRoles(new Set())
   }, [job?.id, tier])
 
-  // Reset tier and inputs widget on job change. Kept separate so it doesn't
-  // fight the states-fetch effect.
+  // Reset tier and inputs widget on job change. selectedRole defaults to
+  // the first enabled role in this job's config so jobs with custom loops
+  // open on a sensible tab.
   useEffect(() => {
     setTier("quick")
-    setSelectedRole("hiring_manager")
+    setSelectedRole(firstEnabledRole(sessionConfig))
     setInputsExpansion({ section: null, pulseToken: 0 })
-  }, [job?.id])
+    // sessionConfig depends on job.full_loop_session_config, which can
+    // refresh in place when prompt 5's Customize Rounds saves. Keying on
+    // job?.id only would miss that — also include sessionConfig so an
+    // in-place config edit re-evaluates the default.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job?.id, sessionConfig])
+
+  // If the currently selected role becomes disabled (config edit), shift to
+  // the first enabled role. setState bails on identical values so this is
+  // safe to fire on every config change.
+  useEffect(() => {
+    if (!sessionConfig[selectedRole].enabled) {
+      setSelectedRole(firstEnabledRole(sessionConfig))
+    }
+  }, [sessionConfig, selectedRole])
 
   // Fetch the 5-key states map. Re-fires on job/tier change (loading flash)
   // and silently in the background when input props change (resume, JD, etc.)
@@ -312,6 +357,7 @@ export function PrepOverlay({
               <main className="pointer-events-auto rounded-2xl border border-black/5 bg-[#F8F9FA] shadow-sm md:max-h-[calc(100dvh-3rem)] md:overflow-y-auto">
                 <PrepCanvas
                   stage={job.stage}
+                  sessionConfig={sessionConfig}
                   statesMap={statesMap}
                   generatingRoles={generatingRoles}
                   selectedRole={selectedRole}
