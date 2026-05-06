@@ -37,7 +37,7 @@ ROUND TAXONOMY
 - hiring_manager: leadership and team-fit conversation, usually a 1:1 with the hiring manager.
 - cross_functional: peer or stakeholder round with PM, engineering, design, or data partners.
 - skills_portfolio: technical or craft round (system design, coding, portfolio walkthrough, take-home review).
-- bar_raiser: senior interviewer probing vision, judgment, and calibration on the company bar. UNCOMMON outside Amazon-influenced loops; do NOT assume present.
+- bar_raiser: senior interviewer probing vision, judgment, and calibration on the company bar. More common at Amazon-influenced shops than elsewhere; default to enabled unless the message explicitly excludes it.
 
 RULES
 Default assumption: a standard Full Loop has all 4 standard rounds. If the message doesn't mention a role and doesn't exclude it, leave it out of BOTH detected_rounds and missing_roles. The mapping layer will treat unmentioned roles as enabled by default.
@@ -230,10 +230,6 @@ function mapParserOutputToConfig(
     }
     // Parser didn't list this role in either bucket — unexpected. Default
     // to enabled with the canonical label so the UI keeps working.
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[parseFullLoopRounds] role ${role} appeared in neither detected nor missing; defaulting to enabled`
-    )
     result[role] = {
       enabled: true,
       label: ROLE_LABELS[role],
