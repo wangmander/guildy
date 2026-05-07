@@ -111,6 +111,11 @@ export function PrepCanvas({
   const noneEnabled =
     fullLoop && !PREP_SESSION_ROLES.some((r) => sessionConfig[r].enabled)
 
+  // Patch 5.1: any in-flight generation locks the SessionTabs strip; the
+  // current-role gen locks the TierSelector. Both prevent the stuck-loading
+  // state caused by switching tier or session mid-call.
+  const isAnyGenerating = generatingRoles.size > 0
+
   const triggerGenerate = () => {
     onGenerate(fullLoop ? selectedRole : null)
   }
@@ -128,6 +133,7 @@ export function PrepCanvas({
           tier={tier}
           onTierChange={onTierChange}
           onUpgrade={onUpgrade}
+          disabled={isGenerating}
         />
       </div>
 
@@ -154,6 +160,7 @@ export function PrepCanvas({
                 sessionConfig={sessionConfig}
                 selectedRole={selectedRole}
                 onSelect={onSelectRole}
+                disabled={isAnyGenerating}
               />
               <button
                 type="button"
@@ -198,10 +205,12 @@ function TierSelector({
   tier,
   onTierChange,
   onUpgrade,
+  disabled = false,
 }: {
   tier: PrepTier
   onTierChange: (tier: PrepTier) => void
   onUpgrade: () => void
+  disabled?: boolean
 }) {
   const compartmentBase =
     "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-colors"
@@ -209,6 +218,9 @@ function TierSelector({
     "bg-white text-[#1C1E21] shadow-sm"
   const compartmentUnselected =
     "text-gray-500 hover:text-[#1C1E21]"
+  const lockedSuffix = disabled
+    ? " cursor-not-allowed opacity-60"
+    : ""
 
   return (
     <div
@@ -220,11 +232,17 @@ function TierSelector({
         type="button"
         role="tab"
         aria-selected={tier === "quick"}
-        onClick={() => onTierChange("quick")}
+        aria-disabled={disabled}
+        tabIndex={disabled ? -1 : 0}
+        onClick={() => {
+          if (disabled) return
+          onTierChange("quick")
+        }}
         className={
           compartmentBase +
           " " +
-          (tier === "quick" ? compartmentSelected : compartmentUnselected)
+          (tier === "quick" ? compartmentSelected : compartmentUnselected) +
+          lockedSuffix
         }
       >
         <span className="inline-flex items-center rounded bg-gray-200/70 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-gray-700">
@@ -240,9 +258,14 @@ function TierSelector({
       <div
         role="tab"
         aria-selected={tier === "deep"}
-        tabIndex={0}
-        onClick={() => onTierChange("deep")}
+        aria-disabled={disabled}
+        tabIndex={disabled ? -1 : 0}
+        onClick={() => {
+          if (disabled) return
+          onTierChange("deep")
+        }}
         onKeyDown={(e) => {
+          if (disabled) return
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault()
             onTierChange("deep")
@@ -250,8 +273,9 @@ function TierSelector({
         }}
         className={
           compartmentBase +
-          " cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4E3BDD]/40 " +
-          (tier === "deep" ? compartmentSelected : compartmentUnselected)
+          " focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4E3BDD]/40 " +
+          (tier === "deep" ? compartmentSelected : compartmentUnselected) +
+          (disabled ? " cursor-not-allowed opacity-60" : " cursor-pointer")
         }
       >
         {tier === "quick" ? (
@@ -350,7 +374,11 @@ function StaleBanner({
         <button
           type="button"
           onClick={onRegenerate}
-          className="inline-flex h-8 items-center rounded-md bg-[#482C4C] px-3 text-xs font-medium text-white transition-opacity hover:opacity-90"
+          className={
+            tier === "deep"
+              ? "inline-flex h-8 items-center rounded-md bg-[#4E3BDD] px-3 text-xs font-medium text-white transition-colors hover:bg-[#4332C2]"
+              : "inline-flex h-8 items-center rounded-md bg-[#482C4C] px-3 text-xs font-medium text-white transition-opacity hover:opacity-90"
+          }
         >
           Regenerate {tier === "deep" ? "Deep" : "Quick"}
         </button>
@@ -403,7 +431,11 @@ function EmptyState({
               ? "Add your resume in onboarding before running prep."
               : undefined
           }
-          className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#482C4C] px-5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          className={
+            tier === "deep"
+              ? "mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#4E3BDD] px-5 text-sm font-medium text-white transition-colors hover:bg-[#4332C2] disabled:cursor-not-allowed disabled:opacity-50"
+              : "mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#482C4C] px-5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          }
         >
           <Sparkles className="size-4" />
           Generate {tierLabel}

@@ -62,7 +62,7 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
-- Last phase shipped: **Phase 5 at `9d1f26c`** — Anthropic `web_search_20250305` server-tool wired inline into Deep Prep generation. Hard MUST directive in a separate cached system block forces Sonnet to ground company-specific positioning and risks before emitting `submit_prep`. Quick path byte-identical. Phase 4e (kanban polish), Phase 4f (multi-session config), and Phase 4d (multi-session core) shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
+- Last phase shipped: **Phase 5 at `9d1f26c`** (patch 5.1 at `<commit-hash>`) — Anthropic `web_search_20250305` server-tool wired inline into Deep Prep generation. Hard MUST directive in a separate cached system block forces Sonnet to ground company-specific positioning and risks before emitting `submit_prep`. Quick path byte-identical. Phase 4e (kanban polish), Phase 4f (multi-session config), and Phase 4d (multi-session core) shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
 - Date: 2026-05-07
 - Project status: ready for Phase 6.5 (Termly + 3 PostHog events + 3-job smoke)
 
@@ -111,6 +111,12 @@ Priority order:
 12. 10-job QA pass with edge cases (international comp, multiple offers, withdrawn jobs)
 
 ## Phase 4c–5 shipped — archive
+
+### Phase 5 patch 5.1 — DONE (TierSelector + SessionTabs lock during gen, Deep Prep button blurple)
+- `components/app/widgets/prep-canvas.tsx` `TierSelector` accepts new `disabled?: boolean`. When true, both compartments get `aria-disabled`, `tabIndex=-1`, no-op click + onKeyDown handlers, `cursor-not-allowed opacity-60`. PrepCanvas passes `disabled={isGenerating}` (current-role gen state). The Upgrade chip nested in the Deep compartment stays interactive (paywall flow is independent of generation); inherits the parent's opacity fade.
+- `components/app/widgets/session-tabs.tsx` accepts new `disabled?: boolean` prop. When true, tablist gets opacity-60 + cursor-not-allowed, every tab button gets `aria-disabled`, `tabIndex=-1`, no-op click, hover styles suppressed; arrow-key focus cycling also suppressed. PrepCanvas passes `disabled={isAnyGenerating}` (any role generating, not just current — switching tabs mid-other-gen would also strand the loading state).
+- EmptyState Generate button + StaleBanner Regenerate button: tier-conditional className. `tier === "deep"` uses `bg-[#4E3BDD] hover:bg-[#4332C2]` (matches DEEP chip palette and the standardized primary CTA from 4c-4 patch 1). `tier === "quick"` keeps prior `bg-[#482C4C] hover:opacity-90` byte-identical. Same shape, same padding, same icon, same font.
+- TypeScript clean. Banned-copy clean.
 
 ### Phase 5 — DONE (Anthropic web_search grounding for Deep Prep)
 - `lib/ai/generate-prep.ts`: Deep tier now passes a tier-aware tools array (`submit_prep` + `web_search_20250305` server-tool with `max_uses: 3`) and `tool_choice: { type: "auto" }` so Sonnet can interleave web_search calls with the terminal `submit_prep` emission. Quick path byte-identical: same single `submit_prep` tool, same forced `tool_choice`.

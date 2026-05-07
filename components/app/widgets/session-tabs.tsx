@@ -20,6 +20,11 @@ export type SessionTabsProps = {
   sessionConfig: FullLoopSessionConfig
   selectedRole: PrepSessionRole
   onSelect: (role: PrepSessionRole) => void
+  // Patch 5.1: when any role is generating in the parent, the strip locks
+  // (no click, no key activation, opacity-60). Switching tabs mid-gen would
+  // strand the parent in a stuck-loading state since the parent's
+  // generatingRoles set doesn't unwind on tab switch.
+  disabled?: boolean
 }
 
 export function SessionTabs({
@@ -27,6 +32,7 @@ export function SessionTabs({
   sessionConfig,
   selectedRole,
   onSelect,
+  disabled = false,
 }: SessionTabsProps) {
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
 
@@ -43,11 +49,13 @@ export function SessionTabs({
   // Manual activation on arrow keys — moves focus only. Each tab can fire
   // an LLM generation when activated, so accidental keyboard nav must not
   // call onSelect. Enter and Space fall through to the native button
-  // onClick handler.
+  // onClick handler. When disabled, arrow-key focus shift is suppressed
+  // alongside click activation.
   const onKeyDown = (
     e: React.KeyboardEvent<HTMLButtonElement>,
     index: number
   ) => {
+    if (disabled) return
     if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
       e.preventDefault()
       const len = visibleRoles.length
@@ -64,7 +72,9 @@ export function SessionTabs({
     <div
       role="tablist"
       aria-label="Full Loop sessions"
-      className="flex flex-nowrap items-center gap-1.5 whitespace-nowrap border-b border-gray-100"
+      className={`flex flex-nowrap items-center gap-1.5 whitespace-nowrap border-b border-gray-100 ${
+        disabled ? "cursor-not-allowed opacity-60" : ""
+      }`}
     >
       {visibleRoles.map((role, index) => {
         const state = stateByRole.get(role) ?? "empty"
@@ -72,7 +82,9 @@ export function SessionTabs({
 
         const variant = isSelected
           ? "bg-white text-[#1C1E21] font-medium shadow-sm"
-          : `${state === "empty" ? "text-gray-400" : "text-gray-700"} hover:bg-gray-50 font-normal`
+          : disabled
+            ? `${state === "empty" ? "text-gray-400" : "text-gray-700"} font-normal`
+            : `${state === "empty" ? "text-gray-400" : "text-gray-700"} hover:bg-gray-50 font-normal`
 
         return (
           <button
@@ -83,10 +95,16 @@ export function SessionTabs({
             type="button"
             role="tab"
             aria-selected={isSelected}
-            tabIndex={isSelected ? 0 : -1}
-            onClick={() => onSelect(role)}
+            aria-disabled={disabled}
+            tabIndex={disabled ? -1 : isSelected ? 0 : -1}
+            onClick={() => {
+              if (disabled) return
+              onSelect(role)
+            }}
             onKeyDown={(e) => onKeyDown(e, index)}
-            className={`inline-flex items-center gap-1.5 rounded-t-md px-3 py-1.5 text-xs transition-colors ${variant}`}
+            className={`inline-flex items-center gap-1.5 rounded-t-md px-3 py-1.5 text-xs transition-colors ${variant}${
+              disabled ? " cursor-not-allowed" : ""
+            }`}
           >
             {state === "generating" ? (
               <span
