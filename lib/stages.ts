@@ -92,12 +92,18 @@ export function rightOfColumn(col: UiColumnKey): UiColumnKey | null {
   return ACTIVE_COLUMNS[i + 1]
 }
 
-export type WriteStage = "screen" | "hiring_manager" | "final" | "offer"
+export type WriteStage =
+  | "applied"
+  | "screen"
+  | "hiring_manager"
+  | "final"
+  | "offer"
 
 // Canonical DB stage written when a card lands in a UI column via arrow or
 // drag. Full Loop reads accept both interview_loop and final, but writes
-// always use final.
-export function columnToWriteStage(col: UiColumnKey): WriteStage | null {
+// always use final. "applied" is a writable target via drag-into-Applied;
+// the action layer flips state to passive when this stage is written.
+export function columnToWriteStage(col: UiColumnKey): WriteStage {
   switch (col) {
     case "screen":
       return "screen"
@@ -108,6 +114,6 @@ export function columnToWriteStage(col: UiColumnKey): WriteStage | null {
     case "offer":
       return "offer"
     case "applied":
-      return null
+      return "applied"
   }
 }

@@ -16,19 +16,53 @@ type Props = {
   label: string
   jobs: JobRow[]
   isSearchActive: boolean
+  draggedJobId: string | null
   onJobOpen: (jobId: string) => void
+  onJobDrop: (jobId: string) => void
+  onDragStart: (jobId: string) => void
+  onDragEnd: () => void
 }
 
-export function AppliedColumn({ label, jobs, isSearchActive, onJobOpen }: Props) {
+export function AppliedColumn({
+  label,
+  jobs,
+  isSearchActive,
+  draggedJobId,
+  onJobOpen,
+  onJobDrop,
+  onDragStart,
+  onDragEnd,
+}: Props) {
   const [open, setOpen] = useState(false)
   const [activatingJob, setActivatingJob] = useState<JobRow | null>(null)
+  const [isOver, setIsOver] = useState(false)
   const count = jobs.length
   const ghostCount = count === 0 && !isSearchActive ? 2 : 0
+  const canAcceptDrop = draggedJobId !== null
 
   return (
     <div
+      onDragOver={(e) => {
+        if (!canAcceptDrop) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = "move"
+        if (!isOver) setIsOver(true)
+      }}
+      onDragLeave={(e) => {
+        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
+        if (isOver) setIsOver(false)
+      }}
+      onDrop={(e) => {
+        if (!canAcceptDrop) return
+        e.preventDefault()
+        const jobId = e.dataTransfer.getData("text/plain")
+        setIsOver(false)
+        if (jobId) onJobDrop(jobId)
+      }}
       className={cn(
-        "flex min-w-[260px] shrink-0 snap-start flex-col rounded-xl border p-3 lg:min-w-0 lg:shrink"
+        "flex min-w-[260px] shrink-0 snap-start flex-col rounded-xl border p-3 transition-colors lg:min-w-0 lg:shrink",
+        canAcceptDrop && isOver && "border-[#482C4C]/40 bg-[#482C4C]/5",
+        canAcceptDrop && !isOver && "border-dashed border-[#482C4C]/20"
       )}
     >
       <div className="mb-3 flex items-center justify-between">
@@ -56,6 +90,9 @@ export function AppliedColumn({ label, jobs, isSearchActive, onJobOpen }: Props)
             variant="inactive"
             onActivate={() => setActivatingJob(job)}
             onOpen={onJobOpen}
+            onDragStart={onDragStart}
+            onDragEnd={onDragEnd}
+            isDragging={draggedJobId === job.id}
           />
         ))}
         {Array.from({ length: ghostCount }).map((_, i) => (
@@ -63,7 +100,7 @@ export function AppliedColumn({ label, jobs, isSearchActive, onJobOpen }: Props)
         ))}
       </div>
 
-      <AddJobModal open={open} onOpenChange={setOpen} />
+      <AddJobModal open={open} onOpenChange={setOpen} defaultStage="applied" />
       <ActivationModal
         open={activatingJob !== null}
         onOpenChange={(next) => {

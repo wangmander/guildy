@@ -16,10 +16,16 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+import type { WriteStage } from "@/lib/stages"
 
 type Props = {
   open: boolean
   onOpenChange: (open: boolean) => void
+  // Phase 4e prompt 2: per-column +Add Job passes the column's WriteStage so
+  // the new job lands in the column it was created from. Absent = default
+  // applied/passive behavior (preserved for the Applied column trigger if
+  // it doesn't pass this prop, plus any other callers).
+  defaultStage?: WriteStage
 }
 
 type ExtractResponse = {
@@ -32,7 +38,7 @@ type ExtractResponse = {
 
 const DEBOUNCE_MS = 500
 
-export function AddJobModal({ open, onOpenChange }: Props) {
+export function AddJobModal({ open, onOpenChange, defaultStage }: Props) {
   const [tab, setTab] = useState<"manual" | "jd">("jd")
   const [company, setCompany] = useState("")
   const [role, setRole] = useState("")
@@ -157,6 +163,7 @@ export function AddJobModal({ open, onOpenChange }: Props) {
         // with source_url still display fine; new jobs leave it null.
         source_url: "",
         jd_text: jdText.trim(),
+        stage: defaultStage,
       })
       if (!result.ok) {
         setError(result.error)

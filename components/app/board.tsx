@@ -165,6 +165,43 @@ export function Board({
     })
   }, [jobs, q, isSearchActive])
 
+  // Phase 4e: optimistic stage overrides keyed by job_id. Applied on render
+  // so the dragged card lands instantly in the destination column. Rolled
+  // back on action failure; cleared per-id when the server jobs prop catches
+  // up to the optimistic stage.
+  const [optimisticStages, setOptimisticStages] = useState<
+    Record<string, StageKey>
+  >({})
+  const [moveError, setMoveError] = useState<string | null>(null)
+
+  // Drop optimistic overrides whose server stage now matches.
+  useEffect(() => {
+    setOptimisticStages((prev) => {
+      let changed = false
+      const next: Record<string, StageKey> = {}
+      for (const [id, stage] of Object.entries(prev)) {
+        const job = jobs.find((j) => j.id === id)
+        if (!job) {
+          changed = true
+          continue
+        }
+        if (job.stage === stage) {
+          changed = true
+          continue
+        }
+        next[id] = stage
+      }
+      return changed ? next : prev
+    })
+  }, [jobs])
+
+  // Auto-dismiss the move error toast after 4s.
+  useEffect(() => {
+    if (!moveError) return
+    const t = setTimeout(() => setMoveError(null), 4000)
+    return () => clearTimeout(t)
+  }, [moveError])
+
   const grouped: Record<UiColumnKey, JobRow[]> = {
     applied: [],
     screen: [],
@@ -174,7 +211,8 @@ export function Board({
   }
 
   for (const job of visibleJobs) {
-    const col = stageToColumn(job.stage)
+    const effectiveStage = optimisticStages[job.id] ?? job.stage
+    const col = stageToColumn(effectiveStage)
     if (col) grouped[col].push(job)
   }
 
@@ -184,9 +222,30 @@ export function Board({
     source: "arrow" | "drag"
   ) => {
     const stage = columnToWriteStage(toColumn)
-    if (!stage) return
+    // Clear drag state synchronously. The optimistic stage flip below
+    // unmounts the source JobCard before the browser fires onDragEnd, so
+    // the DOM-level handler may never run — leaving the destination card
+    // stuck with isDragging=true (faded styling).
+    setDraggedJobId(null)
+    setOptimisticStages((prev) => ({ ...prev, [jobId]: stage }))
+    setMoveError(null)
     startTransition(async () => {
-      await moveJobStageAction({ job_id: jobId, to_stage: stage, source })
+      const res = await moveJobStageAction({
+        job_id: jobId,
+        to_stage: stage,
+        source,
+      })
+      if (!res.ok) {
+        // Rollback the optimistic override; the card snaps back to its
+        // server-truth stage on the next render.
+        setOptimisticStages((prev) => {
+          if (!(jobId in prev)) return prev
+          const next = { ...prev }
+          delete next[jobId]
+          return next
+        })
+        setMoveError(res.error)
+      }
     })
   }
 
@@ -216,6 +275,16 @@ export function Board({
 
   return (
     <>
+      {moveError ? (
+        <div className="px-4 lg:px-8">
+          <div
+            role="alert"
+            className="mb-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
+          >
+            Couldn&rsquo;t move card: {moveError}
+          </div>
+        </div>
+      ) : null}
       <section aria-label="Pipeline" className="w-full">
         <div className="px-4 lg:px-8">
           <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 lg:grid lg:grid-cols-5 lg:snap-none lg:overflow-visible lg:pb-0">
@@ -227,7 +296,11 @@ export function Board({
                     label={col.label}
                     jobs={grouped.applied}
                     isSearchActive={isSearchActive}
+                    draggedJobId={draggedJobId}
                     onJobOpen={open}
+                    onJobDrop={(jobId) => move(jobId, col.key, "drag")}
+                    onDragStart={setDraggedJobId}
+                    onDragEnd={() => setDraggedJobId(null)}
                   />
                 )
               }

@@ -55,6 +55,12 @@ const createJobSchema = z.object({
     .max(20000)
     .optional()
     .transform((v) => (v && v.length > 0 ? v : null)),
+  // Phase 4e prompt 2: optional stage override from per-column +Add Job
+  // affordance. When absent, default = "applied" (passive), preserving the
+  // pre-Phase-4e behavior.
+  stage: z
+    .enum(["applied", "screen", "hiring_manager", "final", "offer"])
+    .optional(),
 })
 
 export type CreateJobInput = z.input<typeof createJobSchema>
@@ -81,19 +87,39 @@ export async function createJobAction(
     return { ok: false, error: "Not signed in" }
   }
 
+  // Stage absent or "applied" → passive. Anything else → active and stamp
+  // activated_at. Mirrors the demote/promote logic in moveJobStageAction.
+  const stage = parsed.data.stage ?? "applied"
+  const isPassive = stage === "applied"
+  const insertRow: {
+    user_id: string
+    company_name: string
+    role_title: string
+    tc: string | null
+    source_url: string | null
+    jd_text: string | null
+    state: "passive" | "active"
+    stage: typeof stage
+    prep_status: "none"
+    activated_at?: string
+  } = {
+    user_id: user.id,
+    company_name: parsed.data.company_name,
+    role_title: parsed.data.role_title,
+    tc: parsed.data.tc,
+    source_url: parsed.data.source_url,
+    jd_text: parsed.data.jd_text,
+    state: isPassive ? "passive" : "active",
+    stage,
+    prep_status: "none",
+  }
+  if (!isPassive) {
+    insertRow.activated_at = new Date().toISOString()
+  }
+
   const { data, error } = await supabase
     .from("jobs")
-    .insert({
-      user_id: user.id,
-      company_name: parsed.data.company_name,
-      role_title: parsed.data.role_title,
-      tc: parsed.data.tc,
-      source_url: parsed.data.source_url,
-      jd_text: parsed.data.jd_text,
-      state: "passive",
-      stage: "applied",
-      prep_status: "none",
-    })
+    .insert(insertRow)
     .select("id")
     .single()
 
@@ -107,7 +133,13 @@ export async function createJobAction(
 
 const moveJobStageSchema = z.object({
   job_id: z.string().uuid("Invalid job id"),
-  to_stage: z.enum(["screen", "hiring_manager", "final", "offer"]),
+  to_stage: z.enum([
+    "applied",
+    "screen",
+    "hiring_manager",
+    "final",
+    "offer",
+  ]),
   source: z.enum(["arrow", "drag"]),
 })
 
@@ -116,6 +148,11 @@ export type MoveJobStageResult =
   | { ok: true }
   | { ok: false; error: string }
 
+// Phase 4e: drag/arrow accept any pair of UI columns including drag-into-
+// Applied (active → passive demote) and drag-from-Applied (passive → active,
+// bypassing the They-Responded activation modal). State flips with stage:
+// to_stage="applied" forces state=passive; any other to_stage forces
+// state=active and stamps activated_at when the job was previously passive.
 export async function moveJobStageAction(
   input: MoveJobStageInput
 ): Promise<MoveJobStageResult> {
@@ -145,19 +182,32 @@ export async function moveJobStageAction(
     return { ok: false, error: "Job not found" }
   }
 
-  if (job.state !== "active") {
-    return { ok: false, error: "Job is not active" }
-  }
-
   const fromStage = job.stage as string
   const toStage = parsed.data.to_stage
-  if (fromStage === toStage) {
+  const fromState = job.state as "passive" | "active"
+  const isPassiveTarget = toStage === "applied"
+  const toState: "passive" | "active" = isPassiveTarget ? "passive" : "active"
+
+  if (fromStage === toStage && fromState === toState) {
     return { ok: true }
+  }
+
+  type JobUpdate = {
+    stage: typeof toStage
+    state: "passive" | "active"
+    activated_at?: string
+  }
+  const updateData: JobUpdate = {
+    stage: toStage,
+    state: toState,
+  }
+  if (!isPassiveTarget && fromState === "passive") {
+    updateData.activated_at = new Date().toISOString()
   }
 
   const { error: updateError } = await supabase
     .from("jobs")
-    .update({ stage: toStage })
+    .update(updateData)
     .eq("id", parsed.data.job_id)
     .eq("user_id", user.id)
   if (updateError) {

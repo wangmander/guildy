@@ -301,95 +301,127 @@ export function PrepOverlay({
       aria-label={job ? `Prep for ${job.company_name}` : "Prep overlay"}
       className="fixed inset-0 z-50"
     >
-      <button
-        type="button"
-        aria-label="Close prep overlay"
-        tabIndex={-1}
-        onMouseDown={(e) => {
-          // Fire on press (not release) so the close feels instant, and
-          // preventDefault skips the native focus shift to this button —
-          // both reduce the rare "click did nothing" cases on the gray
-          // backdrop area.
-          e.preventDefault()
-          onClose()
-        }}
-        className="absolute inset-0 z-0 cursor-default bg-[#1C1E21]/40 backdrop-blur-md"
+      {/* Phase 4e p1.6: dedicated backdrop sibling. Owns the click-to-close
+          handler. Sits at the bottom of the stack; content + X button
+          render on top. Clicks that don't hit a column's pointer-events-auto
+          surface (gaps, outer scrim) hit this element directly. */}
+      <div
+        aria-hidden="true"
+        onClick={onClose}
+        className="absolute inset-0 bg-[#1C1E21]/40 backdrop-blur-md"
       />
 
       <button
         type="button"
-        onClick={onClose}
+        onClick={(e) => {
+          e.stopPropagation()
+          onClose()
+        }}
         aria-label="Close"
-        className="absolute right-4 top-4 z-10 inline-flex size-10 items-center justify-center rounded-full bg-white/90 text-gray-600 shadow-md backdrop-blur transition-colors hover:bg-white hover:text-[#1C1E21] md:right-6 md:top-6"
+        className="absolute right-4 top-4 z-20 inline-flex size-10 items-center justify-center rounded-full bg-white/90 text-gray-600 shadow-md backdrop-blur transition-colors hover:bg-white hover:text-[#1C1E21] md:right-6 md:top-6"
       >
         <X className="size-5" />
       </button>
 
-      <div className="pointer-events-none absolute inset-0 overflow-y-auto md:overflow-hidden">
+      {/* Content layer: pointer-events-none on the wrappers so inter-column
+          gaps and outer overflow area pass clicks through to the backdrop.
+          Each column is pointer-events-auto + stopPropagation so widget
+          clicks stay inside the overlay. */}
+      <div className="pointer-events-none absolute inset-0 z-10 overflow-y-auto md:overflow-hidden">
         <div className="pointer-events-none mx-auto flex min-h-full w-full max-w-[1440px] flex-col gap-4 px-4 py-16 md:grid md:grid-cols-[280px_minmax(0,1fr)_360px] md:gap-6 md:px-6 md:py-6 lg:gap-8 lg:px-8">
           {!job ? (
             <ErrorCard onClose={onClose} />
           ) : (
             <>
-              <aside className="pointer-events-auto flex flex-col gap-4 md:sticky md:top-6 md:max-h-[calc(100dvh-3rem)] md:overflow-y-auto md:pr-1">
-                <JobContextWidget
-                  company={job.company_name}
-                  role={job.role_title}
-                  tc={job.tc}
-                  sourceUrl={job.source_url}
-                  jdSnippet={job.jd_text}
-                />
-                <InterviewerWidget
-                  name={interviewerName}
-                  title={interviewerTitle}
-                  link={interviewerLink}
-                  tier={tier}
-                  insights={currentOutput?.interviewer_insights ?? null}
-                  onEdit={() =>
-                    expandInputsSection("interviewer", { pulse: true })
-                  }
-                />
+              {/* Phase 4e p1.7: pointer-events-auto + stopPropagation moved
+                  from the aside/main wrappers down to per-widget shells.
+                  Aside is now pointer-events-none (purely structural for
+                  the flex layout), so its empty space below the last
+                  widget passes clicks through to the backdrop. */}
+              <aside className="pointer-events-none flex flex-col gap-4 md:sticky md:top-6 md:max-h-[calc(100dvh-3rem)] md:overflow-y-auto md:pr-1">
+                <div
+                  className="pointer-events-auto"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <JobContextWidget
+                    company={job.company_name}
+                    role={job.role_title}
+                    tc={job.tc}
+                    sourceUrl={job.source_url}
+                    jdSnippet={job.jd_text}
+                  />
+                </div>
+                <div
+                  className="pointer-events-auto"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <InterviewerWidget
+                    name={interviewerName}
+                    title={interviewerTitle}
+                    link={interviewerLink}
+                    tier={tier}
+                    insights={currentOutput?.interviewer_insights ?? null}
+                    onEdit={() =>
+                      expandInputsSection("interviewer", { pulse: true })
+                    }
+                  />
+                </div>
                 {tier === "quick" ? (
-                  <UpgradeWidget onUpgrade={onUpgradeClick} />
+                  <div
+                    className="pointer-events-auto"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <UpgradeWidget onUpgrade={onUpgradeClick} />
+                  </div>
                 ) : null}
               </aside>
 
-              <main className="pointer-events-auto rounded-2xl border border-black/5 bg-[#F8F9FA] shadow-sm md:max-h-[calc(100dvh-3rem)] md:overflow-y-auto">
-                <PrepCanvas
-                  jobId={job.id}
-                  stage={job.stage}
-                  sessionConfig={sessionConfig}
-                  statesMap={statesMap}
-                  generatingRoles={generatingRoles}
-                  selectedRole={selectedRole}
-                  onSelectRole={setSelectedRole}
-                  error={error}
-                  hasResume={hasResume}
-                  hasJd={!!job.jd_text && job.jd_text.trim().length > 0}
-                  tier={tier}
-                  onTierChange={setTier}
-                  onGenerate={onGenerate}
-                  onUpgrade={onUpgradeClick}
-                  onAddJd={() => expandInputsSection("jd", { pulse: true })}
-                />
+              <main className="pointer-events-none md:max-h-[calc(100dvh-3rem)] md:overflow-y-auto">
+                <div
+                  className="pointer-events-auto rounded-2xl border border-black/5 bg-[#F8F9FA] shadow-sm"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <PrepCanvas
+                    jobId={job.id}
+                    stage={job.stage}
+                    sessionConfig={sessionConfig}
+                    statesMap={statesMap}
+                    generatingRoles={generatingRoles}
+                    selectedRole={selectedRole}
+                    onSelectRole={setSelectedRole}
+                    error={error}
+                    hasResume={hasResume}
+                    hasJd={!!job.jd_text && job.jd_text.trim().length > 0}
+                    tier={tier}
+                    onTierChange={setTier}
+                    onGenerate={onGenerate}
+                    onUpgrade={onUpgradeClick}
+                    onAddJd={() => expandInputsSection("jd", { pulse: true })}
+                  />
+                </div>
               </main>
 
-              <aside className="pointer-events-auto flex flex-col gap-4 md:sticky md:top-6 md:max-h-[calc(100dvh-3rem)] md:overflow-y-auto md:pr-1">
-                <InputsWidget
-                  jobId={job.id}
-                  hasResume={hasResume}
-                  resumeText={resumeText}
-                  jdText={job.jd_text}
-                  latestMessage={job.latest_message}
-                  interviewerName={interviewerName}
-                  interviewerTitle={interviewerTitle}
-                  interviewerLink={interviewerLink}
-                  noteText={noteText}
-                  hasInterviewer={hasInterviewer}
-                  hasNote={hasNote}
-                  expansion={inputsExpansion}
-                  onExpand={expandInputsSection}
-                />
+              <aside className="pointer-events-none flex flex-col gap-4 md:sticky md:top-6 md:max-h-[calc(100dvh-3rem)] md:overflow-y-auto md:pr-1">
+                <div
+                  className="pointer-events-auto"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <InputsWidget
+                    jobId={job.id}
+                    hasResume={hasResume}
+                    resumeText={resumeText}
+                    jdText={job.jd_text}
+                    latestMessage={job.latest_message}
+                    interviewerName={interviewerName}
+                    interviewerTitle={interviewerTitle}
+                    interviewerLink={interviewerLink}
+                    noteText={noteText}
+                    hasInterviewer={hasInterviewer}
+                    hasNote={hasNote}
+                    expansion={inputsExpansion}
+                    onExpand={expandInputsSection}
+                  />
+                </div>
               </aside>
             </>
           )}
@@ -401,7 +433,10 @@ export function PrepOverlay({
 
 function ErrorCard({ onClose }: { onClose: () => void }) {
   return (
-    <div className="pointer-events-auto col-span-full mx-auto mt-12 max-w-md rounded-2xl border border-black/5 bg-white p-6 text-center shadow-sm">
+    <div
+      onClick={(e) => e.stopPropagation()}
+      className="pointer-events-auto col-span-full mx-auto mt-12 max-w-md rounded-2xl border border-black/5 bg-white p-6 text-center shadow-sm"
+    >
       <h2 className="text-base font-semibold text-[#1C1E21]">
         That job couldn&rsquo;t be found
       </h2>

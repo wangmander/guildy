@@ -44,7 +44,10 @@ export function JobCard({
   const cardRef = useRef<HTMLDivElement | null>(null)
 
   const isInactive = variant === "inactive"
-  const draggable = !isInactive && Boolean(jobId)
+  // Phase 4e: cards in Applied (inactive variant) are now draggable so users
+  // can drag any card to any column. Activation modal stays as the canonical
+  // "I have a message to paste" path via the They Responded button.
+  const draggable = Boolean(jobId) && Boolean(onDragStart)
   const showArrows = !isInactive && (onMoveLeft !== undefined || onMoveRight !== undefined)
   const clickable = Boolean(jobId && onOpen)
 

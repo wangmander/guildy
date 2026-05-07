@@ -62,9 +62,9 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
-- Last phase shipped: **Phase 4f at `b8cffb0`** — multi-session Full Loop with dynamic per-job session config live (parser-backed first run + user-editable Customize Rounds modal). Phase 4d (multi-session core) shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
-- Date: 2026-05-06
-- Project status: ready for Phase 4e (dashboard fixes) or Phase 5 (Gemini 2.5 research)
+- Last phase shipped: **Phase 4e at `<PLACEHOLDER>`** — kanban polish: drag-drop unrestricted between every column pair (with optimistic-update + rollback), per-column +Add Job affordance with stage pre-fill, inline column count, prep overlay backdrop close on every empty area (inter-column gaps, intra-column empty space, outer scrim). Phase 4f (multi-session Full Loop config) and Phase 4d (multi-session core) shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
+- Date: 2026-05-07
+- Project status: ready for Phase 5 (Gemini 2.5 research)
 
 ## Locked models [LIVE]
 
@@ -76,12 +76,7 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 
 Total realistic: ~32-41 hours, ~4-5 focused build sessions.
 
-### Phase 4e — Dashboard fixes (~2-3h) — NEXT
-- Drag-drop between Kanban columns (dnd-kit, mirror existing card-drag)
-- "+ Add Job" trigger on each column header, opens Add Job modal pre-filled with the column's stage
-- Count placement on column headers tightened
-
-### Phase 5 — Gemini 2.5 research for Deep Prep (~5-7h)
+### Phase 5 — Gemini 2.5 research for Deep Prep (~5-7h) — NEXT
 - Provider locked: Google Gemini 2.5 with Search grounding (cost-driven swap from Perplexity, ~3-4× cheaper at scale, leverages existing Google AI Studio access)
 - Company research cached per company, 7-day TTL
 - Interviewer research cached per (interviewer_name, company), no expiry
@@ -118,6 +113,15 @@ Total realistic: ~32-41 hours, ~4-5 focused build sessions.
 - Banned-copy audit (no "AI-powered" cliches)
 
 ## Phase 4c–4f shipped — archive
+
+### Phase 4e — DONE (Kanban polish: any-pair drag-drop, +Add Job per column, backdrop close)
+- Drag-drop unrestricted between any source/destination column pair on the kanban (Applied, Screen, HM, Full Loop, Offer). `columnToWriteStage("applied")` now returns `"applied"` (was `null`), `WriteStage` type extended, `moveJobStageSchema.to_stage` Zod enum gains `"applied"`. State transition logic added: `to_stage="applied"` flips state to `"passive"` (active → passive demote); any other target flips to `"active"` and stamps `activated_at` only when transitioning out of passive. Drop the prior `state !== "active"` guard so passive jobs can be dragged into active columns (bypasses the They-Responded activation modal — drag is a power-user gesture; activation modal stays canonical for "I have a message to paste"). `JobCard` `draggable` gate updated to require `Boolean(jobId) && Boolean(onDragStart)`; the `!isInactive` guard removed so cards in Applied are draggable too.
+- Optimistic stage overrides + rollback: new `optimisticStages: Record<jobId, StageKey>` in `Board`. Drop applies the override synchronously, action error rolls it back, success path keeps it until the next-render `useEffect [jobs]` cleanup drops the matched entry. Inline red error toast above the section, auto-dismisses after 4s.
+- Drag visual cleanup (prompt 1.5): `setDraggedJobId(null)` clears synchronously at the top of `move()` — the optimistic stage flip unmounts the source `JobCard` before the browser fires `onDragEnd`, so the destination card was rendering with stale `isDragging=true` (faded `opacity-50`).
+- Prep overlay backdrop close (prompts 1.5 → 1.6 → 1.7): restructured root from a standalone `<button>` backdrop with `onMouseDown=onClose` to a dedicated backdrop sibling at z-default with `onClick=onClose`, X close button bumped to z-20, content layer at z-10. `pointer-events-auto` + `stopPropagation` moved DOWN from aside/main wrappers onto per-widget shells (one per `JobContextWidget` / `InterviewerWidget` / `UpgradeWidget` / `PrepCanvas` / `InputsWidget`). Result: clicks on widget content stay inside the overlay; clicks on inter-column gaps, intra-column empty space below the last widget, and the outer scrim all fall through to the backdrop and close. Visual chrome for the prep canvas card moved from `<main>` to its inner shell so the visible card boundary matches the clickable area.
+- +Add Job per column with stage pre-fill (prompt 2): `createJobAction` Zod schema gains optional `stage` enum (`applied | screen | hiring_manager | final | offer`). State derivation: stage absent or `"applied"` → `state="passive"`; otherwise → `state="active"` + `activated_at` stamped. `AddJobModal` accepts a `defaultStage?: WriteStage` prop and passes it through to the action. `AppliedColumn` wires `defaultStage="applied"` into its existing prominent +Add Job button. `BoardColumn` renders a small `Plus` icon button (size-6, subtle gray hover, `draggable={false}`, `stopPropagation` on click) on every column except Offer. Per-column `<AddJobModal>` mount with `defaultStage={columnToWriteStage(columnKey)}`.
+- Inline column header (prompt 2): `BoardColumn` header now renders `Hiring Manager · 2` inline (count as a smaller-weight span inside the `<h3>`, separated by middle dot) instead of the prior justified-end count span. `whitespace-nowrap` so long titles don't break. AppliedColumn header preserved exactly per scope.
+- TypeScript clean. Banned-copy clean.
 
 ### Phase 4f — DONE (Multi-session Full Loop dynamic config)
 - Migration `20260505000001_jobs_full_loop_session_config.sql`: nullable `jsonb` column on `public.jobs` storing per-job session config. No CHECK; Zod enforces shape at the application layer. Null = pre-Phase-4f state, falls back to `DEFAULT_FULL_LOOP_SESSION_CONFIG` via `resolveFullLoopSessionConfig`.

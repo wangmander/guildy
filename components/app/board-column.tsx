@@ -1,16 +1,19 @@
 "use client"
 
 import { useState } from "react"
+import { Plus } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
 import {
+  columnToWriteStage,
   leftOfColumn,
   rightOfColumn,
   type CardVariant,
   type UiColumnKey,
 } from "@/lib/stages"
 
+import { AddJobModal } from "./add-job-modal"
 import type { JobRow } from "./board"
 import { EmptyCard } from "./empty-card"
 import { JobCard } from "./job-card"
@@ -47,6 +50,7 @@ export function BoardColumn({
   onDragEnd,
 }: Props) {
   const [isOver, setIsOver] = useState(false)
+  const [addOpen, setAddOpen] = useState(false)
   const isInactive = variant === "inactive"
   const count = jobs.length
   const ghostCount = count === 0 && !isSearchActive ? 2 : 0
@@ -54,6 +58,11 @@ export function BoardColumn({
   const canAcceptDrop = !isInactive && draggedJobId !== null
   const canMoveLeft = leftOfColumn(columnKey) !== null
   const canMoveRight = rightOfColumn(columnKey) !== null
+  // Phase 4e prompt 2: + Add Job affordance on every BoardColumn except
+  // Offer. Stage pre-fill uses the column's WriteStage so the new job
+  // lands in this column immediately.
+  const showPlus = columnKey !== "offer"
+  const writeStage = columnToWriteStage(columnKey)
 
   return (
     <div
@@ -82,16 +91,32 @@ export function BoardColumn({
         canAcceptDrop && !isOver && "border-dashed border-[#482C4C]/20"
       )}
     >
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex items-center justify-between gap-2">
         <h3
           className={cn(
-            "text-sm font-semibold",
+            "text-sm font-semibold whitespace-nowrap",
             isInactive ? "text-gray-400" : "text-[#482C4C]"
           )}
         >
           {label}
+          <span className="ml-1.5 text-xs font-normal text-gray-400">
+            · {count}
+          </span>
         </h3>
-        <span className="text-xs text-gray-400">{count}</span>
+        {showPlus ? (
+          <button
+            type="button"
+            draggable={false}
+            onClick={(e) => {
+              e.stopPropagation()
+              setAddOpen(true)
+            }}
+            aria-label={`Add job to ${label}`}
+            className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-[#1C1E21]"
+          >
+            <Plus className="size-4" />
+          </button>
+        ) : null}
       </div>
 
       <div className="flex max-h-[calc(100dvh-200px)] flex-col gap-2 overflow-y-auto pr-1">
@@ -122,6 +147,14 @@ export function BoardColumn({
           <EmptyCard key={`ghost-${i}`} variant={variant} />
         ))}
       </div>
+
+      {showPlus ? (
+        <AddJobModal
+          open={addOpen}
+          onOpenChange={setAddOpen}
+          defaultStage={writeStage}
+        />
+      ) : null}
     </div>
   )
 }
