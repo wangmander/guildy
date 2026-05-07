@@ -62,7 +62,7 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
-- Last phase shipped: **Phase 4f at `<hash>`** — multi-session Full Loop with dynamic per-job session config live (parser-backed first run + user-editable Customize Rounds modal). Phase 4d (multi-session core) shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
+- Last phase shipped: **Phase 4f at `b8cffb0`** — multi-session Full Loop with dynamic per-job session config live (parser-backed first run + user-editable Customize Rounds modal). Phase 4d (multi-session core) shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
 - Date: 2026-05-06
 - Project status: ready for Phase 4e (dashboard fixes) or Phase 5 (Gemini 2.5 research)
 
