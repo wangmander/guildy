@@ -62,9 +62,9 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
-- Last phase shipped: **Phase 4c-4 closed at `43f651e` (patches 1-9 rolled in). Patch 10 (Background editable inline from InputsWidget) at `f6f1b11`. Patch 12 (operating contract preamble + narrative anchor + UpgradeWidget gradient flip + inline Upgrade chip in tier selector) at `c2eb4b4`. Patch 11 was bundled into patch 12.** Patch 9 removed the diagnostic logs added in a242b8f and during patch 7. Detail for every patch lives in the archive section below.
-- Date: 2026-05-05
-- Project status: ready for Phase 4d (multi-session Full Loop, Option C+)
+- Last phase shipped: **Phase 4f at `<hash>`** — multi-session Full Loop with dynamic per-job session config live (parser-backed first run + user-editable Customize Rounds modal). Phase 4d (multi-session core) shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
+- Date: 2026-05-06
+- Project status: ready for Phase 4e (dashboard fixes) or Phase 5 (Gemini 2.5 research)
 
 ## Locked models [LIVE]
 
@@ -76,18 +76,16 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 
 Total realistic: ~32-41 hours, ~4-5 focused build sessions.
 
-### Phase 4d — Multi-session Full Loop, Option C+ (~3-4h) — NEXT
-- Each session = its own prep generation = its own prep_versions row
-- context_hash includes session name
-- Full-attention LLM call per session (not nested array in one call)
-- 4 default sessions: Hiring Manager, Cross-functional, Skills/Portfolio, Bar Raiser
-- LLM picks plausible names from JD/company context
-- No schema change
+### Phase 4e — Dashboard fixes (~2-3h) — NEXT
+- Drag-drop between Kanban columns (dnd-kit, mirror existing card-drag)
+- "+ Add Job" trigger on each column header, opens Add Job modal pre-filled with the column's stage
+- Count placement on column headers tightened
 
-### Phase 5 — Perplexity research for Deep Prep (~5-7h)
+### Phase 5 — Gemini 2.5 research for Deep Prep (~5-7h)
+- Provider locked: Google Gemini 2.5 with Search grounding (cost-driven swap from Perplexity, ~3-4× cheaper at scale, leverages existing Google AI Studio access)
 - Company research cached per company, 7-day TTL
 - Interviewer research cached per (interviewer_name, company), no expiry
-- `lib/ai/research.ts` module
+- `lib/ai/research.ts` abstracts the provider so future swaps stay cheap
 - Failure surfaces retry/continue, never silent downgrade
 
 ### Phase 6 — Polish (~5-6h)
@@ -119,7 +117,31 @@ Total realistic: ~32-41 hours, ~4-5 focused build sessions.
 - Production smoke test
 - Banned-copy audit (no "AI-powered" cliches)
 
-## Phase 4c shipped — archive
+## Phase 4c–4f shipped — archive
+
+### Phase 4f — DONE (Multi-session Full Loop dynamic config)
+- Migration `20260505000001_jobs_full_loop_session_config.sql`: nullable `jsonb` column on `public.jobs` storing per-job session config. No CHECK; Zod enforces shape at the application layer. Null = pre-Phase-4f state, falls back to `DEFAULT_FULL_LOOP_SESSION_CONFIG` via `resolveFullLoopSessionConfig`.
+- `lib/ai/parse-full-loop-rounds.ts` (NEW): Haiku-backed parser. Reads `latest_message + jd_text + interviewer_name`, returns `{ config, raw }` where config is a complete `FullLoopSessionConfig`. System prompt biases `missing_roles` to **explicit-exclusion only** (silence ≠ exclusion). Tool schema with `detected_rounds` / `missing_roles` / `extra_rounds` / `overall_confidence` (strict, additionalProperties false). Mapping function defaults unmentioned roles to `{ enabled: true, source: "parsed" }`; multiple detected_rounds for the same role resolve via highest-confidence.
+- New actions: `parseFullLoopRoundsAction` (auth + ownership + early-exit on empty inputs + parser call + persist + revalidate; no rate limit) and `updateFullLoopSessionConfigAction` (Zod-validated against `fullLoopSessionConfigSchema` for the strict 4-role shape).
+- Client-side trigger in `components/app/board.tsx`: `parseFullLoopRoundsAction` fires when a job's `stage ∈ {final, interview_loop}` AND `full_loop_session_config === null` AND not already fired this session (`parserFiredJobsRef`). Fires-and-forgets so the dragged card lands instantly; parser revalidation refreshes the row in place when complete.
+- `SessionTabs` reads `sessionConfig` and renders only enabled roles using config labels (hardcoded `ROLE_LABELS` const removed). Arrow-key cycling and `aria-selected` operate on the visible-roles index space.
+- `PrepCanvas`: zero-enabled empty state with "Customize rounds" CTA. Default `selectedRole` is the first enabled role from the resolved config; if the active role becomes disabled, an effect auto-shifts to the new first-enabled.
+- `CustomizeRoundsModal` (NEW): Radix Dialog. Per-role enabled toggle + label input + "Auto-detect from message" (re-runs the parser, refreshes draft + snapshot in place) + Save (per-role diff sets `source: "user"` only on changed rows, preserves prior source on unchanged) + Cancel. Inline Toggle component (no new dep).
+- Patch 3.5: parser trigger moved from `moveJobStageAction` (server, blocked card drops by ~3s) to client-side `useEffect` in `Board` (instant drops; parser runs in background).
+- Patch sharpen-parser: rewrote parser Rules so silence is not exclusion. Default assumption directive added: "a standard Full Loop has all 4 standard rounds. If the message doesn't mention a role and doesn't exclude it, leave it out of BOTH detected_rounds and missing_roles."
+- Patch sharpen-parser-2: bar_raiser taxonomy softened from "do NOT assume present" to "default to enabled unless the message explicitly excludes it"; dead `console.warn` cleanup in `mapParserOutputToConfig` (the "neither bucket" path is now dominant happy path, not anomaly).
+- `SESSION_ROLE_EMPHASIS` exclude blocks tightened in `lib/ai/generate-prep.ts` from soft "exclude X (other_session covers it)" phrasing to hard-boundary directives ("do NOT generate content related to X. If X comes up naturally, defer it explicitly to the [other] tab. This is a hard boundary, not a soft preference."). Applied across all 4 roles. Acceptable system-prompt cache invalidation on next call (V2.0 has no users).
+- TypeScript clean. Banned-copy clean.
+
+### Phase 4d — DONE (Multi-session Full Loop, Option C+)
+- Type foundation: `PREP_SESSION_ROLES` const tuple + `PrepSessionRole` union; optional `session_role` on `PrepInput`; nullable + optional `session_title` and server-authoritative `session_role` on `prepOutputSchema`. Tool input_schema mirrors with `["string", "null"]` types.
+- Prompt layer: `SESSION_ROLE_EMPHASIS` map with focus / emphasize / exclude / session_title_examples per role. `buildUserPrompt` injects a `[SESSION]` block immediately after `[JOB DESCRIPTION]` when `session_role` is set; byte-identical output otherwise.
+- Action layer: `session_role` threaded through `generatePrepAction` + `getCachedPrepAction` schemas; new `buildContextHash` helper folds session_role into the hash conditionally (byte-identical when undefined). `getCachedPrepAction` session-aware fork filters by computed hash; non-session path preserved exactly. `getPrepStatesAction` returns the 5-key map (single + 4 roles) classifying each as cached / stale / empty.
+- `SessionTabs` widget (NEW): horizontal flex-row of chips with state indicators (generating pulse, stale amber dot), roving tabIndex, manual-activation arrow-key nav (Enter/Space activates via native button onClick to avoid accidental LLM gens).
+- PrepOverlay restructured: `prepState` discriminated union dropped; `statesMap` + `generatingRoles` set + `selectedRole` + `error` replace it. `onGenerate(role: PrepSessionRole | null)` accepts the new role param. Optimistic local update so the just-finished session flips cached without waiting for refetch.
+- PrepCanvas: derives display state from `(stage, statesMap, generatingRoles, selectedRole)`; renders `<SessionTabs>` when stage maps to `interview_loop` per `stageKeyToPrepStage`; `<StaleBanner>` above prep modules when current entry's state is stale; `session_title` heading fallback to `stageHeading(stage)`.
+- Migration index `20260504000001_prep_versions_rate_limit_idx.sql` covers the (job_id, tier, context_hash) lookup path naturally — no new migration needed for Phase 4d.
+- Followup p1: secondary in-prep upgrade buttons (locked-preview-module flipped from primary blurple fill to outlined secondary) + UpgradeWidget primary CTA copy "Upgrade to Deep Prep" → "Upgrade all Prep". Visual hierarchy fix so the left-rail primary CTA wins as the global aggregate.
 
 ### Phase 4c-4 patch 12 — DONE (post-close, bundles patch 11)
 - HANDOFF.md preamble replaced with the Operating Contract block: stance, decision rules, prompt engineering rules, anti-drift rules, pressure-test checklist. Reads first by any new Claude chat. Existing `/phase-done` procedural note preserved as a single-line subsection ("## Phase done procedure") between the Operating Contract and `## North Star`.
@@ -245,6 +267,9 @@ Total realistic: ~32-41 hours, ~4-5 focused build sessions.
 - FTUE iteration based on real user data
 - Per-session interviewer storage (currently one main interviewer per job)
 - Mobile native app
+- Custom rounds beyond the 4-role taxonomy (5+ rounds in Full Loop)
+- Per-round emphasis profile picker (each round currently inherits its fixed role's `SESSION_ROLE_EMPHASIS`)
+- Auto-detect-on-input-change (currently only fires on stage transition into Full Loop; user re-runs via Customize modal's Auto-detect button)
 
 ## Don't rebuild (kill list)
 

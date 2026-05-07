@@ -411,8 +411,8 @@ const SESSION_ROLE_EMPHASIS = {
       "expectations setting and 1:1 cadence",
     ],
     exclude: [
-      "deep technical or craft drill (skills_portfolio covers it)",
-      "peer-level collab scenarios (cross_functional covers it)",
+      "do NOT generate content related to deep technical or craft drill. If it comes up naturally, defer it explicitly to the skills_portfolio tab. This is a hard boundary, not a soft preference.",
+      "do NOT generate content related to peer-level collab scenarios. If they come up naturally, defer them explicitly to the cross_functional tab. This is a hard boundary, not a soft preference.",
     ],
     session_title_examples: [
       "VP Engineering Hiring Manager",
@@ -432,8 +432,8 @@ const SESSION_ROLE_EMPHASIS = {
       "working with PM/Eng/Design/Data counterparts",
     ],
     exclude: [
-      "leadership philosophy (hiring_manager covers it)",
-      "pure technical or craft depth (skills_portfolio covers it)",
+      "do NOT generate content related to leadership philosophy. If it comes up naturally, defer it explicitly to the hiring_manager tab. This is a hard boundary, not a soft preference.",
+      "do NOT generate content related to pure technical or craft depth. If it comes up naturally, defer it explicitly to the skills_portfolio tab. This is a hard boundary, not a soft preference.",
     ],
     session_title_examples: [
       "Cross-functional Partner Round",
@@ -453,8 +453,8 @@ const SESSION_ROLE_EMPHASIS = {
       "code or critique judgment",
     ],
     exclude: [
-      "people or leadership topics (hiring_manager covers it)",
-      "cross-team dynamics (cross_functional covers it)",
+      "do NOT generate content related to people or leadership topics. If they come up naturally, defer them explicitly to the hiring_manager tab. This is a hard boundary, not a soft preference.",
+      "do NOT generate content related to cross-team dynamics. If they come up naturally, defer them explicitly to the cross_functional tab. This is a hard boundary, not a soft preference.",
     ],
     session_title_examples: [
       "Portfolio Deep Dive",
@@ -474,8 +474,8 @@ const SESSION_ROLE_EMPHASIS = {
       "hard-call past decisions",
     ],
     exclude: [
-      "tactical execution detail (skills_portfolio covers it)",
-      "mundane day-to-day collab (cross_functional covers it)",
+      "do NOT generate content related to tactical execution detail. If it comes up naturally, defer it explicitly to the skills_portfolio tab. This is a hard boundary, not a soft preference.",
+      "do NOT generate content related to mundane day-to-day collab. If it comes up naturally, defer it explicitly to the cross_functional tab. This is a hard boundary, not a soft preference.",
     ],
     session_title_examples: [
       "Bar Raiser Round",
