@@ -74,43 +74,46 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 
 ## What's left to V2.0 launch [LIVE]
 
-Total realistic: ~32-41 hours, ~4-5 focused build sessions.
+V2.0 P0 LAUNCH SPRINT — locked scope, target Monday May 11. ~10 prompts, ~12-15h.
 
-### Phase 5 — Gemini 2.5 research for Deep Prep (~5-7h) — NEXT
-- Provider locked: Google Gemini 2.5 with Search grounding (cost-driven swap from Perplexity, ~3-4× cheaper at scale, leverages existing Google AI Studio access)
-- Company research cached per company, 7-day TTL
-- Interviewer research cached per (interviewer_name, company), no expiry
-- `lib/ai/research.ts` abstracts the provider so future swaps stay cheap
-- Failure surfaces retry/continue, never silent downgrade
+### Phase 5 — Deep Prep grounding (today, Thu May 7)
+IN: Anthropic web_search tool inline in the Deep Prep generation call. Company research grounding only. Wire into existing generate-prep.ts pipeline without abstraction.
+OUT: Gemini 2.5 integration. lib/ai/research.ts abstraction. Interviewer profile grounding. Per-user cost guardrails on AI spend.
+Estimate: 1-2 prompts, 2h.
 
-### Phase 6 — Polish (~5-6h)
-- FTUE empty state ("Add 3 jobs to unlock your pipeline")
-- Mobile responsive: overlay becomes full-screen takeover
-- Error states with clear retry paths
-- Loading states with progress feedback (not just spinners)
+### Phase 6.5 — Legal + analytics + QA (Friday)
+IN: Termly ToS + Privacy Policy embed. PostHog 3 events: signup, first prep generated, subscription paid. Smoke QA on 3 representative jobs (one per stage range).
+OUT: Resend transactional email setup entirely. Welcome email. Drip campaigns. Full PostHog funnel/cohort setup. 10-job QA pass.
+Estimate: 2 prompts, 3h.
 
-### Phase 6.5 — Pre-launch infrastructure (~6h)
-- Legal: ToS + Privacy Policy via Termly (templated, ~1h)
-- Resend transactional email (receipts, magic link improvements, ~2h)
-- PostHog analytics (track NSM 1 + NSM 2, ~1h)
-- End-to-end QA pass on 10 real jobs (~2h)
+### Phase 6b — Stripe + paywall (Sat-Sun)
+IN: Stripe Checkout (hosted page, NOT custom UI). Webhooks for subscription.created, subscription.updated, subscription.deleted, payment_failed. Paywall logic gating tier=deep features. Stripe-hosted customer portal link (NOT custom UI). Single tier $19.99/mo. Basic grace period via Stripe Smart Retries default behavior.
+OUT: Custom checkout UI. Custom customer portal UI. Complex grace period (multi-stage retry, dunning, win-back).
+Estimate: 4 prompts, 6-8h.
 
-### Phase 6b — Stripe + paywall (~8-12h)
-- Stripe checkout session
-- Webhook handler: subscription.created, updated, deleted, invoice.payment_failed
-- Subscription state in user_profiles
-- Paywall gate on tier='deep' API call
-- Customer portal for cancellation
-- Grace period on payment failure
-- Test via Stripe CLI before deploy
-- $19.99/mo single tier
+### Phase 7 — Production deploy (Sunday late)
+IN: guildy.ai DNS + SSL via Vercel. Production env vars (Anthropic, Supabase, Stripe live keys, PostHog). Banned-copy audit final pass. Smoke on 3 jobs in prod.
+Estimate: 1-2 prompts, 2h.
 
-### Phase 7 — Production deploy (~3h)
-- guildy.ai DNS to Vercel
-- SSL via Vercel
-- Production env vars (refer to .env.example for list — never list values here)
-- Production smoke test
-- Banned-copy audit (no "AI-powered" cliches)
+### Phase 6 (general polish) — KILLED
+Critical-path errors fold into Phase 6b as they surface during build.
+
+## V2.1 backlog [POST-LAUNCH]
+
+Priority order:
+
+1. Mobile responsive (kanban horizontal scroll, prep overlay layout for small viewports)
+2. FTUE walkthrough (empty state guidance, post-create cues, first-job tour)
+3. Resend transactional email setup + welcome email
+4. Drip lifecycle campaigns (day 1 / day 3 / day 7)
+5. Interviewer profile grounding in Deep Prep
+6. Gemini 2.5 research abstraction + lib/ai/research.ts
+7. Custom Stripe customer portal UI
+8. Per-user cost guardrails on AI spend (monthly cap)
+9. Full PostHog funnel and cohort analysis
+10. Comprehensive error states across every action
+11. Progress feedback polish on long operations
+12. 10-job QA pass with edge cases (international comp, multiple offers, withdrawn jobs)
 
 ## Phase 4c–4f shipped — archive
 
