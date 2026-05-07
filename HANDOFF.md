@@ -62,7 +62,7 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
-- Last phase shipped: **Phase 5 at `9d1f26c`** (patch 5.1 at `2801a59`) — Anthropic `web_search_20250305` server-tool wired inline into Deep Prep generation. Hard MUST directive in a separate cached system block forces Sonnet to ground company-specific positioning and risks before emitting `submit_prep`. Quick path byte-identical. Phase 4e (kanban polish), Phase 4f (multi-session config), and Phase 4d (multi-session core) shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
+- Last phase shipped: **Phase 5 at `9d1f26c`** (patch 5.1 at `2801a59`, patch 5.3 at `<commit-hash>`) — Anthropic `web_search_20250305` server-tool wired inline into Deep Prep generation. Hard MUST directive in a separate cached system block forces Sonnet to ground company-specific positioning and risks before emitting `submit_prep`. Quick path byte-identical. Phase 4e (kanban polish), Phase 4f (multi-session config), and Phase 4d (multi-session core) shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
 - Date: 2026-05-07
 - Project status: ready for Phase 6.5 (Termly + 3 PostHog events + 3-job smoke)
 
@@ -111,6 +111,11 @@ Priority order:
 12. 10-job QA pass with edge cases (international comp, multiple offers, withdrawn jobs)
 
 ## Phase 4c–5 shipped — archive
+
+### Phase 5 patch 5.3 — DONE (Upgrade chip toggles tier + web_search single-search)
+- TierSelector Upgrade chip onClick now fires `onTierChange("deep")` alongside the existing `onUpgrade()` analytics call. Pre-paywall the chip would otherwise be a dead button (chip stayed on Quick tier, only logged the upgrade-clicked event). When Phase 6b ships the paywall, `onUpgrade` becomes the gate; for now both fire and the user lands on Deep.
+- `lib/ai/generate-prep.ts` `web_search_20250305` tool config: `max_uses: 3 → 1`. `DEEP_GROUNDING_DIRECTIVE` rewritten to enforce EXACTLY ONE search with explicit query guidance (company name + role/team context + recency hint). Single search returns enough context to ground positioning and risks; keeps Deep generation comfortably inside the 180s `DEEP_TIMEOUT_MS` window. Multi-search grounding deferred to V2.1.
+- TypeScript clean. Banned-copy clean.
 
 ### Phase 5 patch 5.1 — DONE (TierSelector + SessionTabs lock during gen, Deep Prep button blurple)
 - `components/app/widgets/prep-canvas.tsx` `TierSelector` accepts new `disabled?: boolean`. When true, both compartments get `aria-disabled`, `tabIndex=-1`, no-op click + onKeyDown handlers, `cursor-not-allowed opacity-60`. PrepCanvas passes `disabled={isGenerating}` (current-role gen state). The Upgrade chip nested in the Deep compartment stays interactive (paywall flow is independent of generation); inherits the parent's opacity fade.

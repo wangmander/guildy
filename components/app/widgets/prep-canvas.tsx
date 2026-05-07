@@ -283,6 +283,11 @@ function TierSelector({
             type="button"
             onClick={(e) => {
               e.stopPropagation()
+              // Patch 5.3: chip flips tier to deep alongside the existing
+              // onUpgrade analytics call. Pre-paywall the chip would
+              // otherwise be a dead button. When Phase 6b ships the paywall,
+              // onUpgrade becomes the gate; for now both fire.
+              onTierChange("deep")
               onUpgrade()
             }}
             className="inline-flex items-center rounded bg-[#EDE9FE] px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-[#4E3BDD] transition-colors hover:bg-[#E0DAF8] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4E3BDD]/40"

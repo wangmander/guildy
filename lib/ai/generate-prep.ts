@@ -40,7 +40,7 @@ const DEEP_MAX_ITERATIONS = 5
 // submit_prep. Cached independently so Quick's cache key is unaffected.
 const DEEP_GROUNDING_DIRECTIVE = `DEEP PREP GROUNDING REQUIREMENT (Deep tier only)
 
-Before emitting the submit_prep tool, you MUST perform at least one web_search on the company name from the job description. Search for: recent company news, funding announcements, product launches, hiring posture, named competitors. Use search results to ground company-specific positioning and risks. If the company name cannot be confidently identified from the JD, search using the most likely candidate and proceed.`
+Before emitting the submit_prep tool, perform EXACTLY ONE web_search on the company name from the job description. Search query should combine: company name + role/team context + any recency hint (e.g. "recent news", "funding", "2026"). One search returns enough context to ground positioning and risks. Do not perform additional searches. After the search returns, immediately emit submit_prep with grounded content.`
 
 const SYSTEM_PROMPT = `You are a senior interview prep coach with 15+ years guiding candidates through interviews at top tech companies. You produce sharp, candidate-specific prep — never generic boilerplate.
 
@@ -328,11 +328,14 @@ async function generateOnce(
   const tools: any[] = [submitPrepTool]
   if (isDeep) {
     // Server-managed tool: Anthropic executes the search and feeds results
-    // back to the model in-call. max_uses caps total searches per turn.
+    // back to the model in-call. Patch 5.3: max_uses dropped 3 → 1 to keep
+    // Deep generation comfortably inside the 180s timeout. One well-formed
+    // search returns enough company context to ground positioning + risks;
+    // the system directive enforces this at the prompt layer.
     tools.push({
       type: "web_search_20250305",
       name: "web_search",
-      max_uses: 3,
+      max_uses: 1,
     })
   }
 
