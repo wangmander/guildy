@@ -62,7 +62,7 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
-- Last phase shipped: **Phase 4e at `<PLACEHOLDER>`** — kanban polish: drag-drop unrestricted between every column pair (with optimistic-update + rollback), per-column +Add Job affordance with stage pre-fill, inline column count, prep overlay backdrop close on every empty area (inter-column gaps, intra-column empty space, outer scrim). Phase 4f (multi-session Full Loop config) and Phase 4d (multi-session core) shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
+- Last phase shipped: **Phase 4e at `11375ba`** — kanban polish: drag-drop unrestricted between every column pair (with optimistic-update + rollback), per-column +Add Job affordance with stage pre-fill, inline column count, prep overlay backdrop close on every empty area (inter-column gaps, intra-column empty space, outer scrim). Phase 4f (multi-session Full Loop config) and Phase 4d (multi-session core) shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
 - Date: 2026-05-07
 - Project status: ready for Phase 5 (Gemini 2.5 research)
 
