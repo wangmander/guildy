@@ -62,7 +62,7 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
-- Last phase shipped: **Phase 5 at `<commit-hash>`** — Anthropic `web_search_20250305` server-tool wired inline into Deep Prep generation. Hard MUST directive in a separate cached system block forces Sonnet to ground company-specific positioning and risks before emitting `submit_prep`. Quick path byte-identical. Phase 4e (kanban polish), Phase 4f (multi-session config), and Phase 4d (multi-session core) shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
+- Last phase shipped: **Phase 5 at `9d1f26c`** — Anthropic `web_search_20250305` server-tool wired inline into Deep Prep generation. Hard MUST directive in a separate cached system block forces Sonnet to ground company-specific positioning and risks before emitting `submit_prep`. Quick path byte-identical. Phase 4e (kanban polish), Phase 4f (multi-session config), and Phase 4d (multi-session core) shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
 - Date: 2026-05-07
 - Project status: ready for Phase 6.5 (Termly + 3 PostHog events + 3-job smoke)
 
