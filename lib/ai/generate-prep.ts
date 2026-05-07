@@ -23,10 +23,24 @@ const NOTE_CHAR_CAP = 4000
 const QUICK_MAX_TOKENS = 4096
 const DEEP_MAX_TOKENS = 8192
 
-// 2-minute hard timeout on the Anthropic call. Beyond this the SDK promise is
-// aborted via AbortController and the user sees a "timed out, try again"
-// message instead of a hung UI.
-const ANTHROPIC_TIMEOUT_MS = 120_000
+// Hard timeout on the Anthropic call. Beyond this the SDK promise is aborted
+// via AbortController and the user sees a "timed out, try again" message
+// instead of a hung UI. Phase 5: Deep budgets 180s to cover the additional
+// web_search round-trips on top of Sonnet's existing latency.
+const QUICK_TIMEOUT_MS = 120_000
+const DEEP_TIMEOUT_MS = 180_000
+
+// Phase 5: Deep agentic loop guard. Server-side web_search typically resolves
+// in a single client round-trip (Anthropic loops internally), but a defensive
+// client-side cap protects against runaway tool-use chains.
+const DEEP_MAX_ITERATIONS = 5
+
+// Phase 5: appended to Deep system as a separate cached block. Forces the
+// model to ground company-specific prep in a fresh web search before emitting
+// submit_prep. Cached independently so Quick's cache key is unaffected.
+const DEEP_GROUNDING_DIRECTIVE = `DEEP PREP GROUNDING REQUIREMENT (Deep tier only)
+
+Before emitting the submit_prep tool, you MUST perform at least one web_search on the company name from the job description. Search for: recent company news, funding announcements, product launches, hiring posture, named competitors. Use search results to ground company-specific positioning and risks. If the company name cannot be confidently identified from the JD, search using the most likely candidate and proceed.`
 
 const SYSTEM_PROMPT = `You are a senior interview prep coach with 15+ years guiding candidates through interviews at top tech companies. You produce sharp, candidate-specific prep — never generic boilerplate.
 
@@ -277,45 +291,113 @@ async function generateOnce(
   input: PrepInput,
   retryHint: string
 ): Promise<PrepOutput> {
+  const isDeep = input.tier === "deep"
   const userPrompt = buildUserPrompt(input) + retryHint
-  const model = input.tier === "deep" ? DEEP_PREP_MODEL : QUICK_PREP_MODEL
-  const maxTokens = input.tier === "deep" ? DEEP_MAX_TOKENS : QUICK_MAX_TOKENS
+  const model = isDeep ? DEEP_PREP_MODEL : QUICK_PREP_MODEL
+  const maxTokens = isDeep ? DEEP_MAX_TOKENS : QUICK_MAX_TOKENS
+  const timeoutMs = isDeep ? DEEP_TIMEOUT_MS : QUICK_TIMEOUT_MS
+
+  // Phase 5: Deep gets the grounding directive as a second cached block, plus
+  // the web_search server-tool. Quick is byte-identical to pre-Phase-5: same
+  // single tool, same forced tool_choice, same single system block, no loop.
+  const systemBlocks: Anthropic.Messages.TextBlockParam[] = [
+    {
+      type: "text",
+      text: SYSTEM_PROMPT,
+      cache_control: { type: "ephemeral" },
+    },
+  ]
+  if (isDeep) {
+    systemBlocks.push({
+      type: "text",
+      text: DEEP_GROUNDING_DIRECTIVE,
+      cache_control: { type: "ephemeral" },
+    })
+  }
+
+  const submitPrepTool = {
+    name: "submit_prep",
+    description:
+      "Submit the structured interview prep output. Always use this tool for the response.",
+    // Anthropic's input_schema accepts standard JSON Schema; we reuse the
+    // same shape we used with OpenAI.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    input_schema: PREP_OUTPUT_TOOL_SCHEMA as any,
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tools: any[] = [submitPrepTool]
+  if (isDeep) {
+    // Server-managed tool: Anthropic executes the search and feeds results
+    // back to the model in-call. max_uses caps total searches per turn.
+    tools.push({
+      type: "web_search_20250305",
+      name: "web_search",
+      max_uses: 3,
+    })
+  }
+
+  const toolChoice: Anthropic.Messages.ToolChoice = isDeep
+    ? { type: "auto" }
+    : { type: "tool", name: "submit_prep" }
 
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), ANTHROPIC_TIMEOUT_MS)
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
-  let response: Anthropic.Messages.Message
+  const messages: Anthropic.Messages.MessageParam[] = [
+    { role: "user", content: userPrompt },
+  ]
+  let response: Anthropic.Messages.Message | undefined
+  let submitToolUse: Anthropic.Messages.ToolUseBlock | undefined
+  let webSearchCount = 0
+
   try {
-    response = await client.messages.create(
-      {
-        model,
-        max_tokens: maxTokens,
-        temperature: 0.4,
-        system: [
-          {
-            type: "text",
-            text: SYSTEM_PROMPT,
-            // ephemeral cache lasts ~5 min — pays off across regenerations of
-            // the same job within a session.
-            cache_control: { type: "ephemeral" },
-          },
-        ],
-        messages: [{ role: "user", content: userPrompt }],
-        tools: [
-          {
-            name: "submit_prep",
-            description:
-              "Submit the structured interview prep output. Always use this tool for the response.",
-            // Anthropic's input_schema accepts standard JSON Schema; we reuse
-            // the same shape we used with OpenAI.
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            input_schema: PREP_OUTPUT_TOOL_SCHEMA as any,
-          },
-        ],
-        tool_choice: { type: "tool", name: "submit_prep" },
-      },
-      { signal: controller.signal }
-    )
+    const maxIterations = isDeep ? DEEP_MAX_ITERATIONS : 1
+    for (let i = 0; i < maxIterations; i++) {
+      response = await client.messages.create(
+        {
+          model,
+          max_tokens: maxTokens,
+          temperature: 0.4,
+          system: systemBlocks,
+          messages,
+          tools,
+          tool_choice: toolChoice,
+        },
+        { signal: controller.signal }
+      )
+
+      for (const block of response.content) {
+        if (block.type === "tool_use" && block.name === "web_search") {
+          webSearchCount++
+        }
+      }
+
+      submitToolUse = response.content.find(
+        (block): block is Anthropic.Messages.ToolUseBlock =>
+          block.type === "tool_use" && block.name === "submit_prep"
+      )
+      if (submitToolUse) break
+
+      // No submit_prep yet. Distinguish truncation from "model still working
+      // through tools" so the existing PrepTruncatedError path surfaces
+      // properly when output is cut mid-emission.
+      if (response.stop_reason === "max_tokens") {
+        throw new PrepTruncatedError(
+          "Output truncated before submit_prep emission"
+        )
+      }
+      if (response.stop_reason !== "tool_use") {
+        throw new Error("Anthropic did not return a submit_prep tool call")
+      }
+
+      // Continue the conversation: append the assistant message and re-call.
+      // web_search is server-managed, so no client-side tool_result needed.
+      messages.push({ role: "assistant", content: response.content })
+    }
+
+    if (!submitToolUse) {
+      throw new PrepValidationError("Deep grounding exceeded iteration cap")
+    }
   } catch (err) {
     if (err instanceof Anthropic.APIUserAbortError) {
       throw new PrepTimeoutError()
@@ -330,22 +412,21 @@ async function generateOnce(
     clearTimeout(timeoutId)
   }
 
-  const toolUse = response.content.find(
-    (block): block is Anthropic.Messages.ToolUseBlock =>
-      block.type === "tool_use" && block.name === "submit_prep"
-  )
-  if (!toolUse) {
-    throw new Error("Anthropic did not return a submit_prep tool call")
+  if (isDeep) {
+    // eslint-disable-next-line no-console
+    console.log(
+      `[generatePrep] Deep grounding: ${webSearchCount} web_search calls`
+    )
   }
 
-  const result = prepOutputSchema.safeParse(toolUse.input)
+  const result = prepOutputSchema.safeParse(submitToolUse.input)
   if (!result.success) {
     const issues = result.error.issues
       .map((i) => `${i.path.join(".")}: ${i.message}`)
       .join("; ")
     // Truncation gets its own error so the caller can skip the retry path —
     // a longer retry prompt only leaves less room for output.
-    if (response.stop_reason === "max_tokens") {
+    if (response && response.stop_reason === "max_tokens") {
       throw new PrepTruncatedError(issues)
     }
     throw new PrepValidationError(issues)

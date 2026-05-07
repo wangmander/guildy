@@ -62,9 +62,9 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
-- Last phase shipped: **Phase 4e at `11375ba`** — kanban polish: drag-drop unrestricted between every column pair (with optimistic-update + rollback), per-column +Add Job affordance with stage pre-fill, inline column count, prep overlay backdrop close on every empty area (inter-column gaps, intra-column empty space, outer scrim). Phase 4f (multi-session Full Loop config) and Phase 4d (multi-session core) shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
+- Last phase shipped: **Phase 5 at `<commit-hash>`** — Anthropic `web_search_20250305` server-tool wired inline into Deep Prep generation. Hard MUST directive in a separate cached system block forces Sonnet to ground company-specific positioning and risks before emitting `submit_prep`. Quick path byte-identical. Phase 4e (kanban polish), Phase 4f (multi-session config), and Phase 4d (multi-session core) shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
 - Date: 2026-05-07
-- Project status: ready for Phase 5 (Gemini 2.5 research)
+- Project status: ready for Phase 6.5 (Termly + 3 PostHog events + 3-job smoke)
 
 ## Locked models [LIVE]
 
@@ -76,12 +76,7 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 
 V2.0 P0 LAUNCH SPRINT — locked scope, target Monday May 11. ~10 prompts, ~12-15h.
 
-### Phase 5 — Deep Prep grounding (today, Thu May 7)
-IN: Anthropic web_search tool inline in the Deep Prep generation call. Company research grounding only. Wire into existing generate-prep.ts pipeline without abstraction.
-OUT: Gemini 2.5 integration. lib/ai/research.ts abstraction. Interviewer profile grounding. Per-user cost guardrails on AI spend.
-Estimate: 1-2 prompts, 2h.
-
-### Phase 6.5 — Legal + analytics + QA (Friday)
+### Phase 6.5 — Legal + analytics + QA (Friday) — NEXT
 IN: Termly ToS + Privacy Policy embed. PostHog 3 events: signup, first prep generated, subscription paid. Smoke QA on 3 representative jobs (one per stage range).
 OUT: Resend transactional email setup entirely. Welcome email. Drip campaigns. Full PostHog funnel/cohort setup. 10-job QA pass.
 Estimate: 2 prompts, 3h.
@@ -115,7 +110,17 @@ Priority order:
 11. Progress feedback polish on long operations
 12. 10-job QA pass with edge cases (international comp, multiple offers, withdrawn jobs)
 
-## Phase 4c–4f shipped — archive
+## Phase 4c–5 shipped — archive
+
+### Phase 5 — DONE (Anthropic web_search grounding for Deep Prep)
+- `lib/ai/generate-prep.ts`: Deep tier now passes a tier-aware tools array (`submit_prep` + `web_search_20250305` server-tool with `max_uses: 3`) and `tool_choice: { type: "auto" }` so Sonnet can interleave web_search calls with the terminal `submit_prep` emission. Quick path byte-identical: same single `submit_prep` tool, same forced `tool_choice`.
+- New `DEEP_GROUNDING_DIRECTIVE` system block appended after `SYSTEM_PROMPT` for Deep only, with its own `cache_control: { type: "ephemeral" }`. Hard MUST directive: search the company name from the JD for recent news / funding / product launches / hiring posture / named competitors before emitting `submit_prep`. Cached independently so Quick's cache key is unaffected.
+- Agentic loop with `DEEP_MAX_ITERATIONS = 5` cap. Server-managed `web_search` typically resolves in a single client round-trip (Anthropic loops internally), but the client-side cap protects against runaway tool-use chains. On no-`submit_prep` exit: distinguishes `stop_reason === "max_tokens"` (throws `PrepTruncatedError` — bypasses retry path) from generic mid-loop continuation. Quick stays single-iteration.
+- Timeout split into `QUICK_TIMEOUT_MS = 120_000` and `DEEP_TIMEOUT_MS = 180_000`. `ANTHROPIC_TIMEOUT_MS` removed; Deep gets +60s budget for the additional web_search round-trip latency. AbortController bounds the entire iteration sequence cumulatively.
+- Logging: `[generatePrep] Deep grounding: <N> web_search calls` per Deep call. No PII, no query echo. Counts `tool_use` blocks of `name === "web_search"` across the loop's responses.
+- Existing error paths preserved exactly: `PrepValidationError` (single retry path), `PrepTruncatedError` (no retry), `PrepTimeoutError`, `AuthenticationError`. Quick + Deep both still benefit from the post-success guards (Quick null-coercion for `interviewer_insights` / `counter` / `answer_plan`; stage override for staleness detection).
+- No new files in `lib/ai/`. No `research.ts` abstraction. No schema migrations. No UI changes. No Stripe touch. No `models.ts` touch. No `actions.ts` touch.
+- TypeScript clean. Banned-copy clean.
 
 ### Phase 4e — DONE (Kanban polish: any-pair drag-drop, +Add Job per column, backdrop close)
 - Drag-drop unrestricted between any source/destination column pair on the kanban (Applied, Screen, HM, Full Loop, Offer). `columnToWriteStage("applied")` now returns `"applied"` (was `null`), `WriteStage` type extended, `moveJobStageSchema.to_stage` Zod enum gains `"applied"`. State transition logic added: `to_stage="applied"` flips state to `"passive"` (active → passive demote); any other target flips to `"active"` and stamps `activated_at` only when transitioning out of passive. Drop the prior `state !== "active"` guard so passive jobs can be dragged into active columns (bypasses the They-Responded activation modal — drag is a power-user gesture; activation modal stays canonical for "I have a message to paste"). `JobCard` `draggable` gate updated to require `Boolean(jobId) && Boolean(onDragStart)`; the `!isInactive` guard removed so cards in Applied are draggable too.
