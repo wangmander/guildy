@@ -356,6 +356,7 @@ export function PrepOverlay({
 
               <main className="pointer-events-auto rounded-2xl border border-black/5 bg-[#F8F9FA] shadow-sm md:max-h-[calc(100dvh-3rem)] md:overflow-y-auto">
                 <PrepCanvas
+                  jobId={job.id}
                   stage={job.stage}
                   sessionConfig={sessionConfig}
                   statesMap={statesMap}

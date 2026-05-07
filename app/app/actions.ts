@@ -14,6 +14,7 @@ import {
 } from "@/lib/ai/parse-full-loop-rounds"
 import {
   PREP_SESSION_ROLES,
+  fullLoopSessionConfigSchema,
   prepTierSchema,
   stageKeyToPrepStage,
   type FullLoopSessionConfig,
@@ -1191,4 +1192,60 @@ export async function parseFullLoopRoundsAction(
 
   revalidatePath("/app")
   return { ok: true, config: result.config, raw: result.raw }
+}
+
+// Phase 4f: persist a user-edited full_loop_session_config from the
+// Customize Rounds modal. fullLoopSessionConfigSchema enforces the strict
+// 4-role shape so malformed payloads can't slip through. Source-tag merge
+// (user vs preserved-prior) is computed client-side in the modal before
+// this action is called.
+
+const updateFullLoopSessionConfigSchema = z.object({
+  job_id: z.string().uuid("Invalid job id"),
+  config: fullLoopSessionConfigSchema,
+})
+
+export type UpdateFullLoopSessionConfigInput = z.input<
+  typeof updateFullLoopSessionConfigSchema
+>
+
+export type UpdateFullLoopSessionConfigResult =
+  | { ok: true }
+  | { ok: false; error: string }
+
+export async function updateFullLoopSessionConfigAction(
+  input: UpdateFullLoopSessionConfigInput
+): Promise<UpdateFullLoopSessionConfigResult> {
+  const parsed = updateFullLoopSessionConfigSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input",
+    }
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: "Not signed in" }
+
+  const { data: job, error: fetchError } = await supabase
+    .from("jobs")
+    .select("id")
+    .eq("id", parsed.data.job_id)
+    .eq("user_id", user.id)
+    .maybeSingle()
+  if (fetchError) return { ok: false, error: fetchError.message }
+  if (!job) return { ok: false, error: "Job not found" }
+
+  const { error: updateError } = await supabase
+    .from("jobs")
+    .update({ full_loop_session_config: parsed.data.config })
+    .eq("id", parsed.data.job_id)
+    .eq("user_id", user.id)
+  if (updateError) return { ok: false, error: updateError.message }
+
+  revalidatePath("/app")
+  return { ok: true }
 }

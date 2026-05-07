@@ -1,6 +1,7 @@
 "use client"
 
-import { RefreshCw, Sparkles } from "lucide-react"
+import { useState } from "react"
+import { Pencil, RefreshCw, Sparkles } from "lucide-react"
 
 import type { PrepStatesMap, PrepStateEntry } from "@/app/app/actions"
 import {
@@ -12,6 +13,7 @@ import {
 } from "@/lib/ai/prep-types"
 import type { StageKey } from "@/lib/stages"
 
+import { CustomizeRoundsModal } from "./customize-rounds-modal"
 import {
   LockedPreviewFooter,
   LockedPreviewModule,
@@ -28,6 +30,7 @@ const SINGLE_GENERATING_KEY = "_single"
 const QUICK_POSITIONING_VISIBLE_FRAMES = 2
 
 type Props = {
+  jobId: string
   stage: StageKey
   sessionConfig: FullLoopSessionConfig
   statesMap: PrepStatesMap | null
@@ -67,6 +70,7 @@ function stageHeading(stage: StageKey): string {
 }
 
 export function PrepCanvas({
+  jobId,
   stage,
   sessionConfig,
   statesMap,
@@ -82,6 +86,7 @@ export function PrepCanvas({
   onUpgrade,
   onAddJd,
 }: Props) {
+  const [customizeOpen, setCustomizeOpen] = useState(false)
   const fullLoop = isFullLoopStage(stage)
   const currentKey: keyof PrepStatesMap = fullLoop ? selectedRole : "single"
   const generatingKey = fullLoop ? selectedRole : SINGLE_GENERATING_KEY
@@ -131,17 +136,33 @@ export function PrepCanvas({
           <p className="text-sm text-gray-500">
             No rounds configured. Customize rounds to set up your loop.
           </p>
+          <button
+            type="button"
+            onClick={() => setCustomizeOpen(true)}
+            className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 text-xs font-medium text-[#1C1E21] transition-colors hover:bg-gray-50"
+          >
+            <Pencil className="size-3.5" />
+            Customize rounds
+          </button>
         </div>
       ) : (
         <>
           {fullLoop ? (
-            <div className="mt-4">
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
               <SessionTabs
                 sessions={sessions}
                 sessionConfig={sessionConfig}
                 selectedRole={selectedRole}
                 onSelect={onSelectRole}
               />
+              <button
+                type="button"
+                onClick={() => setCustomizeOpen(true)}
+                className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-50 hover:text-[#1C1E21]"
+              >
+                <Pencil className="size-3" />
+                Customize
+              </button>
             </div>
           ) : null}
 
@@ -160,6 +181,15 @@ export function PrepCanvas({
           />
         </>
       )}
+
+      {fullLoop ? (
+        <CustomizeRoundsModal
+          open={customizeOpen}
+          onClose={() => setCustomizeOpen(false)}
+          jobId={jobId}
+          sessionConfig={sessionConfig}
+        />
+      ) : null}
     </div>
   )
 }
