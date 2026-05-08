@@ -10,8 +10,12 @@ import type { PrepTier } from "./prep-types"
 // heavy users should convert to Deep instead of hammering Quick.
 const QUICK_DAILY = 10
 const QUICK_MONTHLY = 75
-const DEEP_DAILY = 15
-const DEEP_MONTHLY = 100
+// Margin-protective at launch: Deep cost target is ~$0.10/gen but
+// dashboard-confirmed cost may land closer to $0.30; 8/day, 50/month
+// keeps the worst case ≥ $4 margin per user at cap on the $19.99 tier.
+// Raise after Anthropic dashboard confirms steady-state cost.
+const DEEP_DAILY = 8
+const DEEP_MONTHLY = 50
 
 export type RateLimitReason = "daily_cap" | "monthly_cap"
 

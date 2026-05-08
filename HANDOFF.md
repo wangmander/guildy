@@ -111,6 +111,9 @@ Priority order:
 
 ## Phase 4c–6.5 shipped — archive
 
+### Patch — Deep rate limits 8/day, 50/month
+- `lib/ai/rate-limit.ts`: `DEEP_DAILY` 15 → 8, `DEEP_MONTHLY` 100 → 50. Margin-protective at launch; raise after dashboard-confirmed cost data. Quick tier (10/75) unchanged.
+
 ### Phase 6.5 — DONE (Termly + PostHog 3 events + V2.1 Ultra tier note)
 - `lib/analytics.ts` (NEW): server-side PostHog capture via fetch to the public capture endpoint. Three exported helpers — `trackSignupCompleted(userId)`, `trackFirstPrepGenerated(userId, jobId, tier, modelUsed)`, `trackSubscriptionPaid(userId, tier)` (stub for Phase 6b's Stripe webhook). All no-op when `NEXT_PUBLIC_POSTHOG_KEY` is unset; capture errors swallowed via try/catch so analytics never block the user flow.
 - `components/posthog-provider.tsx` (NEW): client-only provider initialized in `useEffect`. Calls `posthog.init` with `capture_pageview: true` and `person_profiles: "identified_only"`. No-ops gracefully when env vars are missing. Wraps children straight through (no actual context provider — `posthog-js` is global).
