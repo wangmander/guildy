@@ -23,24 +23,20 @@ const NOTE_CHAR_CAP = 4000
 const QUICK_MAX_TOKENS = 4096
 const DEEP_MAX_TOKENS = 8192
 
-// Hard timeout on the Anthropic call. Beyond this the SDK promise is aborted
-// via AbortController and the user sees a "timed out, try again" message
-// instead of a hung UI. Phase 5: Deep budgets 180s to cover the additional
-// web_search round-trips on top of Sonnet's existing latency.
+// Hard timeouts on the Anthropic prep-generation call. AbortController fires
+// past these and the user sees a "timed out, try again" message. Sonnet is
+// single-pass for prep generation post-Patch-5.4; the broader Deep budget
+// covers Sonnet's reasoning + structured-output emission.
 const QUICK_TIMEOUT_MS = 120_000
 const DEEP_TIMEOUT_MS = 180_000
 
-// Phase 5: Deep agentic loop guard. Server-side web_search typically resolves
-// in a single client round-trip (Anthropic loops internally), but a defensive
-// client-side cap protects against runaway tool-use chains.
-const DEEP_MAX_ITERATIONS = 5
+// Patch 5.4: Haiku-backed company-context fetch budget. Single bounded
+// research call upstream of Sonnet generation; falls back to ungrounded
+// generation on timeout/error.
+const COMPANY_CONTEXT_TIMEOUT_MS = 60_000
+const COMPANY_CONTEXT_MAX_TOKENS = 1024
 
-// Phase 5: appended to Deep system as a separate cached block. Forces the
-// model to ground company-specific prep in a fresh web search before emitting
-// submit_prep. Cached independently so Quick's cache key is unaffected.
-const DEEP_GROUNDING_DIRECTIVE = `DEEP PREP GROUNDING REQUIREMENT (Deep tier only)
-
-Before emitting the submit_prep tool, perform EXACTLY ONE web_search on the company name from the job description. Search query should combine: company name + role/team context + any recency hint (e.g. "recent news", "funding", "2026"). One search returns enough context to ground positioning and risks. Do not perform additional searches. After the search returns, immediately emit submit_prep with grounded content.`
+const COMPANY_CONTEXT_SYSTEM = `You are a research assistant. Given a company name and role context, perform exactly one web_search and produce a 150-220 word terse summary covering: recent company news, funding/financials, key products or strategic moves, named competitors, hiring posture if visible. No fluff, no preamble. Plain text only, no markdown.`
 
 const SYSTEM_PROMPT = `You are a senior interview prep coach with 15+ years guiding candidates through interviews at top tech companies. You produce sharp, candidate-specific prep — never generic boilerplate.
 
@@ -63,6 +59,7 @@ QUALITY BAR
 4. Use the interviewer's name when phrasing positioning frames if provided. Do not invent biographical details about them.
 5. Reference specifics from the latest message if it hints at what they care about.
 6. Do not invent facts about the company that aren't in the JD or message.
+7. When [COMPANY CONTEXT] is present in the user prompt, use it to ground positioning, risks, and questions. Do not invent facts not present in resume, JD, latest message, or company context.
 
 QUICK PREP TIER RULES (when tier === "quick")
 
@@ -289,118 +286,55 @@ class PrepTimeoutError extends Error {
 async function generateOnce(
   client: Anthropic,
   input: PrepInput,
-  retryHint: string
+  retryHint: string,
+  companyContext: string | null
 ): Promise<PrepOutput> {
   const isDeep = input.tier === "deep"
-  const userPrompt = buildUserPrompt(input) + retryHint
+  const userPrompt = buildUserPrompt(input, companyContext) + retryHint
   const model = isDeep ? DEEP_PREP_MODEL : QUICK_PREP_MODEL
   const maxTokens = isDeep ? DEEP_MAX_TOKENS : QUICK_MAX_TOKENS
   const timeoutMs = isDeep ? DEEP_TIMEOUT_MS : QUICK_TIMEOUT_MS
 
-  // Phase 5: Deep gets the grounding directive as a second cached block, plus
-  // the web_search server-tool. Quick is byte-identical to pre-Phase-5: same
-  // single tool, same forced tool_choice, same single system block, no loop.
-  const systemBlocks: Anthropic.Messages.TextBlockParam[] = [
-    {
-      type: "text",
-      text: SYSTEM_PROMPT,
-      cache_control: { type: "ephemeral" },
-    },
-  ]
+  // Patch 5.4: single-pass prep generation. Sonnet no longer carries the
+  // web_search server-tool; grounding is fetched upstream by Haiku and
+  // injected as a [COMPANY CONTEXT] block in the user prompt. Tools array
+  // is just submit_prep; tool_choice forces it; no agentic loop.
   if (isDeep) {
-    systemBlocks.push({
-      type: "text",
-      text: DEEP_GROUNDING_DIRECTIVE,
-      cache_control: { type: "ephemeral" },
-    })
+    // eslint-disable-next-line no-console
+    console.log("[generatePrep] Sonnet generation start")
   }
-
-  const submitPrepTool = {
-    name: "submit_prep",
-    description:
-      "Submit the structured interview prep output. Always use this tool for the response.",
-    // Anthropic's input_schema accepts standard JSON Schema; we reuse the
-    // same shape we used with OpenAI.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    input_schema: PREP_OUTPUT_TOOL_SCHEMA as any,
-  }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const tools: any[] = [submitPrepTool]
-  if (isDeep) {
-    // Server-managed tool: Anthropic executes the search and feeds results
-    // back to the model in-call. Patch 5.3: max_uses dropped 3 → 1 to keep
-    // Deep generation comfortably inside the 180s timeout. One well-formed
-    // search returns enough company context to ground positioning + risks;
-    // the system directive enforces this at the prompt layer.
-    tools.push({
-      type: "web_search_20250305",
-      name: "web_search",
-      max_uses: 1,
-    })
-  }
-
-  const toolChoice: Anthropic.Messages.ToolChoice = isDeep
-    ? { type: "auto" }
-    : { type: "tool", name: "submit_prep" }
 
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
-  const messages: Anthropic.Messages.MessageParam[] = [
-    { role: "user", content: userPrompt },
-  ]
-  let response: Anthropic.Messages.Message | undefined
-  let submitToolUse: Anthropic.Messages.ToolUseBlock | undefined
-  let webSearchCount = 0
-
+  let response: Anthropic.Messages.Message
   try {
-    const maxIterations = isDeep ? DEEP_MAX_ITERATIONS : 1
-    for (let i = 0; i < maxIterations; i++) {
-      response = await client.messages.create(
-        {
-          model,
-          max_tokens: maxTokens,
-          temperature: 0.4,
-          system: systemBlocks,
-          messages,
-          tools,
-          tool_choice: toolChoice,
-        },
-        { signal: controller.signal }
-      )
-
-      for (const block of response.content) {
-        if (block.type === "tool_use" && block.name === "web_search") {
-          webSearchCount++
-        }
-      }
-
-      submitToolUse = response.content.find(
-        (block): block is Anthropic.Messages.ToolUseBlock =>
-          block.type === "tool_use" && block.name === "submit_prep"
-      )
-      if (submitToolUse) break
-
-      // No submit_prep yet. Distinguish truncation from "model still working
-      // through tools" so the existing PrepTruncatedError path surfaces
-      // properly when output is cut mid-emission.
-      if (response.stop_reason === "max_tokens") {
-        throw new PrepTruncatedError(
-          "Output truncated before submit_prep emission"
-        )
-      }
-      if (response.stop_reason !== "tool_use") {
-        throw new Error("Anthropic did not return a submit_prep tool call")
-      }
-
-      // Continue the conversation: append the assistant message and re-call.
-      // web_search is server-managed, so no client-side tool_result needed.
-      messages.push({ role: "assistant", content: response.content })
-    }
-
-    if (!submitToolUse) {
-      throw new PrepValidationError("Deep grounding exceeded iteration cap")
-    }
+    response = await client.messages.create(
+      {
+        model,
+        max_tokens: maxTokens,
+        temperature: 0.4,
+        system: [
+          {
+            type: "text",
+            text: SYSTEM_PROMPT,
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+        messages: [{ role: "user", content: userPrompt }],
+        tools: [
+          {
+            name: "submit_prep",
+            description:
+              "Submit the structured interview prep output. Always use this tool for the response.",
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            input_schema: PREP_OUTPUT_TOOL_SCHEMA as any,
+          },
+        ],
+        tool_choice: { type: "tool", name: "submit_prep" },
+      },
+      { signal: controller.signal }
+    )
   } catch (err) {
     if (err instanceof Anthropic.APIUserAbortError) {
       throw new PrepTimeoutError()
@@ -415,11 +349,12 @@ async function generateOnce(
     clearTimeout(timeoutId)
   }
 
-  if (isDeep) {
-    // eslint-disable-next-line no-console
-    console.log(
-      `[generatePrep] Deep grounding: ${webSearchCount} web_search calls`
-    )
+  const submitToolUse = response.content.find(
+    (block): block is Anthropic.Messages.ToolUseBlock =>
+      block.type === "tool_use" && block.name === "submit_prep"
+  )
+  if (!submitToolUse) {
+    throw new Error("Anthropic did not return a submit_prep tool call")
   }
 
   const result = prepOutputSchema.safeParse(submitToolUse.input)
@@ -429,7 +364,7 @@ async function generateOnce(
       .join("; ")
     // Truncation gets its own error so the caller can skip the retry path —
     // a longer retry prompt only leaves less room for output.
-    if (response && response.stop_reason === "max_tokens") {
+    if (response.stop_reason === "max_tokens") {
       throw new PrepTruncatedError(issues)
     }
     throw new PrepValidationError(issues)
@@ -461,8 +396,29 @@ export async function generatePrep(input: PrepInput): Promise<PrepOutput> {
   }
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
+  // Patch 5.4: Deep flow is now Haiku-search-then-Sonnet-generate. Quick
+  // skips the research step entirely and runs the same single-pass shape
+  // it always has.
+  const isDeep = input.tier === "deep"
+  const deepStart = isDeep ? Date.now() : 0
+  if (isDeep) {
+    // eslint-disable-next-line no-console
+    console.log("[generatePrep] Deep start")
+  }
+
+  const companyContext = isDeep
+    ? await fetchCompanyContext(client, input)
+    : null
+
   try {
-    return await generateOnce(client, input, "")
+    const out = await generateOnce(client, input, "", companyContext)
+    if (isDeep) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[generatePrep] Deep generated in ${Date.now() - deepStart}ms`
+      )
+    }
+    return out
   } catch (err) {
     if (err instanceof PrepTruncatedError) {
       // Retry with a longer prompt would only leave less room for output.
@@ -470,11 +426,98 @@ export async function generatePrep(input: PrepInput): Promise<PrepOutput> {
       throw err
     }
     if (err instanceof PrepValidationError) {
-      // Single retry with the strengthened user prompt. If this also fails,
-      // the error from the second attempt surfaces to the caller.
-      return await generateOnce(client, input, RETRY_HINT)
+      // Single retry with the strengthened user prompt. The retry reuses
+      // the same companyContext so we don't re-pay the Haiku research cost.
+      const out = await generateOnce(client, input, RETRY_HINT, companyContext)
+      if (isDeep) {
+        // eslint-disable-next-line no-console
+        console.log(
+          `[generatePrep] Deep generated in ${Date.now() - deepStart}ms`
+        )
+      }
+      return out
     }
     throw err
+  }
+}
+
+// Patch 5.4: Haiku-backed company-context summary upstream of Sonnet. One
+// bounded research call with the web_search server-tool. On any failure
+// (timeout, auth, empty response) returns null and the Deep generation
+// proceeds ungrounded — no synthetic facts, just resume + JD + message.
+async function fetchCompanyContext(
+  client: Anthropic,
+  input: PrepInput
+): Promise<string | null> {
+  const start = Date.now()
+  const controller = new AbortController()
+  const timeoutId = setTimeout(
+    () => controller.abort(),
+    COMPANY_CONTEXT_TIMEOUT_MS
+  )
+  try {
+    const response = await client.messages.create(
+      {
+        model: QUICK_PREP_MODEL,
+        max_tokens: COMPANY_CONTEXT_MAX_TOKENS,
+        temperature: 0.2,
+        system: [
+          {
+            type: "text",
+            text: COMPANY_CONTEXT_SYSTEM,
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+        messages: [
+          {
+            role: "user",
+            content: `Company: ${input.company_name}\nRole context: ${input.role_title}\n\nSearch and summarize.`,
+          },
+        ],
+        tools: [
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          {
+            type: "web_search_20250305",
+            name: "web_search",
+            max_uses: 1,
+          } as any,
+        ],
+        tool_choice: { type: "auto" },
+      },
+      { signal: controller.signal }
+    )
+
+    let summary = ""
+    for (const block of response.content) {
+      if (block.type === "text") summary += block.text
+    }
+    summary = summary.trim()
+    if (summary.length === 0) {
+      // eslint-disable-next-line no-console
+      console.log(
+        "[generatePrep] Company context fetch failed, proceeding ungrounded: empty summary"
+      )
+      return null
+    }
+    // eslint-disable-next-line no-console
+    console.log(
+      `[generatePrep] Company context fetched: ${summary.length} chars in ${Date.now() - start}ms`
+    )
+    return summary
+  } catch (err) {
+    const reason =
+      err instanceof Anthropic.APIUserAbortError
+        ? "timeout"
+        : err instanceof Error
+          ? err.message
+          : String(err)
+    // eslint-disable-next-line no-console
+    console.log(
+      `[generatePrep] Company context fetch failed, proceeding ungrounded: ${reason}`
+    )
+    return null
+  } finally {
+    clearTimeout(timeoutId)
   }
 }
 
@@ -577,7 +620,10 @@ const SESSION_ROLE_EMPHASIS = {
   }
 >
 
-function buildUserPrompt(input: PrepInput): string {
+function buildUserPrompt(
+  input: PrepInput,
+  companyContext: string | null = null
+): string {
   const resume = truncate(input.resume_text, RESUME_CHAR_CAP)
   const jd = truncate(input.jd_text, JD_CHAR_CAP)
   const message = truncate(input.latest_message, LATEST_MESSAGE_CHAR_CAP)
@@ -610,6 +656,12 @@ function buildUserPrompt(input: PrepInput): string {
     "[JOB DESCRIPTION]",
     jd ?? "(not provided)",
   ]
+
+  // Patch 5.4: company context (Haiku-fetched summary) immediately after JD,
+  // before session-role overrides. Absent when fetch failed or for Quick.
+  if (companyContext) {
+    lines.push("", "[COMPANY CONTEXT]", companyContext)
+  }
 
   if (input.session_role) {
     const cfg = SESSION_ROLE_EMPHASIS[input.session_role]

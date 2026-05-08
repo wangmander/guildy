@@ -4,6 +4,12 @@ import { Board, type JobRow, type InterviewerInfo } from "@/components/app/board
 import { TopNav } from "@/components/app/top-nav"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
+// Patch 5.4: Vercel server actions inherit maxDuration from the invoking
+// page. 240s covers worst-case Deep flow (Haiku 60s + Sonnet 180s) past the
+// AbortController fires. Lives here because Next 14 "use server" files
+// cannot export non-async constants.
+export const maxDuration = 240
+
 type SearchParams = { [key: string]: string | string[] | undefined }
 
 export default async function AppPage({

@@ -62,7 +62,7 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
-- Last phase shipped: **Phase 5 at `9d1f26c`** (patch 5.1 at `2801a59`, patch 5.3 at `b29f038`) — Anthropic `web_search_20250305` server-tool wired inline into Deep Prep generation. Hard MUST directive in a separate cached system block forces Sonnet to ground company-specific positioning and risks before emitting `submit_prep`. Quick path byte-identical. Phase 4e (kanban polish), Phase 4f (multi-session config), and Phase 4d (multi-session core) shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
+- Last phase shipped: **Phase 5 at `9d1f26c`** (patch 5.1 at `2801a59`, patch 5.3 at `b29f038`, patch 5.4 at `<commit-hash>`) — Anthropic `web_search_20250305` server-tool wired inline into Deep Prep generation. Hard MUST directive in a separate cached system block forces Sonnet to ground company-specific positioning and risks before emitting `submit_prep`. Quick path byte-identical. Phase 4e (kanban polish), Phase 4f (multi-session config), and Phase 4d (multi-session core) shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
 - Date: 2026-05-07
 - Project status: ready for Phase 6.5 (Termly + 3 PostHog events + 3-job smoke)
 
@@ -105,12 +105,24 @@ Priority order:
 6. Gemini 2.5 research abstraction + lib/ai/research.ts
 7. Custom Stripe customer portal UI
 8. Per-user cost guardrails on AI spend (monthly cap)
+8a. Server-side in-flight lock on Deep generation (rapid Try Again clicks can currently fire duplicate Sonnet calls; UI lock from patch 5.1 mitigates only within the loading window — patch 5.4 known gap)
 9. Full PostHog funnel and cohort analysis
 10. Comprehensive error states across every action
 11. Progress feedback polish on long operations
 12. 10-job QA pass with edge cases (international comp, multiple offers, withdrawn jobs)
 
 ## Phase 4c–5 shipped — archive
+
+### Phase 5 patch 5.4 — DONE (Decouple Deep grounding into Haiku search + Sonnet single-pass)
+- Removed Sonnet agentic web-search loop entirely. `generateOnce` reverted to single-pass `messages.create` for both tiers: `tools: [submit_prep]` only, `tool_choice: { type: "tool", name: "submit_prep" }` forced, no loop, no `DEEP_MAX_ITERATIONS`. `DEEP_GROUNDING_DIRECTIVE` const removed (Sonnet no longer holds the search tool, so the directive is obsolete).
+- New `fetchCompanyContext(client, input)` helper at module scope. Uses `QUICK_PREP_MODEL` (Haiku 4.5) with `web_search_20250305` server-tool (`max_uses: 1`, `tool_choice: { type: "auto" }`). 60s `AbortController`. System prompt: "research assistant... perform exactly one web_search and produce a 150-220 word terse summary..." On timeout, auth error, or empty text response: returns `null` and Deep generation proceeds ungrounded — no synthetic facts injected, no throw.
+- Deep flow in `generatePrep`: log `[generatePrep] Deep start`, capture timestamp, await `fetchCompanyContext`, then `generateOnce(..., companyContext)`, then log `[generatePrep] Deep generated in <ms>ms`. Retry path reuses the same `companyContext` so Haiku research cost is paid at most once per `generatePrep` call. Quick flow byte-identical (no fetch, no timing logs).
+- `buildUserPrompt(input, companyContext = null)`: when non-null, injects `[COMPANY CONTEXT]\n<summary>` block immediately after `[JOB DESCRIPTION]` and before `[SESSION]`. SYSTEM_PROMPT gains rule 7: "When [COMPANY CONTEXT] is present in the user prompt, use it to ground positioning, risks, and questions. Do not invent facts not present in resume, JD, latest message, or company context." Cached in the existing system block; minor cache-key change for both tiers.
+- Timing logs added: `[generatePrep] Deep start`, `[generatePrep] Company context fetched: <chars> chars in <ms>ms` (or `... fetch failed, proceeding ungrounded: <reason>`), `[generatePrep] Sonnet generation start`, `[generatePrep] Deep generated in <ms>ms`. Server-side console only, no PII, no query echo.
+- `app/app/page.tsx`: added `export const maxDuration = 240` (server actions inherit from invoking page; `"use server"` files cannot export non-async constants per Next 14). Vercel server actions default to 10s; Pro plan supports up to 300s. 240s gives the Haiku-then-Sonnet worst case (60s + 180s) headroom past the AbortController fires.
+- Existing error paths preserved exactly: `PrepValidationError` (single retry, reuses `companyContext`), `PrepTruncatedError` (no retry), `PrepTimeoutError`, `AuthenticationError`. Quick output guards (`interviewer_insights = null`, `counter = null`, `answer_plan = null`) and stage override unchanged.
+- Known gap: rapid Try Again clicks while a Deep gen is still in-flight could fire duplicate Sonnet calls. Patch 5.1's UI lock mitigates during the loading window. Server-side in-flight lock requires schema or external state — deferred to V2.1.
+- TypeScript clean. Banned-copy clean.
 
 ### Phase 5 patch 5.3 — DONE (Upgrade chip toggles tier + web_search single-search)
 - TierSelector Upgrade chip onClick now fires `onTierChange("deep")` alongside the existing `onUpgrade()` analytics call. Pre-paywall the chip would otherwise be a dead button (chip stayed on Quick tier, only logged the upgrade-clicked event). When Phase 6b ships the paywall, `onUpgrade` becomes the gate; for now both fire and the user lands on Deep.
