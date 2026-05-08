@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { createBrowserClient } from "@supabase/ssr"
 
 export default function LoginPage() {
@@ -93,6 +94,17 @@ export default function LoginPage() {
               )}
               <p className="w-full text-center text-gray-400 text-lg mt-4 font-medium">
                 Free to try for beta users
+              </p>
+              <p className="w-full text-center text-xs text-gray-400 mt-3">
+                By continuing you agree to our{" "}
+                <Link href="/terms" className="underline hover:text-gray-600">
+                  Terms
+                </Link>{" "}
+                and{" "}
+                <Link href="/privacy" className="underline hover:text-gray-600">
+                  Privacy Policy
+                </Link>
+                .
               </p>
             </form>
           )}

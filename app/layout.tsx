@@ -4,6 +4,8 @@ import { Inter } from "next/font/google"
 import { GeistSans } from "geist/font/sans"
 import "./globals.css"
 
+import { PostHogProvider } from "@/components/posthog-provider"
+
 const inter = Inter({
   subsets: ["latin"],
   display: "swap",
@@ -25,7 +27,9 @@ export default function RootLayout({
       lang="en"
       className={`${inter.variable} ${GeistSans.variable} antialiased`}
     >
-      <body className="min-h-screen bg-gray-50">{children}</body>
+      <body className="min-h-screen bg-gray-50">
+        <PostHogProvider>{children}</PostHogProvider>
+      </body>
     </html>
   )
 }

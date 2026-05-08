@@ -1,6 +1,7 @@
 "use server"
 
 import { redirect } from "next/navigation"
+import { trackSignupCompleted } from "@/lib/analytics"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 type ActionResult = {
@@ -57,6 +58,11 @@ export async function completeOnboardingAction() {
   if (!hasResume) {
     return { ok: false as const, message: "Add your resume or background before continuing." }
   }
+
+  // Phase 6.5: signup_completed fires once the user has the minimum data
+  // for the product to be useful (resume on file). Awaited so the capture
+  // request gets to fly before redirect terminates the action.
+  await trackSignupCompleted(user.id)
 
   redirect("/app")
 }

@@ -62,7 +62,9 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
-- Last phase shipped: **Phase 5 at `9d1f26c`** (patch 5.1 at `2801a59`, patch 5.3 at `b29f038`, patch 5.4 at `18acb73`) — Anthropic `web_search_20250305` server-tool wired inline into Deep Prep generation. Hard MUST directive in a separate cached system block forces Sonnet to ground company-specific positioning and risks before emitting `submit_prep`. Quick path byte-identical. Phase 4e (kanban polish), Phase 4f (multi-session config), and Phase 4d (multi-session core) shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
+- Last phase shipped: **Phase 6.5 at `<commit-hash>`** — Termly legal pages + PostHog 3 events + V2.1 Ultra tier note. Phase 5 (Anthropic web_search grounding) and patch series 5.1/5.3/5.4 shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
+
+  Prior shipped: Phase 5 at `9d1f26c` (patch 5.1 at `2801a59`, patch 5.3 at `b29f038`, patch 5.4 at `18acb73`) — Anthropic `web_search_20250305` server-tool wired inline into Deep Prep generation. Hard MUST directive in a separate cached system block forces Sonnet to ground company-specific positioning and risks before emitting `submit_prep`. Quick path byte-identical. Phase 4e (kanban polish), Phase 4f (multi-session config), and Phase 4d (multi-session core) shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
 - Date: 2026-05-07
 - Project status: ready for Phase 6.5 (Termly + 3 PostHog events + 3-job smoke)
 
@@ -76,12 +78,7 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 
 V2.0 P0 LAUNCH SPRINT — locked scope, target Monday May 11. ~10 prompts, ~12-15h.
 
-### Phase 6.5 — Legal + analytics + QA (Friday) — NEXT
-IN: Termly ToS + Privacy Policy embed. PostHog 3 events: signup, first prep generated, subscription paid. Smoke QA on 3 representative jobs (one per stage range).
-OUT: Resend transactional email setup entirely. Welcome email. Drip campaigns. Full PostHog funnel/cohort setup. 10-job QA pass.
-Estimate: 2 prompts, 3h.
-
-### Phase 6b — Stripe + paywall (Sat-Sun)
+### Phase 6b — Stripe + paywall (Sat-Sun) — NEXT
 IN: Stripe Checkout (hosted page, NOT custom UI). Webhooks for subscription.created, subscription.updated, subscription.deleted, payment_failed. Paywall logic gating tier=deep features. Stripe-hosted customer portal link (NOT custom UI). Single tier $19.99/mo. Basic grace period via Stripe Smart Retries default behavior.
 OUT: Custom checkout UI. Custom customer portal UI. Complex grace period (multi-stage retry, dunning, win-back).
 Estimate: 4 prompts, 6-8h.
@@ -106,12 +103,26 @@ Priority order:
 7. Custom Stripe customer portal UI
 8. Per-user cost guardrails on AI spend (monthly cap)
 8a. Server-side in-flight lock on Deep generation (rapid Try Again clicks can currently fire duplicate Sonnet calls; UI lock from patch 5.1 mitigates only within the loading window — patch 5.4 known gap)
+8b. Ultra tier ($49.99/mo): Opus 4.7 max-quality generation + Concierge Interviewer Intel feature — multi-source interviewer research (LinkedIn, X, Substack, podcasts, GitHub, conference talks) producing a rapport-building brief per interviewer per round. Hyper-whale tier. Margins are wide because Concierge research is bounded (one brief per round, not per session); defensible because no other prep tool is doing it at this depth.
 9. Full PostHog funnel and cohort analysis
 10. Comprehensive error states across every action
 11. Progress feedback polish on long operations
 12. 10-job QA pass with edge cases (international comp, multiple offers, withdrawn jobs)
 
-## Phase 4c–5 shipped — archive
+## Phase 4c–6.5 shipped — archive
+
+### Phase 6.5 — DONE (Termly + PostHog 3 events + V2.1 Ultra tier note)
+- `lib/analytics.ts` (NEW): server-side PostHog capture via fetch to the public capture endpoint. Three exported helpers — `trackSignupCompleted(userId)`, `trackFirstPrepGenerated(userId, jobId, tier, modelUsed)`, `trackSubscriptionPaid(userId, tier)` (stub for Phase 6b's Stripe webhook). All no-op when `NEXT_PUBLIC_POSTHOG_KEY` is unset; capture errors swallowed via try/catch so analytics never block the user flow.
+- `components/posthog-provider.tsx` (NEW): client-only provider initialized in `useEffect`. Calls `posthog.init` with `capture_pageview: true` and `person_profiles: "identified_only"`. No-ops gracefully when env vars are missing. Wraps children straight through (no actual context provider — `posthog-js` is global).
+- `app/layout.tsx`: imports `PostHogProvider` and wraps `{children}` in the body. RootLayout stays a server component; only the provider is client.
+- `app/onboarding/actions.ts` `completeOnboardingAction`: fires `signup_completed` after the resume gate passes, before redirect to `/app`.
+- `app/app/actions.ts` `generatePrepAction`: after a successful `prep_versions` insert, count rows by user_id; if `count === 1` (the user's very first prep), fires `first_prep_generated` with `{ job_id, tier, model_used }`.
+- `app/privacy/page.tsx` and `app/terms/page.tsx`: replaced inline V1 legal copy with Termly iframe embeds (`<div data-id={...} data-type="iframe" />` + Termly's `embed-policy.min.js` loaded via Next `<Script>`). IDs read from `NEXT_PUBLIC_TERMLY_PRIVACY_ID` and `NEXT_PUBLIC_TERMLY_TOS_ID`; default to `TODO_*` placeholders so user can paste real Termly UUIDs post-deploy.
+- `app/login/page.tsx`: added "By continuing you agree to our Terms and Privacy Policy" line below the magic-link form. Both links route to `/terms` and `/privacy`.
+- `.env.example`: documents `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST`, `NEXT_PUBLIC_TERMLY_TOS_ID`, `NEXT_PUBLIC_TERMLY_PRIVACY_ID`.
+- `package.json`: `posthog-js` added (^1.372).
+- V2.1 backlog: Ultra tier ($49.99/mo, Opus 4.7 max + Concierge Interviewer Intel) added per the standalone discussion.
+- Static gates: `pnpm build` clean (compiled successfully, all 14 routes including new `/privacy` and `/terms`). Banned-copy clean. `pnpm tsc --noEmit` has 6 pre-existing errors in `inputs-widget.tsx` / `theme-provider.tsx` / `badge.tsx` / `button.tsx` from the `react: ^19` runtime + `@types/react: ^18` types mismatch — verified pre-existing via stash test, unrelated to Phase 6.5 work, latent until `pnpm add posthog-js` invalidated the `.tsbuildinfo` cache. Project's Next config skips type validation during build (`typescript.ignoreBuildErrors`), so production unaffected. Cleaning these up is a separate task.
 
 ### Phase 5 patch 5.4 — DONE (Decouple Deep grounding into Haiku search + Sonnet single-pass)
 - Removed Sonnet agentic web-search loop entirely. `generateOnce` reverted to single-pass `messages.create` for both tiers: `tools: [submit_prep]` only, `tool_choice: { type: "tool", name: "submit_prep" }` forced, no loop, no `DEEP_MAX_ITERATIONS`. `DEEP_GROUNDING_DIRECTIVE` const removed (Sonnet no longer holds the search tool, so the directive is obsolete).

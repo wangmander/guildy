@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { z } from "zod"
 
+import { trackFirstPrepGenerated } from "@/lib/analytics"
 import { generatePrep } from "@/lib/ai/generate-prep"
 import { DEEP_PREP_MODEL, QUICK_PREP_MODEL } from "@/lib/ai/models"
 import {
@@ -949,6 +950,23 @@ export async function generatePrepAction(
     })
     .eq("id", parsed.data.job_id)
     .eq("user_id", user.id)
+
+  // Phase 6.5: first_prep_generated fires once per user, the first time a
+  // prep_versions row lands. Count check against the row we just inserted
+  // — count === 1 means this was the user's very first prep. Failures here
+  // are silent inside trackFirstPrepGenerated and never block the response.
+  const { count: prepCount } = await supabase
+    .from("prep_versions")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+  if (prepCount === 1) {
+    await trackFirstPrepGenerated(
+      user.id,
+      parsed.data.job_id,
+      tier,
+      modelForTier(tier)
+    )
+  }
 
   return { ok: true, prep: persistedOutput }
 }
