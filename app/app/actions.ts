@@ -797,7 +797,7 @@ const generatePrepSchema = z.object({
 export type GeneratePrepInput = z.input<typeof generatePrepSchema>
 export type GeneratePrepResult =
   | { ok: true; prep: PrepOutput }
-  | { ok: false; error: string }
+  | { ok: false; error: string; requiresUpgrade?: boolean }
 
 function modelForTier(tier: PrepTier): string {
   return tier === "deep" ? DEEP_PREP_MODEL : QUICK_PREP_MODEL
@@ -827,6 +827,34 @@ export async function generatePrepAction(
     return {
       ok: false,
       error: "You've hit a high-volume threshold, please try again later.",
+    }
+  }
+
+  // Phase 6b: paywall gate on tier=deep. Quick stays free for everyone.
+  // past_due gets a 3-day grace window past current_period_end (Stripe Smart
+  // Retries default), then soft-blocks. UI catches `requiresUpgrade` and
+  // opens the upgrade modal instead of surfacing the error toast.
+  if (parsed.data.tier === "deep") {
+    const { data: subProfile } = await supabase
+      .from("user_profiles")
+      .select("subscription_status, current_period_end")
+      .eq("id", user.id)
+      .maybeSingle()
+    const status = (subProfile?.subscription_status as string | null) ?? "free"
+    const periodEnd = subProfile?.current_period_end
+      ? new Date(subProfile.current_period_end as string)
+      : null
+    const inGrace =
+      status === "past_due" &&
+      periodEnd !== null &&
+      periodEnd.getTime() + 3 * 24 * 60 * 60 * 1000 > Date.now()
+    const allowed = status === "active" || inGrace
+    if (!allowed) {
+      return {
+        ok: false,
+        error: "Upgrade to Deep Prep ($19.99/mo) to generate this.",
+        requiresUpgrade: true,
+      }
     }
   }
 

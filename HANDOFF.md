@@ -62,7 +62,9 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
-- Last phase shipped: **Phase 6.5 at `ba4199f`** — Termly legal pages + PostHog 3 events + V2.1 Ultra tier note. Phase 5 (Anthropic web_search grounding) and patch series 5.1/5.3/5.4 shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
+- Last phase shipped: **Phase 6b at `<commit-hash>`** — Stripe Checkout + paywall + webhooks + customer portal. Single $19.99/mo tier; Deep gated behind active subscription, Quick stays free for everyone. Phase 6.5 (Termly + PostHog) and Phase 5 (web_search grounding) shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
+
+  Prior shipped: **Phase 6.5 at `ba4199f`** — Termly legal pages + PostHog 3 events + V2.1 Ultra tier note. Phase 5 (Anthropic web_search grounding) and patch series 5.1/5.3/5.4 shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
 
   Prior shipped: Phase 5 at `9d1f26c` (patch 5.1 at `2801a59`, patch 5.3 at `b29f038`, patch 5.4 at `18acb73`) — Anthropic `web_search_20250305` server-tool wired inline into Deep Prep generation. Hard MUST directive in a separate cached system block forces Sonnet to ground company-specific positioning and risks before emitting `submit_prep`. Quick path byte-identical. Phase 4e (kanban polish), Phase 4f (multi-session config), and Phase 4d (multi-session core) shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
 - Date: 2026-05-07
@@ -78,12 +80,7 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 
 V2.0 P0 LAUNCH SPRINT — locked scope, target Monday May 11. ~10 prompts, ~12-15h.
 
-### Phase 6b — Stripe + paywall (Sat-Sun) — NEXT
-IN: Stripe Checkout (hosted page, NOT custom UI). Webhooks for subscription.created, subscription.updated, subscription.deleted, payment_failed. Paywall logic gating tier=deep features. Stripe-hosted customer portal link (NOT custom UI). Single tier $19.99/mo. Basic grace period via Stripe Smart Retries default behavior.
-OUT: Custom checkout UI. Custom customer portal UI. Complex grace period (multi-stage retry, dunning, win-back).
-Estimate: 4 prompts, 6-8h.
-
-### Phase 7 — Production deploy (Sunday late)
+### Phase 7 — Production deploy (Sunday late) — NEXT
 IN: guildy.ai DNS + SSL via Vercel. Production env vars (Anthropic, Supabase, Stripe live keys, PostHog). Banned-copy audit final pass. Smoke on 3 jobs in prod.
 Estimate: 1-2 prompts, 2h.
 
@@ -100,7 +97,7 @@ Priority order:
 4. Drip lifecycle campaigns (day 1 / day 3 / day 7)
 5. Interviewer profile grounding in Deep Prep
 6. Gemini 2.5 research abstraction + lib/ai/research.ts
-7. Custom Stripe customer portal UI
+7. ~~Custom Stripe customer portal UI~~ — Stripe-hosted portal locked for V2.0+; no plan to swap unless forced
 8. Per-user cost guardrails on AI spend (monthly cap)
 8a. Server-side in-flight lock on Deep generation (rapid Try Again clicks can currently fire duplicate Sonnet calls; UI lock from patch 5.1 mitigates only within the loading window — patch 5.4 known gap)
 8b. Ultra tier ($49.99/mo): Opus 4.7 max-quality generation + Concierge Interviewer Intel feature — multi-source interviewer research (LinkedIn, X, Substack, podcasts, GitHub, conference talks) producing a rapport-building brief per interviewer per round. Hyper-whale tier. Margins are wide because Concierge research is bounded (one brief per round, not per session); defensible because no other prep tool is doing it at this depth.
@@ -109,7 +106,25 @@ Priority order:
 11. Progress feedback polish on long operations
 12. 10-job QA pass with edge cases (international comp, multiple offers, withdrawn jobs)
 
-## Phase 4c–6.5 shipped — archive
+## Phase 4c–6b shipped — archive
+
+### Patch — Deep rate limits 8/day, 50/month
+- `lib/ai/rate-limit.ts`: `DEEP_DAILY` 15 → 8, `DEEP_MONTHLY` 100 → 50. Margin-protective at launch; raise after dashboard-confirmed cost data. Quick tier (10/75) unchanged.
+
+### Phase 6b — DONE (Stripe Checkout + paywall + webhooks + customer portal)
+- Migration `20260508000001_user_profiles_stripe.sql`: `user_profiles` gains `stripe_customer_id text`, `subscription_status text not null default 'free'` (allowed values: free / active / past_due / canceled), `current_period_end timestamptz`. New index `user_profiles_stripe_customer_idx` on `stripe_customer_id` since the webhook resolves user identity through this column on every event. **Apply manually after merge** via `supabase db push` or the Supabase SQL editor.
+- `lib/stripe.ts` (NEW): exports `getStripe()` lazy-singleton factory. The Stripe constructor throws on empty `STRIPE_SECRET_KEY`, which broke `next build`'s page-data collection step (route modules get imported even when env isn't fully set during build). The factory defers construction to first request. `apiVersion` pinned to `"2024-12-18.acacia"` (cast through `any`; SDK 22's apiVersion type narrows to its own latest literal) for stable webhook event shapes across SDK upgrades.
+- `app/api/stripe/checkout/route.ts` (NEW): authenticated POST. Reads `user_profiles.stripe_customer_id`; if missing, creates a Stripe customer (email + supabase user_id metadata) and persists the id back. Creates a `subscription`-mode Checkout session against `STRIPE_PRICE_ID`, success_url `${origin}/app?subscribed=1`, cancel_url `${origin}/app?canceled=1`, `allow_promotion_codes: true`. Returns `{ url }`.
+- `app/api/stripe/webhook/route.ts` (NEW): unauthenticated POST. Reads raw body via `req.text()` and verifies signature against `STRIPE_WEBHOOK_SECRET`. Service-role Supabase client (no cookies). Resolves user via `user_profiles.stripe_customer_id` lookup (NOT email). Handles four event types: `customer.subscription.created` and `.updated` → maps Stripe's status enum to our 4-value text enum and writes `subscription_status` + `current_period_end`; `.created` also fires `trackSubscriptionPaid(userId, "deep")` for PostHog. `customer.subscription.deleted` → status="canceled". `invoice.payment_failed` → status="past_due". Orphaned events (no matching customer) return 200 to prevent Stripe retry loops. `revalidatePath("/app")` after every successful update so the user's open tab reflects the new state on next render.
+- `app/api/stripe/portal/route.ts` (NEW): authenticated POST. Reads `stripe_customer_id`; 400 if absent (never subscribed). Creates a billing portal session with `return_url: ${origin}/app`. Returns `{ url }`.
+- Paywall gate in `generatePrepAction`: when `tier === "deep"`, fetches `subscription_status` + `current_period_end`. Allows when `status === "active"` OR (`status === "past_due"` AND `current_period_end + 3 days > now()`). Otherwise returns `{ ok: false, error: "Upgrade to Deep Prep ($19.99/mo) to generate this.", requiresUpgrade: true }`. `GeneratePrepResult` type extended with optional `requiresUpgrade?: boolean` discriminator. Quick path skips this gate entirely — byte-identical to pre-Phase-6b.
+- `components/app/widgets/upgrade-modal.tsx` (NEW): Radix Dialog. Headline "Unlock Deep Prep", subhead "$19.99/mo. Cancel anytime." 5 benefit bullets. Subscribe button POSTs to `/api/stripe/checkout` and redirects via `window.location.href`. "Manage subscription" link visible only when `subscriptionStatus === "past_due" || "canceled"`; POSTs to `/api/stripe/portal`. Banned-copy clean.
+- Deep button intercept in `prep-canvas.tsx`: new props `subscriptionStatus: string` and `currentPeriodEnd: string | null`. `triggerGenerate` checks tier=deep + `isSubscribedDeep` (active OR past_due-in-grace) and opens `<UpgradeModal>` instead of calling `onGenerate` when blocked. Server-side gate is the source of truth; this UI gate is a UX mirror so users don't wait 60s for Sonnet to fail. Modal mounted once per PrepCanvas instance.
+- Plumbing: `app/app/page.tsx` selects `subscription_status` and `current_period_end` alongside `resume_text`. Threaded through Board → PrepOverlay → PrepCanvas as `subscriptionStatus` (string) and `currentPeriodEnd` (ISO string | null).
+- `lib/analytics.ts` `trackSubscriptionPaid` is now wired (called from `customer.subscription.created` webhook handler). Was a stub in Phase 6.5.
+- `.env.example` documents `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`.
+- Dependencies: `stripe@^22.1` added.
+- Static gates: pnpm build clean. Banned-copy clean. Pre-existing tsc errors from the react-19/types-18 mismatch remain (unrelated to Phase 6b).
 
 ### Patch — Deep rate limits 8/day, 50/month
 - `lib/ai/rate-limit.ts`: `DEEP_DAILY` 15 → 8, `DEEP_MONTHLY` 100 → 50. Margin-protective at launch; raise after dashboard-confirmed cost data. Quick tier (10/75) unchanged.

@@ -37,7 +37,11 @@ export default async function AppPage({
       )
       .eq("user_id", user.id)
       .order("created_at", { ascending: false }),
-    supabase.from("user_profiles").select("resume_text").eq("id", user.id).maybeSingle(),
+    supabase
+      .from("user_profiles")
+      .select("resume_text, subscription_status, current_period_end")
+      .eq("id", user.id)
+      .maybeSingle(),
     supabase
       .from("job_context")
       .select("job_id, content, metadata, created_at")
@@ -87,6 +91,12 @@ export default async function AppPage({
           jobs={(jobs ?? []) as JobRow[]}
           hasResume={hasResume}
           resumeText={profile?.resume_text ?? null}
+          subscriptionStatus={
+            (profile?.subscription_status as string | null) ?? "free"
+          }
+          currentPeriodEnd={
+            (profile?.current_period_end as string | null) ?? null
+          }
           interviewerByJobId={interviewerByJobId}
           noteByJobId={noteByJobId}
           initialOpenJobId={initialOpenJobId}

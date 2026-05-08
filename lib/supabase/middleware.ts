@@ -12,6 +12,17 @@ function isPublicPath(pathname: string) {
 }
 
 export async function updateSession(request: NextRequest) {
+  // Patch 6b-fix1: Stripe webhook is unauthenticated (no user cookies, raw
+  // body required for signature verification). Bypass session refresh and
+  // the auth gate entirely — both would 307-redirect the POST to /login,
+  // which Stripe interprets as a delivery failure and retries indefinitely
+  // without ever reaching the handler. Other /api/stripe/* routes
+  // (checkout, portal) carry user cookies and stay authed via middleware
+  // as normal.
+  if (request.nextUrl.pathname.startsWith("/api/stripe/webhook")) {
+    return NextResponse.next({ request })
+  }
+
   let response = NextResponse.next({ request })
 
   const supabase = createServerClient(

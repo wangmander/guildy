@@ -52,6 +52,8 @@ type Props = {
   jobs: JobRow[]
   hasResume: boolean
   resumeText: string | null
+  subscriptionStatus: string
+  currentPeriodEnd: string | null
   interviewerByJobId: Record<string, InterviewerInfo>
   noteByJobId: Record<string, string>
   initialOpenJobId: string | null
@@ -61,6 +63,8 @@ export function Board({
   jobs,
   hasResume,
   resumeText,
+  subscriptionStatus,
+  currentPeriodEnd,
   interviewerByJobId,
   noteByJobId,
   initialOpenJobId,
@@ -337,6 +341,8 @@ export function Board({
           job={openJob}
           hasResume={hasResume}
           resumeText={resumeText}
+          subscriptionStatus={subscriptionStatus}
+          currentPeriodEnd={currentPeriodEnd}
           hasInterviewer={hasInterviewer}
           hasNote={hasNote}
           interviewerName={interviewer?.name ?? null}

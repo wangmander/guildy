@@ -14,6 +14,7 @@ import {
 import type { StageKey } from "@/lib/stages"
 
 import { CustomizeRoundsModal } from "./customize-rounds-modal"
+import { UpgradeModal } from "./upgrade-modal"
 import {
   LockedPreviewFooter,
   LockedPreviewModule,
@@ -33,6 +34,8 @@ type Props = {
   jobId: string
   stage: StageKey
   sessionConfig: FullLoopSessionConfig
+  subscriptionStatus: string
+  currentPeriodEnd: string | null
   statesMap: PrepStatesMap | null
   generatingRoles: Set<string>
   selectedRole: PrepSessionRole
@@ -73,6 +76,8 @@ export function PrepCanvas({
   jobId,
   stage,
   sessionConfig,
+  subscriptionStatus,
+  currentPeriodEnd,
   statesMap,
   generatingRoles,
   selectedRole,
@@ -87,7 +92,24 @@ export function PrepCanvas({
   onAddJd,
 }: Props) {
   const [customizeOpen, setCustomizeOpen] = useState(false)
+  const [upgradeOpen, setUpgradeOpen] = useState(false)
   const fullLoop = isFullLoopStage(stage)
+
+  // Phase 6b: Deep tier paywall gate. active = always allowed; past_due gets
+  // a 3-day grace window past current_period_end (mirrors the server-side
+  // gate in generatePrepAction); everything else triggers UpgradeModal in
+  // place of the generation call.
+  const isSubscribedDeep = (() => {
+    if (subscriptionStatus === "active") return true
+    if (subscriptionStatus === "past_due" && currentPeriodEnd) {
+      const grace =
+        new Date(currentPeriodEnd).getTime() + 3 * 24 * 60 * 60 * 1000
+      return grace > Date.now()
+    }
+    return false
+  })()
+  const showManagePortalLink =
+    subscriptionStatus === "past_due" || subscriptionStatus === "canceled"
   const currentKey: keyof PrepStatesMap = fullLoop ? selectedRole : "single"
   const generatingKey = fullLoop ? selectedRole : SINGLE_GENERATING_KEY
   const isGenerating = generatingRoles.has(generatingKey)
@@ -117,6 +139,12 @@ export function PrepCanvas({
   const isAnyGenerating = generatingRoles.size > 0
 
   const triggerGenerate = () => {
+    // Phase 6b: paywall intercept. UI-side guard mirrors the server-side
+    // check in generatePrepAction; either path opens the same modal.
+    if (tier === "deep" && !isSubscribedDeep) {
+      setUpgradeOpen(true)
+      return
+    }
     onGenerate(fullLoop ? selectedRole : null)
   }
 
@@ -197,6 +225,12 @@ export function PrepCanvas({
           sessionConfig={sessionConfig}
         />
       ) : null}
+
+      <UpgradeModal
+        open={upgradeOpen}
+        onClose={() => setUpgradeOpen(false)}
+        showManageLink={showManagePortalLink}
+      />
     </div>
   )
 }

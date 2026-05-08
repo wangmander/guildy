@@ -46,6 +46,8 @@ type Props = {
   job: PrepJob | null
   hasResume: boolean
   resumeText: string | null
+  subscriptionStatus: string
+  currentPeriodEnd: string | null
   hasInterviewer: boolean
   hasNote: boolean
   interviewerName: string | null
@@ -103,6 +105,8 @@ export function PrepOverlay({
   job,
   hasResume,
   resumeText,
+  subscriptionStatus,
+  currentPeriodEnd,
   hasInterviewer,
   hasNote,
   interviewerName,
@@ -385,6 +389,8 @@ export function PrepOverlay({
                     jobId={job.id}
                     stage={job.stage}
                     sessionConfig={sessionConfig}
+                    subscriptionStatus={subscriptionStatus}
+                    currentPeriodEnd={currentPeriodEnd}
                     statesMap={statesMap}
                     generatingRoles={generatingRoles}
                     selectedRole={selectedRole}
