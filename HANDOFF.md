@@ -99,6 +99,14 @@ UX items flagged during launch QA. Ship post-V2.0-deploy, before broader V2.1.
 
 4. **Progressive disclosure for prep generation.** Deep is 60-180s, Quick ~20s. Goal: first prep module visible in 2-3s, remaining modules stream or load progressively. Path A (right answer): Anthropic messages.stream() + inputJson snapshots + SSE route + per-key incremental render in PrepCanvas (~6-10h, locked architecture choice from earlier deferred note). Path B (fallback if A hits SDK/Vercel issues): skeleton modules render at 2-3s with rotating loading text per module, full output replaces all at once on completion (~2-3h, perception-only). Applies to both Quick and Deep. Files: lib/ai/generate-prep.ts, new app/api/prep/stream/route.ts, prep-canvas.tsx.
 
+5. **Proper login screen with multiple auth methods.** Current /login is magic-link-only. Phase 8 ships a real login surface: email + password (Supabase auth supports natively), Google OAuth (Supabase provider, fastest add for our audience), magic link demoted to a tertiary "no password" option. Login page UI gets layout polish: Guildy mark, clear primary CTA, "Create account" vs "Sign in" mode toggle, terms+privacy line stays from Phase 6.5. Files: app/login/page.tsx, possibly new app/signup/page.tsx if mode-toggle is two routes. Supabase config: enable email-password provider + Google OAuth provider.
+
+6. **Reorderable + extensible Full Loop rounds.** Current full_loop_session_config supports 4 fixed roles (Hiring Manager, Bar Raiser, Engineering, Cross-functional). Phase 8 extends:
+   - Drag-reorder the 4 default rounds in SessionTabs and persist order to the config
+   - Add custom rounds beyond the taxonomy (5+ rounds, e.g. second Engineering round, exec interviews)
+   - Each custom round needs a label + emphasis profile picker (which fixed role's SESSION_ROLE_EMPHASIS to inherit, until per-round profiles ship as a separate V2.1 item)
+   Files: lib/ai/parse-full-loop-rounds.ts (parser allows arbitrary array), prep-types.ts (session_role union → config-driven enum), session-tabs.tsx (drag handles, reorder), customize-rounds-modal.tsx (add/remove/reorder controls), migration on jobs.full_loop_session_config to allow ordered array shape.
+
 ## V2.1 backlog [POST-LAUNCH]
 
 Priority order:
@@ -343,7 +351,6 @@ Priority order:
 - FTUE iteration based on real user data
 - Per-session interviewer storage (currently one main interviewer per job)
 - Mobile native app
-- Custom rounds beyond the 4-role taxonomy (5+ rounds in Full Loop)
 - Per-round emphasis profile picker (each round currently inherits its fixed role's `SESSION_ROLE_EMPHASIS`)
 - Auto-detect-on-input-change (currently only fires on stage transition into Full Loop; user re-runs via Customize modal's Auto-detect button)
 
