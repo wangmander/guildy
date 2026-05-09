@@ -87,6 +87,18 @@ Estimate: 1-2 prompts, 2h.
 ### Phase 6 (general polish) — KILLED
 Critical-path errors fold into Phase 6b as they surface during build.
 
+## Phase 8 polish [POST-LAUNCH]
+
+UX items flagged during launch QA. Ship post-V2.0-deploy, before broader V2.1.
+
+1. **Paid users default to Deep, no toggle.** When subscription is active (or past_due in grace per Phase 6b logic), TierSelector toggle is hidden entirely. PrepCanvas defaults `tier='deep'` on mount. Quick is unreachable for paid users by design — toggle exists only to upsell free users. Files: prep-canvas.tsx (default tier + TierSelector visibility gate), prep-overlay.tsx (subscription_status pass-through already exists from 6b).
+
+2. **Auto-land on existing Deep prep.** When a job has any cached Deep prep_versions row, opening the overlay defaults to Deep view regardless of current toggle state. Applies to free users too (rare: user generated Deep during a trial). Logic: on PrepCanvas mount, if statesMap.deep === 'cached', set tier='deep'.
+
+3. **Extraction failure UX.** When /api/extract (URL or paste path) returns partial fields, mark each empty field "Could not extract" with subtle light-orange highlight (not red). Tailwind direction: bg-orange-50 / text-orange-700 / border-orange-200 or close. Files: add-job-modal.tsx, possibly a shared partial-extraction component.
+
+4. **Progressive disclosure for prep generation.** Deep is 60-180s, Quick ~20s. Goal: first prep module visible in 2-3s, remaining modules stream or load progressively. Path A (right answer): Anthropic messages.stream() + inputJson snapshots + SSE route + per-key incremental render in PrepCanvas (~6-10h, locked architecture choice from earlier deferred note). Path B (fallback if A hits SDK/Vercel issues): skeleton modules render at 2-3s with rotating loading text per module, full output replaces all at once on completion (~2-3h, perception-only). Applies to both Quick and Deep. Files: lib/ai/generate-prep.ts, new app/api/prep/stream/route.ts, prep-canvas.tsx.
+
 ## V2.1 backlog [POST-LAUNCH]
 
 Priority order:
