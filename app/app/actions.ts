@@ -624,10 +624,14 @@ export async function updateUserResumeAction(
 // must produce byte-identical hashes for identical inputs, otherwise cache
 // rows fail to resolve.
 //
-// session_role is appended to the hash material only when defined. With
-// session_role undefined the JSON.stringify object preserves its pre-Phase-4d
-// key set in pre-Phase-4d insertion order — existing prep_versions rows
-// resolve byte-identical.
+// session_role and session_label are appended to the hash material only when
+// defined. With both undefined, the JSON.stringify object preserves its
+// pre-Phase-4d key set in pre-Phase-4d insertion order — existing
+// prep_versions rows resolve byte-identical.
+//
+// Phase 5: session_label appended after session_role. Renaming a Full Loop
+// round produces a fresh hash and invalidates the prior cached prep — by
+// design, since the label drives the model's session emphasis.
 function buildContextHash(inputs: {
   tier: PrepTier
   stage: PrepStage
@@ -639,6 +643,7 @@ function buildContextHash(inputs: {
   interviewer_link: string | null
   note_text: string | null
   session_role?: PrepSessionRole
+  session_label?: string | null
 }): string {
   const obj: Record<string, unknown> = {
     tier: inputs.tier,
@@ -653,6 +658,9 @@ function buildContextHash(inputs: {
   }
   if (inputs.session_role) {
     obj.session_role = inputs.session_role
+  }
+  if (inputs.session_label && inputs.session_label.length > 0) {
+    obj.session_label = inputs.session_label
   }
   return createHash("sha256").update(JSON.stringify(obj)).digest("hex")
 }
@@ -693,7 +701,9 @@ export async function getCachedPrepAction(
     const [{ data: job, error: jobError }, { data: profile }] = await Promise.all([
       supabase
         .from("jobs")
-        .select("id, stage, jd_text, latest_message")
+        .select(
+          "id, stage, jd_text, latest_message, full_loop_session_config"
+        )
         .eq("id", parsed.data.job_id)
         .eq("user_id", user.id)
         .maybeSingle(),
@@ -737,6 +747,14 @@ export async function getCachedPrepAction(
     const interviewerLink = interviewerMeta?.link ?? null
     const noteText = noteRow?.content ?? null
 
+    const sessionConfig =
+      (job.full_loop_session_config as FullLoopSessionConfig | null) ?? null
+    const sessionLabel =
+      sessionConfig?.[sessionRole]?.label &&
+      sessionConfig[sessionRole].label.length > 0
+        ? sessionConfig[sessionRole].label
+        : null
+
     const contextHash = buildContextHash({
       tier: parsed.data.tier,
       stage: stageKeyToPrepStage(job.stage as StageKey),
@@ -748,6 +766,7 @@ export async function getCachedPrepAction(
       interviewer_link: interviewerLink,
       note_text: noteText,
       session_role: sessionRole,
+      session_label: sessionLabel,
     })
 
     const { data: row, error: prepError } = await supabase
@@ -861,7 +880,9 @@ export async function generatePrepAction(
   const [{ data: job, error: jobError }, { data: profile }] = await Promise.all([
     supabase
       .from("jobs")
-      .select("id, company_name, role_title, stage, jd_text, latest_message")
+      .select(
+        "id, company_name, role_title, stage, jd_text, latest_message, full_loop_session_config"
+      )
       .eq("id", parsed.data.job_id)
       .eq("user_id", user.id)
       .maybeSingle(),
@@ -912,6 +933,18 @@ export async function generatePrepAction(
   const interviewerLink = interviewerMeta?.link ?? null
   const noteText = noteRow?.content ?? null
 
+  // Phase 5: extract the user-edited round label for the active session_role
+  // and feed it into both the model prompt and the cache hash. Null when the
+  // job has no full_loop_session_config or the role entry is missing.
+  const sessionConfig =
+    (job.full_loop_session_config as FullLoopSessionConfig | null) ?? null
+  const sessionLabel =
+    parsed.data.session_role &&
+    sessionConfig?.[parsed.data.session_role]?.label &&
+    sessionConfig[parsed.data.session_role].label.length > 0
+      ? sessionConfig[parsed.data.session_role].label
+      : null
+
   // PHASE 6b: re-add subscription gate here. Free users can call tier="deep"
   // during test mode; production should require active subscription before
   // dispatching the Sonnet call.
@@ -931,6 +964,7 @@ export async function generatePrepAction(
       interviewer_link: interviewerLink,
       note_text: noteText,
       session_role: parsed.data.session_role,
+      session_label: sessionLabel,
       tier,
     })
   } catch (err) {
@@ -959,6 +993,7 @@ export async function generatePrepAction(
     interviewer_link: interviewerLink,
     note_text: noteText,
     session_role: parsed.data.session_role,
+    session_label: sessionLabel,
   })
 
   const { error: insertError } = await supabase.from("prep_versions").insert({

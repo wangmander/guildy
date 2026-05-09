@@ -60,6 +60,7 @@ QUALITY BAR
 5. Reference specifics from the latest message if it hints at what they care about.
 6. Do not invent facts about the company that aren't in the JD or message.
 7. When [COMPANY CONTEXT] is present in the user prompt, use it to ground positioning, risks, and questions. Do not invent facts not present in resume, JD, latest message, or company context.
+8. When [SESSION] contains a 'Round name' line, treat it as the primary session target. Drive prep emphasis from the round name. The role-keyed Focus/Emphasize/Defer lines that follow are supporting context, not the dominant signal. If round name and role enum imply different emphasis, prioritize the round name.
 
 QUICK PREP TIER RULES (when tier === "quick")
 
@@ -406,6 +407,15 @@ export async function generatePrep(input: PrepInput): Promise<PrepOutput> {
     console.log("[generatePrep] Deep start")
   }
 
+  // Phase 5: smoke-test diagnostic. Confirms the user-edited round label is
+  // reaching the prompt. Cleanup post-launch alongside the other diagnostic
+  // logs in this file.
+  const sessionLabel = input.session_label?.trim()
+  if (sessionLabel && sessionLabel.length > 0) {
+    // eslint-disable-next-line no-console
+    console.log(`[generatePrep] Session label injected: ${sessionLabel}`)
+  }
+
   const companyContext = isDeep
     ? await fetchCompanyContext(client, input)
     : null
@@ -665,18 +675,30 @@ function buildUserPrompt(
 
   if (input.session_role) {
     const cfg = SESSION_ROLE_EMPHASIS[input.session_role]
+    const sessionLabel = input.session_label?.trim()
+    const hasLabel = Boolean(sessionLabel && sessionLabel.length > 0)
+    lines.push("", "[SESSION]")
+    if (hasLabel) {
+      lines.push(`Round name: ${sessionLabel}`)
+    }
     lines.push(
-      "",
-      "[SESSION]",
       `Session role: ${input.session_role}`,
       `Focus: ${cfg.focus}`,
       "Emphasize in this session:",
       ...cfg.emphasize.map((s) => `  - ${s}`),
       "Defer (other sessions cover):",
-      ...cfg.exclude.map((s) => `  - ${s}`),
-      "Populate session_title in the output with a contextualized label fitting this role and the JD or company. Examples:",
-      ...cfg.session_title_examples.map((s) => `  - ${s}`)
+      ...cfg.exclude.map((s) => `  - ${s}`)
     )
+    if (hasLabel) {
+      lines.push(
+        "Populate session_title in the output to faithfully reflect the round name above (or a contextualized variant fitting the JD/company)."
+      )
+    } else {
+      lines.push(
+        "Populate session_title in the output with a contextualized label fitting this role and the JD or company. If no round name is provided, pick from these examples:",
+        ...cfg.session_title_examples.map((s) => `  - ${s}`)
+      )
+    }
   }
 
   lines.push(
