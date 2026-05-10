@@ -811,6 +811,13 @@ const generatePrepSchema = z.object({
   job_id: z.string().uuid("Invalid job id"),
   tier: prepTierSchema,
   session_role: z.enum(PREP_SESSION_ROLES).optional(),
+  // Patch 6: explicit cache-bypass flag for the manual Regenerate CTA. The
+  // current generatePrepAction path does not short-circuit on cached rows
+  // (getPrepStatesAction is the cache reader), so this is a contract for
+  // any future pre-check and an audit signal that the call was an explicit
+  // user-initiated regenerate. Always-on for StaleBanner and the top-row
+  // Regenerate icon; off for first-generate paths (EmptyState, retries).
+  force: z.boolean().optional().default(false),
 })
 
 export type GeneratePrepInput = z.input<typeof generatePrepSchema>

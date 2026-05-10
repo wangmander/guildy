@@ -251,7 +251,7 @@ export function PrepOverlay({
   ])
 
   const onGenerate = useCallback(
-    (role: PrepSessionRole | null) => {
+    (role: PrepSessionRole | null, opts?: { force?: boolean }) => {
       if (!job) return
       const generatingKey = role ?? SINGLE_GENERATING_KEY
       setGeneratingRoles((prev) => {
@@ -265,6 +265,7 @@ export function PrepOverlay({
           job_id: job.id,
           tier,
           session_role: role ?? undefined,
+          force: opts?.force ?? false,
         })
         setGeneratingRoles((prev) => {
           const next = new Set(prev)

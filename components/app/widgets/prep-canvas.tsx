@@ -45,7 +45,10 @@ type Props = {
   hasJd: boolean
   tier: PrepTier
   onTierChange: (tier: PrepTier) => void
-  onGenerate: (role: PrepSessionRole | null) => void
+  onGenerate: (
+    role: PrepSessionRole | null,
+    opts?: { force?: boolean }
+  ) => void
   onUpgrade: () => void
   onAddJd: () => void
 }
@@ -138,31 +141,48 @@ export function PrepCanvas({
   // state caused by switching tier or session mid-call.
   const isAnyGenerating = generatingRoles.size > 0
 
-  const triggerGenerate = () => {
+  const triggerGenerate = (opts?: { force?: boolean }) => {
     // Phase 6b: paywall intercept. UI-side guard mirrors the server-side
     // check in generatePrepAction; either path opens the same modal.
     if (tier === "deep" && !isSubscribedDeep) {
       setUpgradeOpen(true)
       return
     }
-    onGenerate(fullLoop ? selectedRole : null)
+    onGenerate(fullLoop ? selectedRole : null, opts)
   }
+
+  // Patch 6: manual Regenerate CTA on the cached-prep top row. EmptyState
+  // owns the first-generate path and StaleBanner owns the post-edit
+  // regenerate, so this surfaces only when the current role is cached —
+  // covering the typo-fix-to-same-string and "want a fresh take" cases.
+  const showRegenerate = currentEntry?.state === "cached"
 
   return (
     <div className="px-4 pb-12 pt-6 md:px-7">
-      {/* Compact top row: title (left) + tier toggle (right). Regenerate
-          removed — context_hash invalidates cache automatically when any
-          input edit happens, so manual regenerate is unnecessary. */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-2xl font-semibold tracking-tight text-[#1C1E21] md:text-[1.625rem]">
           {heading}
         </h1>
-        <TierSelector
-          tier={tier}
-          onTierChange={onTierChange}
-          onUpgrade={onUpgrade}
-          disabled={isGenerating}
-        />
+        <div className="flex items-center gap-2">
+          <TierSelector
+            tier={tier}
+            onTierChange={onTierChange}
+            onUpgrade={onUpgrade}
+            disabled={isGenerating}
+          />
+          {showRegenerate ? (
+            <button
+              type="button"
+              onClick={() => triggerGenerate({ force: true })}
+              disabled={isAnyGenerating}
+              aria-label="Regenerate prep"
+              title="Regenerate prep"
+              className="inline-flex size-8 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-[#1C1E21] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <RefreshCw className="size-4" />
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {noneEnabled ? (
@@ -210,7 +230,8 @@ export function PrepCanvas({
             hasResume={hasResume}
             hasJd={hasJd}
             tier={tier}
-            onGenerate={triggerGenerate}
+            onGenerate={() => triggerGenerate()}
+            onRegenerate={() => triggerGenerate({ force: true })}
             onUpgrade={onUpgrade}
             onAddJd={onAddJd}
           />
@@ -351,6 +372,7 @@ function CanvasBody({
   hasJd,
   tier,
   onGenerate,
+  onRegenerate,
   onUpgrade,
   onAddJd,
 }: {
@@ -363,6 +385,7 @@ function CanvasBody({
   hasJd: boolean
   tier: PrepTier
   onGenerate: () => void
+  onRegenerate: () => void
   onUpgrade: () => void
   onAddJd: () => void
 }) {
@@ -392,7 +415,7 @@ function CanvasBody({
       tier={tier}
       onUpgrade={onUpgrade}
       stale={currentEntry.state === "stale"}
-      onRegenerate={onGenerate}
+      onRegenerate={onRegenerate}
     />
   )
 }
