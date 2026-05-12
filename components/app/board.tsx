@@ -11,10 +11,15 @@ import {
 } from "react"
 
 import {
+  getSubscriptionStatusAction,
   moveJobStageAction,
   parseFullLoopRoundsAction,
 } from "@/app/app/actions"
-import type { FullLoopSessionConfig } from "@/lib/ai/prep-types"
+import {
+  PREP_SESSION_ROLES,
+  type FullLoopSessionConfig,
+  type PrepSessionRole,
+} from "@/lib/ai/prep-types"
 import {
   columnToWriteStage,
   leftOfColumn,
@@ -206,6 +211,59 @@ export function Board({
     return () => clearTimeout(t)
   }, [moveError])
 
+  // Prompt 9 post-checkout resume. Stripe success_url lands us back here
+  // with subscribed=1 + resume_job + resume_role. When the fresh sub
+  // status is active we open that job, hand the role to PrepOverlay as
+  // autoResume so it re-fires Deep with force:true, and strip the
+  // query params. The fresh action call is the cache buster — RSC props
+  // can lag the webhook on the redirect, but the action reads straight
+  // from the DB.
+  const [autoResume, setAutoResume] = useState<
+    { jobId: string; role: PrepSessionRole | null } | null
+  >(null)
+  const [welcomeToast, setWelcomeToast] = useState<string | null>(null)
+  const autoResumeHandledRef = useRef(false)
+  useEffect(() => {
+    if (autoResumeHandledRef.current) return
+    if (searchParams.get("subscribed") !== "1") return
+    const resumeJobParam = searchParams.get("resume_job")
+    const resumeRoleParam = searchParams.get("resume_role")
+    if (!resumeJobParam || !resumeRoleParam) return
+    autoResumeHandledRef.current = true
+
+    const role: PrepSessionRole | null =
+      resumeRoleParam === "_single"
+        ? null
+        : (PREP_SESSION_ROLES as readonly string[]).includes(resumeRoleParam)
+          ? (resumeRoleParam as PrepSessionRole)
+          : null
+    const matchedJob = jobs.find((j) => j.id === resumeJobParam)
+
+    ;(async () => {
+      const status = await getSubscriptionStatusAction()
+      if (status.ok && status.subscription_status === "active" && matchedJob) {
+        setOpenJobId(resumeJobParam)
+        setAutoResume({ jobId: resumeJobParam, role })
+        setWelcomeToast("Welcome to Guildy Deep. Generating your prep...")
+      }
+      const params = new URLSearchParams(searchParams.toString())
+      params.delete("subscribed")
+      params.delete("resume_job")
+      params.delete("resume_role")
+      const qs = params.toString()
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    })()
+    // searchParams/jobs are read inside; intentionally only fire once via the
+    // ref guard above so re-renders don't restart the flow.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (!welcomeToast) return
+    const t = setTimeout(() => setWelcomeToast(null), 5000)
+    return () => clearTimeout(t)
+  }, [welcomeToast])
+
   const grouped: Record<UiColumnKey, JobRow[]> = {
     applied: [],
     screen: [],
@@ -279,6 +337,16 @@ export function Board({
 
   return (
     <>
+      {welcomeToast ? (
+        <div className="px-4 lg:px-8">
+          <div
+            role="status"
+            className="mb-2 rounded-md border border-[#4E3BDD]/20 bg-[#EDE9FE] px-3 py-2 text-xs text-[#4E3BDD]"
+          >
+            {welcomeToast}
+          </div>
+        </div>
+      ) : null}
       {moveError ? (
         <div className="px-4 lg:px-8">
           <div
@@ -349,6 +417,11 @@ export function Board({
           interviewerTitle={interviewer?.title ?? null}
           interviewerLink={interviewer?.link ?? null}
           noteText={noteText}
+          autoResume={
+            autoResume && autoResume.jobId === openJobId
+              ? { role: autoResume.role }
+              : null
+          }
           onClose={close}
         />
       )}

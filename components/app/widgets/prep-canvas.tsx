@@ -111,8 +111,6 @@ export function PrepCanvas({
     }
     return false
   })()
-  const showManagePortalLink =
-    subscriptionStatus === "past_due" || subscriptionStatus === "canceled"
   const currentKey: keyof PrepStatesMap = fullLoop ? selectedRole : "single"
   const generatingKey = fullLoop ? selectedRole : SINGLE_GENERATING_KEY
   const isGenerating = generatingRoles.has(generatingKey)
@@ -250,7 +248,8 @@ export function PrepCanvas({
       <UpgradeModal
         open={upgradeOpen}
         onClose={() => setUpgradeOpen(false)}
-        showManageLink={showManagePortalLink}
+        jobId={jobId}
+        sessionRole={fullLoop ? selectedRole : null}
       />
     </div>
   )

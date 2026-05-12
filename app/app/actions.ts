@@ -34,6 +34,39 @@ export async function signOutAction() {
   redirect("/login")
 }
 
+// Prompt 9 post-checkout resume: re-reads subscription status fresh from
+// the DB so the /app client can gate auto-fire on the webhook having
+// landed. AppPage's server fetch can race the webhook on the Stripe
+// success redirect; this action bypasses any RSC cache by virtue of
+// being a Server Action invoked client-side.
+export async function getSubscriptionStatusAction(): Promise<
+  | {
+      ok: true
+      subscription_status: string
+      current_period_end: string | null
+    }
+  | { ok: false; error: string }
+> {
+  const supabase = await createSupabaseServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: "Not signed in" }
+  const { data, error } = await supabase
+    .from("user_profiles")
+    .select("subscription_status, current_period_end")
+    .eq("id", user.id)
+    .maybeSingle()
+  if (error) return { ok: false, error: error.message }
+  return {
+    ok: true,
+    subscription_status:
+      (data?.subscription_status as string | null) ?? "free",
+    current_period_end:
+      (data?.current_period_end as string | null) ?? null,
+  }
+}
+
 const createJobSchema = z.object({
   company_name: z.string().trim().min(1, "Company is required").max(200),
   role_title: z.string().trim().min(1, "Role title is required").max(200),

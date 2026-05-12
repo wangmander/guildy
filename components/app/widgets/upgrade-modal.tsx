@@ -10,12 +10,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import type { PrepSessionRole } from "@/lib/ai/prep-types"
 
 // Phase 6b: paywall modal. Subscribe button POSTs to /api/stripe/checkout
 // and redirects the browser to the Stripe-hosted Checkout page. Manage
-// Subscription is shown only when the user already has a Stripe customer
-// (status past_due or canceled) so they can update payment info or
-// reactivate without going through Checkout again.
+// Subscription was previously rendered here for past_due/canceled users;
+// that link now lives in the global Settings menu, so this modal is
+// subscribe-only.
+//
+// Prompt 9: when the modal fires from inside a job's PrepCanvas, pass
+// jobId + sessionRole so Checkout's success_url can carry them back and
+// /app can auto-fire Deep generation for the originally blocked round.
 
 const BENEFITS = [
   "Full positioning frames with rich grounding",
@@ -28,13 +33,15 @@ const BENEFITS = [
 type Props = {
   open: boolean
   onClose: () => void
-  showManageLink?: boolean
+  jobId?: string | null
+  sessionRole?: PrepSessionRole | null
 }
 
 export function UpgradeModal({
   open,
   onClose,
-  showManageLink = false,
+  jobId = null,
+  sessionRole = null,
 }: Props) {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -43,7 +50,16 @@ export function UpgradeModal({
     setPending(true)
     setError(null)
     try {
-      const res = await fetch("/api/stripe/checkout", { method: "POST" })
+      const body: { resume_job?: string; resume_role?: string } = {}
+      if (jobId) body.resume_job = jobId
+      // Send "_single" for non-Full-Loop stages so the /app handler can
+      // disambiguate the single-prep case from a missing role param.
+      body.resume_role = sessionRole ?? "_single"
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         throw new Error(data.error || "Checkout failed")
@@ -55,26 +71,6 @@ export function UpgradeModal({
       throw new Error("No checkout URL returned")
     } catch (err) {
       setError(err instanceof Error ? err.message : "Subscribe failed")
-      setPending(false)
-    }
-  }
-
-  const managePortal = async () => {
-    setPending(true)
-    setError(null)
-    try {
-      const res = await fetch("/api/stripe/portal", { method: "POST" })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        throw new Error(data.error || "Portal failed")
-      }
-      if (data.url) {
-        window.location.href = data.url as string
-        return
-      }
-      throw new Error("No portal URL returned")
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Portal failed")
       setPending(false)
     }
   }
@@ -108,7 +104,7 @@ export function UpgradeModal({
           <p className="mt-2 text-xs text-red-600">{error}</p>
         ) : null}
 
-        <div className="mt-4 space-y-2">
+        <div className="mt-4">
           <button
             type="button"
             onClick={subscribe}
@@ -118,16 +114,6 @@ export function UpgradeModal({
             {pending ? <Loader2 className="size-4 animate-spin" /> : null}
             Subscribe
           </button>
-          {showManageLink ? (
-            <button
-              type="button"
-              onClick={managePortal}
-              disabled={pending}
-              className="inline-flex h-9 w-full items-center justify-center text-xs font-medium text-[#4E3BDD] transition-colors hover:underline disabled:opacity-50"
-            >
-              Manage subscription
-            </button>
-          ) : null}
         </div>
       </DialogContent>
     </Dialog>

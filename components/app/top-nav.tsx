@@ -5,13 +5,21 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
 import { X } from "lucide-react"
 
-import { AccountMenu } from "./account-menu"
+import { SettingsMenu } from "./settings-menu"
 
-type Props = { email: string }
+type Props = {
+  email: string
+  subscriptionStatus: string
+  hasStripeCustomer: boolean
+}
 
 const URL_DEBOUNCE_MS = 200
 
-export function TopNav({ email }: Props) {
+export function TopNav({
+  email,
+  subscriptionStatus,
+  hasStripeCustomer,
+}: Props) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -97,7 +105,11 @@ export function TopNav({ email }: Props) {
           </div>
         </div>
 
-        <AccountMenu email={email} />
+        <SettingsMenu
+          email={email}
+          subscriptionStatus={subscriptionStatus}
+          hasStripeCustomer={hasStripeCustomer}
+        />
       </div>
     </header>
   )

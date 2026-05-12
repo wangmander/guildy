@@ -39,7 +39,9 @@ export default async function AppPage({
       .order("created_at", { ascending: false }),
     supabase
       .from("user_profiles")
-      .select("resume_text, subscription_status, current_period_end")
+      .select(
+        "resume_text, subscription_status, current_period_end, stripe_customer_id"
+      )
       .eq("id", user.id)
       .maybeSingle(),
     supabase
@@ -85,7 +87,13 @@ export default async function AppPage({
 
   return (
     <div className="min-h-screen bg-[#F8F9FA]">
-      <TopNav email={user.email ?? ""} />
+      <TopNav
+        email={user.email ?? ""}
+        subscriptionStatus={
+          (profile?.subscription_status as string | null) ?? "free"
+        }
+        hasStripeCustomer={!!profile?.stripe_customer_id}
+      />
       <main className="mx-auto w-full max-w-[1440px] py-6">
         <Board
           jobs={(jobs ?? []) as JobRow[]}

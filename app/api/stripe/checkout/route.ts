@@ -17,6 +17,28 @@ export async function POST(req: Request) {
     )
   }
 
+  // Post-checkout resume context. When the paywall fires from inside a
+  // job's PrepCanvas we thread the job id + round role through Checkout's
+  // success_url so /app can auto-open that job and re-fire Deep without
+  // the user re-navigating. Body is optional — older callers POST {} and
+  // the success_url falls back to the bare subscribed flag.
+  let resumeJob: string | null = null
+  let resumeRole: string | null = null
+  try {
+    const body = (await req.json().catch(() => ({}))) as {
+      resume_job?: unknown
+      resume_role?: unknown
+    }
+    if (typeof body.resume_job === "string" && body.resume_job.length > 0) {
+      resumeJob = body.resume_job
+    }
+    if (typeof body.resume_role === "string" && body.resume_role.length > 0) {
+      resumeRole = body.resume_role
+    }
+  } catch {
+    // ignore malformed bodies; fall back to bare success_url
+  }
+
   const supabase = await createSupabaseServerClient()
   const {
     data: { user },
@@ -57,11 +79,16 @@ export async function POST(req: Request) {
   }
 
   const origin = new URL(req.url).origin
+  const successParams = new URLSearchParams({ subscribed: "1" })
+  if (resumeJob && resumeRole) {
+    successParams.set("resume_job", resumeJob)
+    successParams.set("resume_role", resumeRole)
+  }
   const session = await getStripe().checkout.sessions.create({
     mode: "subscription",
     customer: customerId,
     line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
-    success_url: `${origin}/app?subscribed=1`,
+    success_url: `${origin}/app?${successParams.toString()}`,
     cancel_url: `${origin}/app?canceled=1`,
     allow_promotion_codes: true,
   })

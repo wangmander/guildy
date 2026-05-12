@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useTransition,
 } from "react"
@@ -42,6 +43,15 @@ export type PrepJob = {
   full_loop_session_config: FullLoopSessionConfig | null
 }
 
+// Prompt 9 post-checkout resume: Board hydrates this when /app loads with
+// subscribed=1 + resume_job + resume_role and the fresh subscription
+// status is active. role===null is the single-prep case (any stage that
+// isn't a Full Loop). consumed via internal ref so the autoresume only
+// fires once per (job, role) pair.
+export type PrepAutoResume = {
+  role: PrepSessionRole | null
+}
+
 type Props = {
   job: PrepJob | null
   hasResume: boolean
@@ -54,6 +64,7 @@ type Props = {
   interviewerTitle: string | null
   interviewerLink: string | null
   noteText: string | null
+  autoResume?: PrepAutoResume | null
   onClose: () => void
 }
 
@@ -113,6 +124,7 @@ export function PrepOverlay({
   interviewerTitle,
   interviewerLink,
   noteText,
+  autoResume = null,
   onClose,
 }: Props) {
   const [statesMap, setStatesMap] = useState<PrepStatesMap | null>(null)
@@ -184,12 +196,21 @@ export function PrepOverlay({
     [job?.full_loop_session_config]
   )
 
+  // Prompt 9 autoresume: when the post-checkout flow drives a tier flip to
+  // 'deep' alongside a generation kickoff, the reset effect below would
+  // otherwise clear the just-set generatingRoles on the tier-dep retrigger.
+  // The pending ref is set true while the autoresume kickoff is in flight,
+  // and cleared by the action's transition callback.
+  const autoResumePendingRef = useRef(false)
+
   // Reset session state whenever a different job opens or tier flips. Cleared
   // map produces a clean LoadingSkeleton on first paint of the new context.
   useEffect(() => {
     setStatesMap(null)
     setError(null)
-    setGeneratingRoles(new Set())
+    if (!autoResumePendingRef.current) {
+      setGeneratingRoles(new Set())
+    }
   }, [job?.id, tier])
 
   // Reset tier and inputs widget on job change. selectedRole defaults to
@@ -288,6 +309,58 @@ export function PrepOverlay({
     },
     [job, tier]
   )
+
+  // Prompt 9 autoresume effect: when /app loads with subscribed=1 plus a
+  // job+role and the fresh subscription is active, Board passes
+  // autoResume here. We flip tier to deep, select the round, mark
+  // generatingRoles, and fire generatePrepAction inline (can't use
+  // onGenerate — its closure captured tier='quick'). The ref ensures one
+  // shot per (job, role).
+  const autoResumeFiredKeyRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!autoResume || !job) return
+    const role = autoResume.role
+    const fireKey = `${job.id}:${role ?? "_single"}`
+    if (autoResumeFiredKeyRef.current === fireKey) return
+    autoResumeFiredKeyRef.current = fireKey
+    autoResumePendingRef.current = true
+
+    setTier("deep")
+    if (role) setSelectedRole(role)
+
+    const generatingKey = role ?? SINGLE_GENERATING_KEY
+    setGeneratingRoles((prev) => {
+      const next = new Set(prev)
+      next.add(generatingKey)
+      return next
+    })
+    setError(null)
+
+    startTransition(async () => {
+      const res = await generatePrepAction({
+        job_id: job.id,
+        tier: "deep",
+        session_role: role ?? undefined,
+        force: true,
+      })
+      autoResumePendingRef.current = false
+      setGeneratingRoles((prev) => {
+        const next = new Set(prev)
+        next.delete(generatingKey)
+        return next
+      })
+      if (!res.ok) {
+        setError(res.error)
+        return
+      }
+      const mapKey: keyof PrepStatesMap = role ?? "single"
+      setStatesMap((prev) =>
+        prev
+          ? { ...prev, [mapKey]: { state: "cached", output: res.prep } }
+          : prev
+      )
+    })
+  }, [autoResume, job])
 
   // Output backing the Interviewer widget's insights field. Single view uses
   // the "single" entry; Full Loop uses the selected session's output.
