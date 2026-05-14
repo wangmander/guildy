@@ -652,20 +652,6 @@ function PrepView({
         }
       />
 
-      <RisksSection
-        risks={prep.risks}
-        tier={tier}
-        footer={
-          isQuick ? (
-            <LockedPreviewFooter
-              title="Risks with prepared counters"
-              teaser="Deep Prep returns each likely concern with a specific counter anchored in your resume."
-              onUpgrade={onUpgrade}
-            />
-          ) : null
-        }
-      />
-
       <QuestionsTheyAsk
         items={prep.questions_they_ask}
         tier={tier}
@@ -691,6 +677,20 @@ function PrepView({
       ) : null}
 
       <ChecklistSection checklist={prep.prep_checklist} />
+
+      <RisksSection
+        risks={prep.risks}
+        tier={tier}
+        footer={
+          isQuick ? (
+            <LockedPreviewFooter
+              title="Risks with prepared counters"
+              teaser="Deep Prep returns each likely concern with a specific counter anchored in your resume."
+              onUpgrade={onUpgrade}
+            />
+          ) : null
+        }
+      />
     </div>
   )
 }
