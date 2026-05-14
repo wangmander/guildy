@@ -65,6 +65,10 @@ type Props = {
   interviewerLink: string | null
   noteText: string | null
   autoResume?: PrepAutoResume | null
+  // Prompt 14: fires after the autoresume effect completes (success OR
+  // failure). Board uses it to clear its autoResume state so closing and
+  // reopening the same job doesn't re-fire the Deep regen on remount.
+  onAutoResumeHandled?: () => void
   onClose: () => void
 }
 
@@ -125,6 +129,7 @@ export function PrepOverlay({
   interviewerLink,
   noteText,
   autoResume = null,
+  onAutoResumeHandled,
   onClose,
 }: Props) {
   const [statesMap, setStatesMap] = useState<PrepStatesMap | null>(null)
@@ -213,19 +218,19 @@ export function PrepOverlay({
     }
   }, [job?.id, tier])
 
-  // Reset tier and inputs widget on job change. selectedRole defaults to
-  // the first enabled role in this job's config so jobs with custom loops
-  // open on a sensible tab.
+  // Prompt 14: split from a combined [job?.id, sessionConfig] effect. The
+  // previous shape reset tier whenever the Full Loop parser updated
+  // job.full_loop_session_config mid-session, which silently reverted
+  // Deep → Quick after the autoresume kicked off. tier/inputs only reset
+  // on actual job change now; selectedRole defaults are re-evaluated by
+  // the defense effect below when the active role goes disabled.
   useEffect(() => {
     setTier("quick")
     setSelectedRole(firstEnabledRole(sessionConfig))
     setInputsExpansion({ section: null, pulseToken: 0 })
-    // sessionConfig depends on job.full_loop_session_config, which can
-    // refresh in place when prompt 5's Customize Rounds saves. Keying on
-    // job?.id only would miss that — also include sessionConfig so an
-    // in-place config edit re-evaluates the default.
+    // sessionConfig intentionally excluded — see comment above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [job?.id, sessionConfig])
+  }, [job?.id])
 
   // If the currently selected role becomes disabled (config edit), shift to
   // the first enabled role. setState bails on identical values so this is
@@ -310,21 +315,22 @@ export function PrepOverlay({
     [job, tier]
   )
 
-  // Prompt 9 autoresume effect: when /app loads with subscribed=1 plus a
-  // job+role and the fresh subscription is active, Board passes
-  // autoResume here. We flip tier to deep, select the round, mark
-  // generatingRoles, and fire generatePrepAction inline (can't use
-  // onGenerate — its closure captured tier='quick'). The ref ensures one
-  // shot per (job, role).
-  const autoResumeFiredKeyRef = useRef<string | null>(null)
+  // Prompt 14 autoresume effect: hardened to fire AT MOST once per
+  // overlay mount. The boolean ref replaces the prior (job,role) keyed
+  // ref so subsequent prop changes on the same mount are also a no-op.
+  // Board clears its autoResume state via onAutoResumeHandled after the
+  // action completes (success OR failure) so a close+reopen of the same
+  // job lands on the cached Deep prep instead of regenerating. On
+  // failure, tier stays on Deep and the error surfaces via the standard
+  // ErrorState (retryable Generate Deep button) — no silent revert.
+  const autoResumeHandledRef = useRef(false)
   useEffect(() => {
     if (!autoResume || !job) return
-    const role = autoResume.role
-    const fireKey = `${job.id}:${role ?? "_single"}`
-    if (autoResumeFiredKeyRef.current === fireKey) return
-    autoResumeFiredKeyRef.current = fireKey
+    if (autoResumeHandledRef.current) return
+    autoResumeHandledRef.current = true
     autoResumePendingRef.current = true
 
+    const role = autoResume.role
     setTier("deep")
     if (role) setSelectedRole(role)
 
@@ -350,17 +356,21 @@ export function PrepOverlay({
         return next
       })
       if (!res.ok) {
+        // Surface a retryable error; do NOT setTier("quick"). The user
+        // is on the Deep tab and ErrorState's Try again button calls
+        // onGenerate which keeps the current tier closure.
         setError(res.error)
-        return
+      } else {
+        const mapKey: keyof PrepStatesMap = role ?? "single"
+        setStatesMap((prev) =>
+          prev
+            ? { ...prev, [mapKey]: { state: "cached", output: res.prep } }
+            : prev
+        )
       }
-      const mapKey: keyof PrepStatesMap = role ?? "single"
-      setStatesMap((prev) =>
-        prev
-          ? { ...prev, [mapKey]: { state: "cached", output: res.prep } }
-          : prev
-      )
+      onAutoResumeHandled?.()
     })
-  }, [autoResume, job])
+  }, [autoResume, job, onAutoResumeHandled])
 
   // Output backing the Interviewer widget's insights field. Single view uses
   // the "single" entry; Full Loop uses the selected session's output.

@@ -475,6 +475,7 @@ export function Board({
               ? { role: autoResume.role }
               : null
           }
+          onAutoResumeHandled={() => setAutoResume(null)}
           onClose={close}
         />
       )}
