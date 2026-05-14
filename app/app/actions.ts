@@ -847,6 +847,31 @@ export async function updateUserResumeAction(
 // Phase 5: session_label appended after session_role. Renaming a Full Loop
 // round produces a fresh hash and invalidates the prior cached prep — by
 // design, since the label drives the model's session emphasis.
+// Prompt 16 invariant: two identical-content inputs MUST produce identical
+// hashes regardless of trailing whitespace, line-ending style, or object
+// key order. Pasted textarea content commonly arrives with CRLF line
+// endings on Windows or trailing whitespace from copy-paste; the cache
+// reader and writer call this same function on different data fetches,
+// so any drift between them surfaces as a false "Inputs changed" stale
+// banner. normalizeHashString folds those variations away; sorting keys
+// before serialize is defense-in-depth against any future object-shape
+// changes that would otherwise rely on V8 insertion order.
+//
+// Note: existing prep_versions rows persisted before this normalization
+// shipped will not match the new hashes and will surface as stale on
+// next read. Users regenerate once, then hashes stabilize.
+function normalizeHashString(value: string | null | undefined): string {
+  if (!value) return ""
+  return value.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim()
+}
+
+function stableStringify(obj: Record<string, unknown>): string {
+  const keys = Object.keys(obj).sort()
+  const sorted: Record<string, unknown> = {}
+  for (const key of keys) sorted[key] = obj[key]
+  return JSON.stringify(sorted)
+}
+
 function buildContextHash(inputs: {
   tier: PrepTier
   stage: PrepStage
@@ -863,21 +888,22 @@ function buildContextHash(inputs: {
   const obj: Record<string, unknown> = {
     tier: inputs.tier,
     stage: inputs.stage,
-    resume: inputs.resume_text ?? "",
-    jd: inputs.jd_text ?? "",
-    msg: inputs.latest_message ?? "",
-    interviewer_name: inputs.interviewer_name ?? "",
-    interviewer_title: inputs.interviewer_title ?? "",
-    interviewer_link: inputs.interviewer_link ?? "",
-    note: inputs.note_text ?? "",
+    resume: normalizeHashString(inputs.resume_text),
+    jd: normalizeHashString(inputs.jd_text),
+    msg: normalizeHashString(inputs.latest_message),
+    interviewer_name: normalizeHashString(inputs.interviewer_name),
+    interviewer_title: normalizeHashString(inputs.interviewer_title),
+    interviewer_link: normalizeHashString(inputs.interviewer_link),
+    note: normalizeHashString(inputs.note_text),
   }
   if (inputs.session_role) {
     obj.session_role = inputs.session_role
   }
-  if (inputs.session_label && inputs.session_label.length > 0) {
-    obj.session_label = inputs.session_label
+  const normalizedLabel = normalizeHashString(inputs.session_label)
+  if (normalizedLabel.length > 0) {
+    obj.session_label = normalizedLabel
   }
-  return createHash("sha256").update(JSON.stringify(obj)).digest("hex")
+  return createHash("sha256").update(stableStringify(obj)).digest("hex")
 }
 
 // Prep ---------------------------------------------------------------------

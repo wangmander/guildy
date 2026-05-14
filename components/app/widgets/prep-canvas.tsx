@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Pencil, RefreshCw, Sparkles } from "lucide-react"
 
 import type { PrepStatesMap, PrepStateEntry } from "@/app/app/actions"
@@ -123,6 +123,28 @@ export function PrepCanvas({
   const currentEntry: PrepStateEntry | undefined = statesMap?.[currentKey]
   const currentOutput = currentEntry?.output ?? null
 
+  // Prompt 16 Bug 3: the latest-rounds picker in PrepOverlay shifts
+  // selectedRole on mount based on cached prep history, but its action
+  // resolves a tick after statesMap. Without this gate, an overlay
+  // reopen flashes "Generate Deep" EmptyState for the default round
+  // before swapping to the cached PrepView on the actual most-recent
+  // round. mountSettled flips to true a short interval after PrepCanvas
+  // mounts; until then, when the current key is empty AND any other
+  // round has cached/stale data, render LoadingSkeleton instead of
+  // EmptyState. After settle, EmptyState renders normally so users on
+  // truly empty rounds still see the Generate CTA.
+  const [mountSettled, setMountSettled] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setMountSettled(true), 500)
+    return () => clearTimeout(t)
+  }, [])
+  const hasAnyCachedOrStale =
+    !!statesMap &&
+    Object.values(statesMap).some(
+      (e) => e.state === "cached" || e.state === "stale"
+    )
+  const suppressEmptyFlicker = !mountSettled && hasAnyCachedOrStale
+
   // Heading: prefer the session-specific title (Full Loop sessions populate
   // it via the prompt); fall back to the stage heading otherwise.
   const sessionTitle = currentOutput?.session_title?.trim()
@@ -235,6 +257,7 @@ export function PrepCanvas({
             hasResume={hasResume}
             hasJd={hasJd}
             tier={tier}
+            suppressEmptyFlicker={suppressEmptyFlicker}
             onGenerate={() => triggerGenerate()}
             onRegenerate={() => triggerGenerate({ force: true })}
             onUpgrade={onUpgrade}
@@ -382,6 +405,7 @@ function CanvasBody({
   hasResume,
   hasJd,
   tier,
+  suppressEmptyFlicker,
   onGenerate,
   onRegenerate,
   onUpgrade,
@@ -395,6 +419,11 @@ function CanvasBody({
   hasResume: boolean
   hasJd: boolean
   tier: PrepTier
+  // Prompt 16 Bug 3: hold the EmptyState during the brief window where
+  // the latest-rounds picker may still swap selectedRole into a
+  // non-empty round. False after the window closes so genuinely empty
+  // rounds still surface the Generate CTA.
+  suppressEmptyFlicker: boolean
   onGenerate: () => void
   onRegenerate: () => void
   onUpgrade: () => void
@@ -410,6 +439,9 @@ function CanvasBody({
     return <LoadingSkeleton />
   }
   if (!currentEntry || currentEntry.state === "empty" || !currentOutput) {
+    if (suppressEmptyFlicker) {
+      return <LoadingSkeleton />
+    }
     return (
       <EmptyState
         hasResume={hasResume}

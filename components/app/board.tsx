@@ -226,6 +226,23 @@ export function Board({
   >(null)
   const [welcomeToast, setWelcomeToast] = useState<string | null>(null)
   const autoResumeHandledRef = useRef(false)
+
+  // Prompt 16 Bug 1: lifted out of the effect so onAutoResumeHandled can
+  // call it after PrepOverlay's autoresume action completes (success OR
+  // failure). The previous shape stripped immediately on verify "active",
+  // which sometimes raced the overlay mount and left params in the URL
+  // when navigation timing went sideways. The new contract: URL params
+  // represent pending autoresume work. They clear when the work settles.
+  const stripAutoResumeParams = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete("session_id")
+    params.delete("subscribed")
+    params.delete("resume_job")
+    params.delete("resume_role")
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }, [router, pathname, searchParams])
+
   useEffect(() => {
     if (autoResumeHandledRef.current) return
 
@@ -250,22 +267,18 @@ export function Board({
       ? (jobs.find((j) => j.id === resumeJobParam) ?? null)
       : null
 
-    const stripParams = () => {
-      const params = new URLSearchParams(searchParams.toString())
-      params.delete("session_id")
-      params.delete("subscribed")
-      params.delete("resume_job")
-      params.delete("resume_role")
-      const qs = params.toString()
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
-    }
-
-    const fireResume = () => {
+    // Returns true when an autoresume was queued (PrepOverlay will fire
+    // and onAutoResumeHandled is responsible for stripping URL params).
+    // Returns false when no work is queued and the caller should strip now.
+    const fireResume = (): boolean => {
       if (resumeJobParam && matchedJob) {
         setOpenJobId(resumeJobParam)
         setAutoResume({ jobId: resumeJobParam, role })
+        setWelcomeToast("Welcome to Guildy Deep. Generating your prep...")
+        return true
       }
-      setWelcomeToast("Welcome to Guildy Deep. Generating your prep...")
+      setWelcomeToast("Welcome to Guildy Deep.")
+      return false
     }
 
     ;(async () => {
@@ -274,8 +287,8 @@ export function Board({
         for (let attempt = 0; attempt < 3; attempt++) {
           const res = await verifyCheckoutAndSyncAction(sessionIdParam)
           if (res.status === "active") {
-            fireResume()
-            stripParams()
+            const queued = fireResume()
+            if (!queued) stripAutoResumeParams()
             return
           }
           if (res.status === "unauthorized" || res.status === "error") {
@@ -288,7 +301,7 @@ export function Board({
             )
             return
           }
-          // pending — back off and retry
+          // pending: back off and retry
           if (attempt < 2) {
             await new Promise((r) => setTimeout(r, 500))
           }
@@ -302,9 +315,11 @@ export function Board({
       // Legacy: subscribed=1 only. Fall back to DB status read.
       const status = await getSubscriptionStatusAction()
       if (status.ok && status.subscription_status === "active") {
-        fireResume()
+        const queued = fireResume()
+        if (!queued) stripAutoResumeParams()
+      } else {
+        stripAutoResumeParams()
       }
-      stripParams()
     })()
     // searchParams/jobs are read inside; intentionally only fire once via the
     // ref guard above so re-renders don't restart the flow.
@@ -475,7 +490,10 @@ export function Board({
               ? { role: autoResume.role }
               : null
           }
-          onAutoResumeHandled={() => setAutoResume(null)}
+          onAutoResumeHandled={() => {
+            setAutoResume(null)
+            stripAutoResumeParams()
+          }}
           onClose={close}
         />
       )}
