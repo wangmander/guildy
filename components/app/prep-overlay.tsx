@@ -393,27 +393,54 @@ export function PrepOverlay({
   // Prompt 15 default-round picker. On overlay open, query the most
   // recent prep round per tier for this job and pre-select it. Paid
   // users prefer Deep; Quick is the fallback for both paid (no Deep yet)
-  // and free users. autoResume wins when active — if it was set on
+  // and free users. autoResume wins when active: if it was set on
   // initial mount, this picker skips entirely so we never stomp the
   // round Stripe redirected us to. Single-prep stages return role=null
   // from the action, which leaves selectedRole at its firstEnabledRole
   // default (harmless since the UI uses the "single" key there).
+  //
+  // Prompt 17b: latestRoundsResolved gates the PrepCanvas skeleton.
+  // Initial false; flips true when the action settles (success OR
+  // failure) or when the picker is skipped (autoResume / already-picked
+  // paths). Replaces the 500ms timer heuristic in PrepCanvas with a
+  // signal driven by the actual query lifecycle.
   const initialAutoResumeRef = useRef(autoResume !== null)
   const defaultRoundPickedRef = useRef(false)
+  const [latestRoundsResolved, setLatestRoundsResolved] = useState(false)
   useEffect(() => {
     if (!job) return
-    if (initialAutoResumeRef.current) return
-    if (defaultRoundPickedRef.current) return
+    if (initialAutoResumeRef.current) {
+      // autoResume drives selectedRole authoritatively; picker is a
+      // no-op so PrepCanvas can proceed past the skeleton gate.
+      setLatestRoundsResolved(true)
+      return
+    }
+    if (defaultRoundPickedRef.current) {
+      // Defensive: a job?.id change without overlay unmount would
+      // skip the action; mark resolved so the skeleton doesn't lock.
+      setLatestRoundsResolved(true)
+      return
+    }
     defaultRoundPickedRef.current = true
+    setLatestRoundsResolved(false)
     let cancelled = false
-    getLatestPrepRoundsAction(job.id).then((res) => {
-      if (cancelled) return
-      if (!res.ok) return
-      const paid = isPaidStatus(subscriptionStatus)
-      const latest = paid ? (res.deep ?? res.quick) : res.quick
-      const targetRole = latest?.role ?? null
-      if (targetRole) setSelectedRole(targetRole)
-    })
+    getLatestPrepRoundsAction(job.id)
+      .then((res) => {
+        if (cancelled) return
+        if (res.ok) {
+          const paid = isPaidStatus(subscriptionStatus)
+          const latest = paid ? (res.deep ?? res.quick) : res.quick
+          const targetRole = latest?.role ?? null
+          if (targetRole) setSelectedRole(targetRole)
+        }
+        // No-cached-prep is a legitimate resolved state. EmptyState
+        // surfaces normally once we flip the gate.
+        setLatestRoundsResolved(true)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setLatestRoundsResolved(true)
+      })
     return () => {
       cancelled = true
     }
@@ -527,6 +554,7 @@ export function PrepOverlay({
                     subscriptionStatus={subscriptionStatus}
                     currentPeriodEnd={currentPeriodEnd}
                     statesMap={statesMap}
+                    latestRoundsResolved={latestRoundsResolved}
                     generatingRoles={generatingRoles}
                     selectedRole={selectedRole}
                     onSelectRole={setSelectedRole}
