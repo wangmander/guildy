@@ -79,16 +79,27 @@ export async function POST(req: Request) {
   }
 
   const origin = new URL(req.url).origin
-  const successParams = new URLSearchParams({ subscribed: "1" })
+  // Prompt 12: success_url carries Stripe's {CHECKOUT_SESSION_ID} literal
+  // placeholder, which Stripe substitutes after Checkout completes. /app
+  // verifies the session server-side via verifyCheckoutAndSyncAction —
+  // no longer depends on the webhook landing first. URLSearchParams would
+  // percent-encode the braces and break Stripe's substitution, so the
+  // query string is assembled manually.
+  const successParams: string[] = [`session_id={CHECKOUT_SESSION_ID}`]
   if (resumeJob && resumeRole) {
-    successParams.set("resume_job", resumeJob)
-    successParams.set("resume_role", resumeRole)
+    successParams.push(`resume_job=${encodeURIComponent(resumeJob)}`)
+    successParams.push(`resume_role=${encodeURIComponent(resumeRole)}`)
   }
   const session = await getStripe().checkout.sessions.create({
     mode: "subscription",
     customer: customerId,
     line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
-    success_url: `${origin}/app?${successParams.toString()}`,
+    // Session-level metadata makes ownership verification cheap on the
+    // /app side: a single retrieve call returns this without needing to
+    // expand the customer object. Customer metadata is also set above on
+    // first creation; the two paths are redundant by design.
+    metadata: { supabase_user_id: user.id },
+    success_url: `${origin}/app?${successParams.join("&")}`,
     cancel_url: `${origin}/app?canceled=1`,
     allow_promotion_codes: true,
   })

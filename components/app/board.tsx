@@ -14,6 +14,7 @@ import {
   getSubscriptionStatusAction,
   moveJobStageAction,
   parseFullLoopRoundsAction,
+  verifyCheckoutAndSyncAction,
 } from "@/app/app/actions"
 import {
   PREP_SESSION_ROLES,
@@ -211,13 +212,15 @@ export function Board({
     return () => clearTimeout(t)
   }, [moveError])
 
-  // Prompt 9 post-checkout resume. Stripe success_url lands us back here
-  // with subscribed=1 + resume_job + resume_role. When the fresh sub
-  // status is active we open that job, hand the role to PrepOverlay as
-  // autoResume so it re-fires Deep with force:true, and strip the
-  // query params. The fresh action call is the cache buster — RSC props
-  // can lag the webhook on the redirect, but the action reads straight
-  // from the DB.
+  // Prompt 12 post-checkout resume. Primary path: verify the Stripe
+  // Checkout Session server-side and sync user_profiles from that read.
+  // The webhook is no longer in the critical path — the action retrieves
+  // the session straight from Stripe so a webhook delay can't block the
+  // first paid experience.
+  //
+  // Backward compat: in-flight sessions created before Prompt 12 used a
+  // subscribed=1 success_url with no session_id. If we see that param
+  // shape we fall back to the prior DB-status flow.
   const [autoResume, setAutoResume] = useState<
     { jobId: string; role: PrepSessionRole | null } | null
   >(null)
@@ -225,33 +228,83 @@ export function Board({
   const autoResumeHandledRef = useRef(false)
   useEffect(() => {
     if (autoResumeHandledRef.current) return
-    if (searchParams.get("subscribed") !== "1") return
-    const resumeJobParam = searchParams.get("resume_job")
-    const resumeRoleParam = searchParams.get("resume_role")
-    if (!resumeJobParam || !resumeRoleParam) return
+
+    const sessionIdParam = searchParams.get("session_id")
+    const subscribedLegacyParam = searchParams.get("subscribed")
+    if (!sessionIdParam && subscribedLegacyParam !== "1") return
+
     autoResumeHandledRef.current = true
 
+    const resumeJobParam = searchParams.get("resume_job")
+    const resumeRoleParam = searchParams.get("resume_role")
     const role: PrepSessionRole | null =
       resumeRoleParam === "_single"
         ? null
-        : (PREP_SESSION_ROLES as readonly string[]).includes(resumeRoleParam)
+        : resumeRoleParam &&
+            (PREP_SESSION_ROLES as readonly string[]).includes(
+              resumeRoleParam
+            )
           ? (resumeRoleParam as PrepSessionRole)
           : null
-    const matchedJob = jobs.find((j) => j.id === resumeJobParam)
+    const matchedJob = resumeJobParam
+      ? (jobs.find((j) => j.id === resumeJobParam) ?? null)
+      : null
 
-    ;(async () => {
-      const status = await getSubscriptionStatusAction()
-      if (status.ok && status.subscription_status === "active" && matchedJob) {
-        setOpenJobId(resumeJobParam)
-        setAutoResume({ jobId: resumeJobParam, role })
-        setWelcomeToast("Welcome to Guildy Deep. Generating your prep...")
-      }
+    const stripParams = () => {
       const params = new URLSearchParams(searchParams.toString())
+      params.delete("session_id")
       params.delete("subscribed")
       params.delete("resume_job")
       params.delete("resume_role")
       const qs = params.toString()
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    }
+
+    const fireResume = () => {
+      if (resumeJobParam && matchedJob) {
+        setOpenJobId(resumeJobParam)
+        setAutoResume({ jobId: resumeJobParam, role })
+      }
+      setWelcomeToast("Welcome to Guildy Deep. Generating your prep...")
+    }
+
+    ;(async () => {
+      // Primary: Stripe-verified path.
+      if (sessionIdParam) {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const res = await verifyCheckoutAndSyncAction(sessionIdParam)
+          if (res.status === "active") {
+            fireResume()
+            stripParams()
+            return
+          }
+          if (res.status === "unauthorized" || res.status === "error") {
+            // Don't retry on auth/error; surface a quiet toast and leave
+            // params so a reload (or support ping) has the context intact.
+            setWelcomeToast(
+              res.status === "unauthorized"
+                ? "Couldn't verify this checkout session."
+                : "Couldn't verify subscription. Refresh in a moment."
+            )
+            return
+          }
+          // pending — back off and retry
+          if (attempt < 2) {
+            await new Promise((r) => setTimeout(r, 500))
+          }
+        }
+        setWelcomeToast(
+          "Subscription confirming, refresh in a moment."
+        )
+        return
+      }
+
+      // Legacy: subscribed=1 only. Fall back to DB status read.
+      const status = await getSubscriptionStatusAction()
+      if (status.ok && status.subscription_status === "active") {
+        fireResume()
+      }
+      stripParams()
     })()
     // searchParams/jobs are read inside; intentionally only fire once via the
     // ref guard above so re-renders don't restart the flow.

@@ -26,6 +26,7 @@ import {
 } from "@/lib/ai/prep-types"
 import { checkRateLimit } from "@/lib/ai/rate-limit"
 import type { StageKey } from "@/lib/stages"
+import { getStripe } from "@/lib/stripe"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 export async function signOutAction() {
@@ -34,11 +35,117 @@ export async function signOutAction() {
   redirect("/login")
 }
 
+// Prompt 12 post-checkout verification. Reads the Checkout Session
+// directly from Stripe, verifies the current user owns it, and upserts
+// user_profiles from that read. This is the primary first-paid-experience
+// path — it bypasses the webhook entirely, so a slow webhook can no
+// longer block the auto-resume flow on /app. The webhook still handles
+// ongoing lifecycle events (cancel, payment failure) and is the source
+// of truth for those. Idempotent: safe to call after the webhook has
+// already synced.
+export type VerifyCheckoutResult =
+  | { status: "active"; current_period_end: string | null }
+  | { status: "pending" }
+  | { status: "unauthorized" }
+  | { status: "error"; error: string }
+
+export async function verifyCheckoutAndSyncAction(
+  sessionId: string
+): Promise<VerifyCheckoutResult> {
+  if (typeof sessionId !== "string" || sessionId.length === 0) {
+    return { status: "error", error: "Missing session_id" }
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { status: "unauthorized" }
+
+  let session
+  try {
+    session = await getStripe().checkout.sessions.retrieve(sessionId, {
+      expand: ["subscription", "customer"],
+    })
+  } catch (err) {
+    return {
+      status: "error",
+      error: err instanceof Error ? err.message : "Stripe lookup failed",
+    }
+  }
+
+  // Ownership check. Session-level metadata is the primary signal; we also
+  // accept the expanded customer's metadata.supabase_user_id as a fallback
+  // for sessions created before the session-metadata change.
+  const sessionOwner =
+    (session.metadata?.supabase_user_id as string | undefined) ?? null
+  const customer =
+    session.customer && typeof session.customer !== "string"
+      ? session.customer
+      : null
+  const customerOwner =
+    customer && !("deleted" in customer && customer.deleted)
+      ? ((customer.metadata?.supabase_user_id as string | undefined) ?? null)
+      : null
+  if (sessionOwner !== user.id && customerOwner !== user.id) {
+    return { status: "unauthorized" }
+  }
+
+  const subscription =
+    session.subscription && typeof session.subscription !== "string"
+      ? session.subscription
+      : null
+  const isPaid = session.payment_status === "paid"
+  const isActiveStatus =
+    !!subscription &&
+    (subscription.status === "active" || subscription.status === "trialing")
+  if (!isPaid || !isActiveStatus) {
+    return { status: "pending" }
+  }
+
+  const customerId =
+    typeof session.customer === "string"
+      ? session.customer
+      : (session.customer?.id ?? null)
+
+  // Stripe SDK 22 narrowed current_period_end out of the Subscription root
+  // type (lives on subscription_item now). With apiVersion pinned to
+  // 2024-12-18.acacia the runtime response still keeps it at the
+  // subscription level — same cast pattern as the webhook handler.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const periodEndUnix = (subscription as any).current_period_end as
+    | number
+    | undefined
+  const periodEnd = periodEndUnix
+    ? new Date(periodEndUnix * 1000).toISOString()
+    : null
+
+  const update: {
+    subscription_status: "active"
+    current_period_end: string | null
+    stripe_customer_id?: string
+  } = {
+    subscription_status: "active",
+    current_period_end: periodEnd,
+  }
+  if (customerId) update.stripe_customer_id = customerId
+
+  const { error: updateError } = await supabase
+    .from("user_profiles")
+    .update(update)
+    .eq("id", user.id)
+  if (updateError) {
+    return { status: "error", error: updateError.message }
+  }
+
+  return { status: "active", current_period_end: periodEnd }
+}
+
 // Prompt 9 post-checkout resume: re-reads subscription status fresh from
 // the DB so the /app client can gate auto-fire on the webhook having
-// landed. AppPage's server fetch can race the webhook on the Stripe
-// success redirect; this action bypasses any RSC cache by virtue of
-// being a Server Action invoked client-side.
+// landed. Used by the backward-compat path for in-flight checkout
+// sessions created before verifyCheckoutAndSyncAction shipped (those
+// success_urls used subscribed=1 with no session_id).
 export async function getSubscriptionStatusAction(): Promise<
   | {
       ok: true
