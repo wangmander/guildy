@@ -90,7 +90,7 @@ export function InputsWidget({
   const rows: Row[] = [
     {
       key: "background",
-      label: "Background",
+      label: "Intro/Cover Letter",
       preview: previewOf(resumeText),
       present: hasResume,
       clickable: true,
@@ -414,7 +414,7 @@ function BackgroundForm({
 
   return (
     <FormShell
-      label="Used for prep on every job. Editing updates your background everywhere."
+      label="Used for prep on every job. Editing updates your intro everywhere."
       hasExisting={false}
       onSave={onSave}
       onClear={noopClear}

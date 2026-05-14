@@ -45,13 +45,13 @@ export function OnboardingForm({ initialText }: { initialText: string }) {
     <div className="space-y-8">
       <div className="bg-white border border-[#E5E7EB] rounded-2xl p-6 space-y-4">
         <div>
-          <h2 className="text-xl font-semibold text-[#482C4C]">Paste resume or background</h2>
+          <h2 className="text-xl font-semibold text-[#482C4C]">Paste resume or intro</h2>
         </div>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={14}
-          placeholder="Paste resume text or a structured summary of your background..."
+          placeholder="Paste resume text or a short intro/cover-letter-style summary..."
           className="w-full p-4 rounded-xl border border-[#E5E7EB] text-sm text-gray-900 focus:outline-none focus:border-[#482C4C] focus:ring-2 focus:ring-[#482C4C]/20 font-mono"
           disabled={pending}
         />
