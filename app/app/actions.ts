@@ -141,6 +141,81 @@ export async function verifyCheckoutAndSyncAction(
   return { status: "active", current_period_end: periodEnd }
 }
 
+// Prompt 15: returns the most recently generated prep round per tier
+// for a job. PrepOverlay uses this on mount to default selectedRole to
+// the round with the latest activity (Deep first for paid users, then
+// Quick fallback). A returned entry of `null` means no prep_versions
+// row exists for that tier yet; `{ role: null }` means a row exists but
+// it's a non-Full-Loop single prep where role doesn't apply.
+export async function getLatestPrepRoundsAction(jobId: string): Promise<
+  | {
+      ok: true
+      deep: { role: PrepSessionRole | null } | null
+      quick: { role: PrepSessionRole | null } | null
+    }
+  | { ok: false; error: string }
+> {
+  if (typeof jobId !== "string" || jobId.length === 0) {
+    return { ok: false, error: "Missing jobId" }
+  }
+  const supabase = await createSupabaseServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: "Not signed in" }
+
+  // Cheap ownership check; RLS would catch unauthorized reads too.
+  const { data: jobRow, error: jobError } = await supabase
+    .from("jobs")
+    .select("id")
+    .eq("id", jobId)
+    .eq("user_id", user.id)
+    .maybeSingle()
+  if (jobError) return { ok: false, error: jobError.message }
+  if (!jobRow) return { ok: false, error: "Job not found" }
+
+  const [{ data: deepRow }, { data: quickRow }] = await Promise.all([
+    supabase
+      .from("prep_versions")
+      .select("output")
+      .eq("job_id", jobId)
+      .eq("user_id", user.id)
+      .eq("tier", "deep")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("prep_versions")
+      .select("output")
+      .eq("job_id", jobId)
+      .eq("user_id", user.id)
+      .eq("tier", "quick")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ])
+
+  const roleFrom = (
+    row: { output: unknown } | null
+  ): { role: PrepSessionRole | null } | null => {
+    if (!row) return null
+    const output = row.output as PrepOutput | null
+    const raw = output?.session_role ?? null
+    return {
+      role:
+        raw &&
+        (PREP_SESSION_ROLES as readonly string[]).includes(raw as string)
+          ? (raw as PrepSessionRole)
+          : null,
+    }
+  }
+  return {
+    ok: true,
+    deep: roleFrom(deepRow),
+    quick: roleFrom(quickRow),
+  }
+}
+
 // Prompt 9 post-checkout resume: re-reads subscription status fresh from
 // the DB so the /app client can gate auto-fire on the webhook having
 // landed. Used by the backward-compat path for in-flight checkout

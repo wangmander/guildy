@@ -12,6 +12,7 @@ import { X } from "lucide-react"
 
 import {
   generatePrepAction,
+  getLatestPrepRoundsAction,
   getPrepStatesAction,
   type PrepStatesMap,
 } from "@/app/app/actions"
@@ -87,6 +88,14 @@ function isFullLoopStage(stage: StageKey | undefined): boolean {
   return stage === "interview_loop" || stage === "final"
 }
 
+// Prompt 15: paid view = active subscriber OR past_due grace. Both
+// statuses mean the user has paid for Deep and should never see the
+// Quick tab; Deep is the only tier they interact with. Canceled and
+// free both fall back to the original Quick-default flow.
+function isPaidStatus(status: string): boolean {
+  return status === "active" || status === "past_due"
+}
+
 // First role marked enabled in the resolved config. Falls back to
 // "hiring_manager" when zero roles are enabled (defensive — UI also handles
 // the zero-enabled case via the empty-state branch in PrepCanvas).
@@ -139,7 +148,11 @@ export function PrepOverlay({
   const [selectedRole, setSelectedRole] =
     useState<PrepSessionRole>("hiring_manager")
   const [error, setError] = useState<string | null>(null)
-  const [tier, setTier] = useState<PrepTier>("quick")
+  // Prompt 15: paid users default to Deep on every overlay open. Free
+  // and canceled users keep the legacy Quick default.
+  const [tier, setTier] = useState<PrepTier>(() =>
+    isPaidStatus(subscriptionStatus) ? "deep" : "quick"
+  )
   const [inputsExpansion, setInputsExpansion] = useState<InputsExpansionState>({
     section: null,
     pulseToken: 0,
@@ -224,11 +237,16 @@ export function PrepOverlay({
   // Deep → Quick after the autoresume kicked off. tier/inputs only reset
   // on actual job change now; selectedRole defaults are re-evaluated by
   // the defense effect below when the active role goes disabled.
+  //
+  // Prompt 15: tier reset honors subscription status. Paid users land
+  // on Deep on every job open; the latest-round picker effect below
+  // refines selectedRole based on prep history.
   useEffect(() => {
-    setTier("quick")
+    setTier(isPaidStatus(subscriptionStatus) ? "deep" : "quick")
     setSelectedRole(firstEnabledRole(sessionConfig))
     setInputsExpansion({ section: null, pulseToken: 0 })
-    // sessionConfig intentionally excluded — see comment above.
+    // sessionConfig + subscriptionStatus intentionally excluded — see
+    // comment above. Effect only fires on actual job switches.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [job?.id])
 
@@ -371,6 +389,39 @@ export function PrepOverlay({
       onAutoResumeHandled?.()
     })
   }, [autoResume, job, onAutoResumeHandled])
+
+  // Prompt 15 default-round picker. On overlay open, query the most
+  // recent prep round per tier for this job and pre-select it. Paid
+  // users prefer Deep; Quick is the fallback for both paid (no Deep yet)
+  // and free users. autoResume wins when active — if it was set on
+  // initial mount, this picker skips entirely so we never stomp the
+  // round Stripe redirected us to. Single-prep stages return role=null
+  // from the action, which leaves selectedRole at its firstEnabledRole
+  // default (harmless since the UI uses the "single" key there).
+  const initialAutoResumeRef = useRef(autoResume !== null)
+  const defaultRoundPickedRef = useRef(false)
+  useEffect(() => {
+    if (!job) return
+    if (initialAutoResumeRef.current) return
+    if (defaultRoundPickedRef.current) return
+    defaultRoundPickedRef.current = true
+    let cancelled = false
+    getLatestPrepRoundsAction(job.id).then((res) => {
+      if (cancelled) return
+      if (!res.ok) return
+      const paid = isPaidStatus(subscriptionStatus)
+      const latest = paid ? (res.deep ?? res.quick) : res.quick
+      const targetRole = latest?.role ?? null
+      if (targetRole) setSelectedRole(targetRole)
+    })
+    return () => {
+      cancelled = true
+    }
+    // job?.id is the only meaningful retrigger; subscriptionStatus
+    // intentionally excluded so a mid-session status flip (rare) does
+    // not re-run the picker and clobber the user's current selection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job?.id])
 
   // Output backing the Interviewer widget's insights field. Single view uses
   // the "single" entry; Full Loop uses the selected session's output.

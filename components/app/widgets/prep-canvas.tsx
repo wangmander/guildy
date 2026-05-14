@@ -111,6 +111,12 @@ export function PrepCanvas({
     }
     return false
   })()
+  // Prompt 15: paid view hides the Quick compartment entirely. Both
+  // active and past_due (regardless of grace specifics) suppress it —
+  // a past-grace past_due user still doesn't get the "downgrade to
+  // Quick" tab because that's a product choice, not a billing fallback.
+  const hideQuickTier =
+    subscriptionStatus === "active" || subscriptionStatus === "past_due"
   const currentKey: keyof PrepStatesMap = fullLoop ? selectedRole : "single"
   const generatingKey = fullLoop ? selectedRole : SINGLE_GENERATING_KEY
   const isGenerating = generatingRoles.has(generatingKey)
@@ -167,6 +173,7 @@ export function PrepCanvas({
             onTierChange={onTierChange}
             onUpgrade={onUpgrade}
             disabled={isGenerating}
+            hideQuick={hideQuickTier}
           />
           {showRegenerate ? (
             <button
@@ -260,11 +267,14 @@ function TierSelector({
   onTierChange,
   onUpgrade,
   disabled = false,
+  hideQuick = false,
 }: {
   tier: PrepTier
   onTierChange: (tier: PrepTier) => void
   onUpgrade: () => void
   disabled?: boolean
+  // Prompt 15: paid users see only the Deep compartment.
+  hideQuick?: boolean
 }) {
   const compartmentBase =
     "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-colors"
@@ -282,28 +292,30 @@ function TierSelector({
       aria-label="Prep tier"
       className="inline-flex flex-nowrap items-center gap-0.5 rounded-full border border-black/10 bg-gray-50 p-0.5 whitespace-nowrap"
     >
-      <button
-        type="button"
-        role="tab"
-        aria-selected={tier === "quick"}
-        aria-disabled={disabled}
-        tabIndex={disabled ? -1 : 0}
-        onClick={() => {
-          if (disabled) return
-          onTierChange("quick")
-        }}
-        className={
-          compartmentBase +
-          " " +
-          (tier === "quick" ? compartmentSelected : compartmentUnselected) +
-          lockedSuffix
-        }
-      >
-        <span className="inline-flex items-center rounded bg-gray-200/70 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-gray-700">
-          Haiku 4.5
-        </span>
-        <span className="font-medium">Quick Prep</span>
-      </button>
+      {hideQuick ? null : (
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tier === "quick"}
+          aria-disabled={disabled}
+          tabIndex={disabled ? -1 : 0}
+          onClick={() => {
+            if (disabled) return
+            onTierChange("quick")
+          }}
+          className={
+            compartmentBase +
+            " " +
+            (tier === "quick" ? compartmentSelected : compartmentUnselected) +
+            lockedSuffix
+          }
+        >
+          <span className="inline-flex items-center rounded bg-gray-200/70 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-gray-700">
+            Haiku 4.5
+          </span>
+          <span className="font-medium">Quick Prep</span>
+        </button>
+      )}
 
       {/* Deep compartment: div with role=tab so a real <button> Upgrade chip
           can nest inside without invalid button-in-button HTML. Enter/Space
