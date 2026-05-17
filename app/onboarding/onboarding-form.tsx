@@ -28,7 +28,17 @@ export function OnboardingForm({ initialText }: { initialText: string }) {
         setSavedText(text)
       }
 
-      const completeResult = await completeOnboardingAction()
+      // Prompt 21: the unauth Quick Prep funnel stashes a handoff uuid in
+      // localStorage at /signup (it has to survive the magic-link email
+      // round trip). Read it here and hand it to completion; clear it so
+      // a later re-onboard does not replay a consumed handoff.
+      let handoffId: string | undefined
+      if (typeof window !== "undefined") {
+        handoffId = window.localStorage.getItem("guildy_handoff") ?? undefined
+        if (handoffId) window.localStorage.removeItem("guildy_handoff")
+      }
+
+      const completeResult = await completeOnboardingAction(handoffId)
       if (completeResult && !completeResult.ok) {
         setStatus({ tone: "error", text: completeResult.message })
         return

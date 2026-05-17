@@ -3,8 +3,29 @@ import { NextResponse, type NextRequest } from "next/server"
 
 type CookieSet = { name: string; value: string; options?: CookieOptions }
 
-const PUBLIC_PATHS = new Set(["/", "/login", "/about", "/privacy", "/terms", "/security"])
-const PUBLIC_PREFIXES = ["/auth/", "/api/health", "/_next/", "/static/"]
+// Prompt 21: /signup is the unauth Quick Prep funnel's capture route and
+// must be reachable without a session, or the auth gate 307s to /login
+// and drops the ?handoff= param. The two unauth API routes likewise need
+// to bypass the gate: a redirected POST never reaches the handler. The
+// generate route shipped in Prompt 20 without this entry, so an
+// unauthenticated call was being redirected away from the handler.
+const PUBLIC_PATHS = new Set([
+  "/",
+  "/login",
+  "/signup",
+  "/about",
+  "/privacy",
+  "/terms",
+  "/security",
+])
+const PUBLIC_PREFIXES = [
+  "/auth/",
+  "/api/health",
+  "/api/generate-quick-prep-unauth",
+  "/api/unauth-handoff/",
+  "/_next/",
+  "/static/",
+]
 
 function isPublicPath(pathname: string) {
   if (PUBLIC_PATHS.has(pathname)) return true

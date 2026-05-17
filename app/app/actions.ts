@@ -1,7 +1,5 @@
 "use server"
 
-import { createHash } from "node:crypto"
-
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { z } from "zod"
@@ -24,6 +22,7 @@ import {
   type PrepTier,
   type PrepSessionRole,
 } from "@/lib/ai/prep-types"
+import { buildContextHash } from "@/lib/ai/context-hash"
 import { checkRateLimit } from "@/lib/ai/rate-limit"
 import type { StageKey } from "@/lib/stages"
 import { getStripe } from "@/lib/stripe"
@@ -834,77 +833,9 @@ export async function updateUserResumeAction(
   return { ok: true }
 }
 
-// Single-source builder for prep_versions.context_hash. Both
-// generatePrepAction (writer) and getCachedPrepAction (session-aware reader)
-// must produce byte-identical hashes for identical inputs, otherwise cache
-// rows fail to resolve.
-//
-// session_role and session_label are appended to the hash material only when
-// defined. With both undefined, the JSON.stringify object preserves its
-// pre-Phase-4d key set in pre-Phase-4d insertion order — existing
-// prep_versions rows resolve byte-identical.
-//
-// Phase 5: session_label appended after session_role. Renaming a Full Loop
-// round produces a fresh hash and invalidates the prior cached prep — by
-// design, since the label drives the model's session emphasis.
-// Prompt 16 invariant: two identical-content inputs MUST produce identical
-// hashes regardless of trailing whitespace, line-ending style, or object
-// key order. Pasted textarea content commonly arrives with CRLF line
-// endings on Windows or trailing whitespace from copy-paste; the cache
-// reader and writer call this same function on different data fetches,
-// so any drift between them surfaces as a false "Inputs changed" stale
-// banner. normalizeHashString folds those variations away; sorting keys
-// before serialize is defense-in-depth against any future object-shape
-// changes that would otherwise rely on V8 insertion order.
-//
-// Note: existing prep_versions rows persisted before this normalization
-// shipped will not match the new hashes and will surface as stale on
-// next read. Users regenerate once, then hashes stabilize.
-function normalizeHashString(value: string | null | undefined): string {
-  if (!value) return ""
-  return value.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim()
-}
-
-function stableStringify(obj: Record<string, unknown>): string {
-  const keys = Object.keys(obj).sort()
-  const sorted: Record<string, unknown> = {}
-  for (const key of keys) sorted[key] = obj[key]
-  return JSON.stringify(sorted)
-}
-
-function buildContextHash(inputs: {
-  tier: PrepTier
-  stage: PrepStage
-  resume_text: string | null
-  jd_text: string | null
-  latest_message: string | null
-  interviewer_name: string | null
-  interviewer_title: string | null
-  interviewer_link: string | null
-  note_text: string | null
-  session_role?: PrepSessionRole
-  session_label?: string | null
-}): string {
-  const obj: Record<string, unknown> = {
-    tier: inputs.tier,
-    stage: inputs.stage,
-    resume: normalizeHashString(inputs.resume_text),
-    jd: normalizeHashString(inputs.jd_text),
-    msg: normalizeHashString(inputs.latest_message),
-    interviewer_name: normalizeHashString(inputs.interviewer_name),
-    interviewer_title: normalizeHashString(inputs.interviewer_title),
-    interviewer_link: normalizeHashString(inputs.interviewer_link),
-    note: normalizeHashString(inputs.note_text),
-  }
-  if (inputs.session_role) {
-    obj.session_role = inputs.session_role
-  }
-  const normalizedLabel = normalizeHashString(inputs.session_label)
-  if (normalizedLabel.length > 0) {
-    obj.session_label = normalizedLabel
-  }
-  return createHash("sha256").update(stableStringify(obj)).digest("hex")
-}
+// Prompt 21: buildContextHash moved to lib/ai/context-hash.ts so the
+// unauth-handoff consume path hashes with the byte-identical function.
+// Imported at the top of this file; call sites below are unchanged.
 
 // Prep ---------------------------------------------------------------------
 
