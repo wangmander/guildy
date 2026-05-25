@@ -60,3 +60,15 @@ export async function trackSubscriptionPaid(
 ): Promise<void> {
   await captureServer("subscription_paid", userId, { tier })
 }
+
+// kanban_job_created: fired from consumeHandoff (source="handoff") since
+// that path has no client moment. Manual creates fire client-side from
+// add-job-modal. distinct_id is the Supabase user.id — the same id the
+// client-side posthog.identify() call uses, so server-captured events
+// attach to the same person record.
+export async function trackKanbanJobCreated(
+  userId: string,
+  source: "manual" | "handoff"
+): Promise<void> {
+  await captureServer("kanban_job_created", userId, { source })
+}

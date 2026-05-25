@@ -9,6 +9,7 @@ import {
   useTransition,
 } from "react"
 import { X } from "lucide-react"
+import posthog from "posthog-js"
 
 import {
   generatePrepAction,
@@ -191,6 +192,18 @@ export function PrepOverlay({
     }
   }, [onClose])
 
+  // Fires once per overlay open and again only when a different job is
+  // swapped into the same instance. Stage is captured but not in deps so
+  // a mid-overlay stage drag doesn't refire the event.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!job) return
+    posthog.capture("prep_overlay_opened", {
+      job_id: job.id,
+      stage: job.stage,
+    })
+  }, [job?.id])
+
   // After the overlay unmounts the browser restores focus to the trigger
   // (a card with role=button), which paints a keyboard focus ring. Blur
   // the next frame so the ring doesn't linger. Empty deps so this fires
@@ -319,6 +332,12 @@ export function PrepOverlay({
         if (!res.ok) {
           setError(res.error)
           return
+        }
+        if (tier === "quick") {
+          posthog.capture("quick_prep_generated", {
+            job_id: job.id,
+            session_role: role ?? "_single",
+          })
         }
         // Optimistic local update so the just-finished session flips from
         // generating → cached without waiting for the next states refetch.

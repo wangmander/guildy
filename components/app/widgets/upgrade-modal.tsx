@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Loader2 } from "lucide-react"
+import posthog from "posthog-js"
 
 import {
   Dialog,
@@ -46,7 +47,19 @@ export function UpgradeModal({
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  useEffect(() => {
+    if (!open) return
+    posthog.capture("upgrade_modal_viewed", {
+      job_id: jobId,
+      session_role: sessionRole ?? "_single",
+    })
+  }, [open, jobId, sessionRole])
+
   const subscribe = async () => {
+    posthog.capture("upgrade_modal_subscribe_clicked", {
+      job_id: jobId,
+      session_role: sessionRole ?? "_single",
+    })
     setPending(true)
     setError(null)
     try {

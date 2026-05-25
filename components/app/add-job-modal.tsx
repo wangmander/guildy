@@ -1,6 +1,7 @@
 "use client"
 
 import { useRef, useState, useTransition } from "react"
+import posthog from "posthog-js"
 
 import { createJobAction } from "@/app/app/actions"
 import { Button } from "@/components/ui/button"
@@ -169,6 +170,7 @@ export function AddJobModal({ open, onOpenChange, defaultStage }: Props) {
         setError(result.error)
         return
       }
+      posthog.capture("kanban_job_created", { source: "manual" })
       handleOpenChange(false)
     })
   }

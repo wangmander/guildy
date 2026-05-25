@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@supabase/supabase-js"
 
-import { trackSignupCompleted } from "@/lib/analytics"
+import { trackKanbanJobCreated, trackSignupCompleted } from "@/lib/analytics"
 import { buildContextHash } from "@/lib/ai/context-hash"
 import { QUICK_PREP_MODEL } from "@/lib/ai/models"
 import { stageKeyToPrepStage } from "@/lib/ai/prep-types"
@@ -161,6 +161,10 @@ async function consumeHandoff(
 
   // Consume: delete the handoff row regardless of the prep-insert outcome.
   await admin.from("unauth_handoffs").delete().eq("id", handoffId)
+
+  // Fire-and-forget analytics. Failure is swallowed inside the helper.
+  await trackKanbanJobCreated(userId, "handoff")
+
   return job.id as string
 }
 

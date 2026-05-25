@@ -62,6 +62,7 @@ Guildy creates massive value for one thing: **getting users hired**. Every decis
 ## Current state [LIVE]
 
 - Branch: v2-pivot
+- Latest patch: **PostHog funnel + engagement events at `<commit-hash>`** — added `cross_subdomain_cookie: true` for `.guildy.ai` distinct_id continuity from marketing → app. `posthog-provider.tsx` now identifies on Supabase `SIGNED_IN` and on initial mount via `getUser()`, resets on `SIGNED_OUT`. New events: `upgrade_modal_viewed`, `upgrade_modal_subscribe_clicked`, `kanban_job_created` (source: manual client-side, handoff server-side via `lib/analytics.trackKanbanJobCreated`), `prep_overlay_opened`, `quick_prep_generated`. `trackSignupCompleted` was already wired in `completeOnboardingAction`. `trackSubscriptionPaid` already fires from the Stripe `customer.subscription.created` webhook. No PII fields, no business logic changes.
 - Last phase shipped: **Phase 6b at `<commit-hash>`** — Stripe Checkout + paywall + webhooks + customer portal. Single $19.99/mo tier; Deep gated behind active subscription, Quick stays free for everyone. Phase 6.5 (Termly + PostHog) and Phase 5 (web_search grounding) shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
 
   Prior shipped: **Phase 6.5 at `ba4199f`** — Termly legal pages + PostHog 3 events + V2.1 Ultra tier note. Phase 5 (Anthropic web_search grounding) and patch series 5.1/5.3/5.4 shipped earlier in this branch. Detail for every shipped phase lives in the archive section below.
