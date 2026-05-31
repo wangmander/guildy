@@ -127,6 +127,14 @@ Priority order:
 11. Progress feedback polish on long operations
 12. 10-job QA pass with edge cases (international comp, multiple offers, withdrawn jobs)
 
+## Guildy 2.1 Command Center (planned) [POST-LAUNCH]
+
+- Organizing principle: with ~0 users, every feature is for CONVERSION and MARKETING, not retention. Retention mechanics (streaks, XP, daily missions, return nudges) are tabled until there's a user base. Conversion lifts the rate; distribution still fixes traffic.
+- Positioning: "Manage the hunt, not just the interview." Command center for the whole job-hunt funnel, not a prep tool or tracker.
+- Locked build order: (1) Job Source Advisor — rated board recommendations by persona, ships FIRST as a FREE pre-signup hook on the marketing site; (2) Home "Today" panel + transparent stats (real numbers, no fake gamification); (3) TC Comparison matrix — auto-appears at late stage, bottom half of the command center; (4) Negotiation Prep (Ultra tier) — branches off the TC matrix; (5) Target Company List.
+- Freshness constraint: we do NOT have reliable post-date data (paste-based, no board API). Do not build a freshness score or fake it — general advice + optional manual date field only.
+- Full detail: `docs/guildy-2.1-command-center-backlog.md`.
+
 ## Phase 4c–6b shipped — archive
 
 ### Patch — Deep rate limits 8/day, 50/month
