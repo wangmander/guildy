@@ -24,6 +24,8 @@ import {
 } from "@/lib/ai/prep-types"
 import { buildContextHash } from "@/lib/ai/context-hash"
 import { checkRateLimit } from "@/lib/ai/rate-limit"
+import { generateBoardMap } from "@/lib/jobSourceAdvisor/aiFallback"
+import type { BoardRating } from "@/lib/jobSourceAdvisor/boardRatings"
 import type { StageKey } from "@/lib/stages"
 import { getStripe } from "@/lib/stripe"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
@@ -1558,4 +1560,27 @@ export async function updateFullLoopSessionConfigAction(
 
   revalidatePath("/app")
   return { ok: true }
+}
+
+// Job Source Advisor AI fallback. Called client-side from the command rail
+// only when a role title does not match a curated seed. Auth-gated so the
+// Anthropic call cannot be triggered anonymously. Returns boards or a flag
+// to fall back to the generic blend; never throws.
+const advisorRoleSchema = z.string().trim().min(1).max(120)
+
+export async function getJobSourceAdvisorAction(
+  roleTitle: string
+): Promise<{ ok: true; boards: BoardRating[] } | { ok: false }> {
+  const parsed = advisorRoleSchema.safeParse(roleTitle)
+  if (!parsed.success) return { ok: false }
+
+  const supabase = await createSupabaseServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false }
+
+  const boards = await generateBoardMap(parsed.data)
+  if (!boards) return { ok: false }
+  return { ok: true, boards }
 }

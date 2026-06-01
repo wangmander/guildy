@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation"
 
 import { Board, type JobRow, type InterviewerInfo } from "@/components/app/board"
+import { CommandRail, type RailStats } from "@/components/app/command-rail"
 import { TopNav } from "@/components/app/top-nav"
+import { selectAdvisor } from "@/lib/jobSourceAdvisor/boardRatings"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 // Patch 5.4: Vercel server actions inherit maxDuration from the invoking
@@ -85,6 +87,19 @@ export default async function AppPage({
   const jobParam = searchParams?.job
   const initialOpenJobId = typeof jobParam === "string" ? jobParam : null
 
+  // Command rail: real stats + automatic Job Source Advisor, both derived
+  // from the user's actual cards. Closed cards are excluded (hidden on Home).
+  const jobRows = (jobs ?? []) as JobRow[]
+  const nonClosed = jobRows.filter((j) => j.stage !== "closed")
+  const activeStages = new Set(["screen", "hiring_manager", "interview_loop", "final"])
+  const railStats: RailStats = {
+    jobsTracked: nonClosed.length,
+    activeInterviews: nonClosed.filter((j) => activeStages.has(j.stage)).length,
+    offers: nonClosed.filter((j) => j.stage === "offer").length,
+  }
+  // jobs are ordered created_at desc, so nonClosed is already recency-first.
+  const advisor = selectAdvisor(nonClosed.map((j) => j.role_title))
+
   return (
     <div className="min-h-screen bg-[#F8F9FA]">
       <TopNav
@@ -95,20 +110,25 @@ export default async function AppPage({
         hasStripeCustomer={!!profile?.stripe_customer_id}
       />
       <main className="mx-auto w-full max-w-[1440px] py-6">
-        <Board
-          jobs={(jobs ?? []) as JobRow[]}
-          hasResume={hasResume}
-          resumeText={profile?.resume_text ?? null}
-          subscriptionStatus={
-            (profile?.subscription_status as string | null) ?? "free"
-          }
-          currentPeriodEnd={
-            (profile?.current_period_end as string | null) ?? null
-          }
-          interviewerByJobId={interviewerByJobId}
-          noteByJobId={noteByJobId}
-          initialOpenJobId={initialOpenJobId}
-        />
+        <div className="flex flex-col gap-4 lg:flex-row lg:gap-0">
+          <CommandRail stats={railStats} advisor={advisor} />
+          <div className="min-w-0 flex-1">
+            <Board
+              jobs={jobRows}
+              hasResume={hasResume}
+              resumeText={profile?.resume_text ?? null}
+              subscriptionStatus={
+                (profile?.subscription_status as string | null) ?? "free"
+              }
+              currentPeriodEnd={
+                (profile?.current_period_end as string | null) ?? null
+              }
+              interviewerByJobId={interviewerByJobId}
+              noteByJobId={noteByJobId}
+              initialOpenJobId={initialOpenJobId}
+            />
+          </div>
+        </div>
       </main>
     </div>
   )
