@@ -3,10 +3,12 @@ import { redirect } from "next/navigation"
 import { Board, type JobRow, type InterviewerInfo } from "@/components/app/board"
 import {
   CommandRail,
+  type ApplyGoal,
   type RailStats,
   type TodayItem,
 } from "@/components/app/command-rail"
 import { TopNav } from "@/components/app/top-nav"
+import { benchmarkLine } from "@/lib/jobSourceAdvisor/applyBenchmarks"
 import { selectAdvisor } from "@/lib/jobSourceAdvisor/boardRatings"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
@@ -40,7 +42,7 @@ export default async function AppPage({
     supabase
       .from("jobs")
       .select(
-        "id, company_name, role_title, tc, state, stage, source_url, jd_text, latest_message, full_loop_session_config"
+        "id, company_name, role_title, tc, state, stage, source_url, jd_text, latest_message, full_loop_session_config, created_at"
       )
       .eq("user_id", user.id)
       .order("created_at", { ascending: false }),
@@ -178,12 +180,23 @@ export default async function AppPage({
       })
     }
 
-    // 4. Apply-pace fallback: single, fills a remaining slot.
-    if (todayItems.length < 3) {
-      todayItems.push({ kind: "apply_pace", jobCount: nonClosed.length })
-    }
   }
   const today = todayItems.slice(0, 3)
+
+  // Apply goal: a persistent meter pinned at the bottom of the Today panel,
+  // not a priority slot. loggedThisWeek counts jobs created in the last
+  // rolling 7 days (any stage/state, it measures logging activity, not true
+  // applications which we cannot see). benchmarkLine is tailored to the most
+  // recent non-closed role. Null when the user has no non-closed jobs.
+  const sevenDaysAgoMs = Date.now() - 7 * 24 * 60 * 60 * 1000
+  const rawJobs = (jobs ?? []) as Array<{ created_at: string }>
+  const loggedThisWeek = rawJobs.filter(
+    (j) => new Date(j.created_at).getTime() >= sevenDaysAgoMs
+  ).length
+  const applyGoal: ApplyGoal | null =
+    nonClosed.length > 0
+      ? { loggedThisWeek, benchmarkLine: benchmarkLine(nonClosed[0].role_title) }
+      : null
 
   return (
     <div className="min-h-screen bg-[#F8F9FA]">
@@ -196,7 +209,12 @@ export default async function AppPage({
       />
       <main className="mx-auto w-full max-w-[1440px] py-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:gap-0">
-          <CommandRail stats={railStats} advisor={advisor} today={today} />
+          <CommandRail
+            stats={railStats}
+            advisor={advisor}
+            today={today}
+            applyGoal={applyGoal}
+          />
           <div className="min-w-0 flex-1">
             <Board
               jobs={jobRows}

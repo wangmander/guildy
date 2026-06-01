@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { ArrowRight, Compass, ExternalLink, Plus } from "lucide-react"
+import {
+  ArrowRight,
+  ChevronDown,
+  Compass,
+  ExternalLink,
+  Plus,
+} from "lucide-react"
 
 import { getJobSourceAdvisorAction } from "@/app/app/actions"
 import {
@@ -23,18 +29,30 @@ export type RailStats = {
 // Today panel items, server-built in app/app/page.tsx and passed in as a
 // typed array. Discriminated on `kind`. The renderer below maps each kind to
 // a row; new task types (e.g. a future Target Company List nudge) extend this
-// union and add a branch, keeping the panel an extensible container.
+// union and add a branch, keeping the panel an extensible container. The
+// apply goal is NOT an item here, it is a persistent meter pinned at the
+// bottom of the panel (see ApplyGoal / ApplyGoalMeter below).
 export type TodayItem =
   | { kind: "prep_due"; jobId: string; company: string; stageLabel: string }
   | { kind: "quick_prep_gap"; jobId: string; company: string }
   | { kind: "source_nudge"; board: string; role: string; score: number }
-  | { kind: "apply_pace"; jobCount: number }
+
+// Persistent apply-goal data. Null when the user has no non-closed jobs (the
+// empty state shows instead). loggedThisWeek counts jobs created in the last
+// rolling 7 days; benchmarkLine is the role-tailored ballpark sentence.
+export type ApplyGoal = {
+  loggedThisWeek: number
+  benchmarkLine: string
+}
 
 type Props = {
   stats: RailStats
   advisor: Advisor
   today: TodayItem[]
+  applyGoal: ApplyGoal | null
 }
+
+const APPLY_TARGET = 15
 
 // Board landing URLs for the source-nudge item. boardRatings.ts stays the
 // pure ratings source; link targets live here. Boards with no canonical URL
@@ -152,6 +170,10 @@ function BoardRow({ board }: { board: BoardRating }) {
   )
 }
 
+// Job Source Advisor. Collapsed by default so it reads as one task among
+// others, not a centerpiece block. The AI fallback still resolves on mount
+// (independent of expand state) so the collapsed count is ready. Expanding
+// reveals the full ranked rated list unchanged.
 function AdvisorPanel({ advisor }: { advisor: Advisor }) {
   const [boards, setBoards] = useState<BoardRating[]>(
     advisor.mode === "ai_needed" ? [] : advisor.boards
@@ -160,6 +182,7 @@ function AdvisorPanel({ advisor }: { advisor: Advisor }) {
   const [note, setNote] = useState<string | null>(
     advisor.mode === "generic" ? "Personalizes once you add a job." : null
   )
+  const [expanded, setExpanded] = useState(false)
 
   useEffect(() => {
     if (advisor.mode !== "ai_needed" || !advisor.roleTitle) return
@@ -184,37 +207,62 @@ function AdvisorPanel({ advisor }: { advisor: Advisor }) {
   const subhead = advisor.roleLabel
     ? `Best boards for ${advisor.roleLabel}`
     : "Best boards for your search"
+  const roleText = advisor.roleLabel ?? "your search"
+  const summary = loading
+    ? "Finding your board map..."
+    : `${boards.length} boards for ${roleText}`
 
   return (
     <Panel>
-      <div className="flex items-center gap-1.5">
-        <Compass className="size-4 text-[#4E3BDD]" />
-        <h2 className="font-display text-sm font-medium text-[#1C1E21]">
-          Where to look
-        </h2>
-      </div>
-      <p className="mt-1 text-xs text-gray-500">{subhead}</p>
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className="flex w-full items-center justify-between gap-2 text-left"
+      >
+        <span className="flex min-w-0 items-center gap-1.5">
+          <Compass className="size-4 shrink-0 text-[#4E3BDD]" />
+          <span className="font-display text-sm font-medium text-[#1C1E21]">
+            Where to look
+          </span>
+        </span>
+        <ChevronDown
+          className={cn(
+            "size-4 shrink-0 text-gray-400 transition-transform",
+            expanded && "rotate-180"
+          )}
+        />
+      </button>
 
-      {loading ? (
-        <div className="mt-3 flex flex-col gap-3" aria-live="polite">
-          <p className="text-xs text-gray-400">Finding your board map...</p>
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="flex flex-col gap-1.5">
-              <div className="h-3 w-2/3 animate-pulse rounded bg-gray-100" />
-              <div className="h-1 w-full animate-pulse rounded-full bg-gray-100" />
-            </div>
-          ))}
-        </div>
+      {!expanded ? (
+        <p className="mt-1 truncate text-xs text-gray-500">{summary}</p>
       ) : (
         <>
-          <ul className="mt-2 flex flex-col divide-y divide-gray-100">
-            {boards.map((board) => (
-              <BoardRow key={board.board} board={board} />
-            ))}
-          </ul>
-          {note ? (
-            <p className="mt-2 text-[11px] leading-snug text-gray-400">{note}</p>
-          ) : null}
+          <p className="mt-1 text-xs text-gray-500">{subhead}</p>
+          {loading ? (
+            <div className="mt-3 flex flex-col gap-3" aria-live="polite">
+              <p className="text-xs text-gray-400">Finding your board map...</p>
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="flex flex-col gap-1.5">
+                  <div className="h-3 w-2/3 animate-pulse rounded bg-gray-100" />
+                  <div className="h-1 w-full animate-pulse rounded-full bg-gray-100" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              <ul className="mt-2 flex flex-col divide-y divide-gray-100">
+                {boards.map((board) => (
+                  <BoardRow key={board.board} board={board} />
+                ))}
+              </ul>
+              {note ? (
+                <p className="mt-2 text-[11px] leading-snug text-gray-400">
+                  {note}
+                </p>
+              ) : null}
+            </>
+          )}
         </>
       )}
     </Panel>
@@ -277,58 +325,104 @@ function TodayItemRow({ item }: { item: TodayItem }) {
         </li>
       )
     }
-    case "apply_pace": {
-      const jobWord = item.jobCount === 1 ? "job" : "jobs"
-      return (
-        <li className="py-1.5 text-xs leading-snug text-gray-500">
-          You&rsquo;ve tracked {item.jobCount} {jobWord}. 15 to 20 applications a
-          week consistently beats bursts.
-        </li>
-      )
-    }
   }
 }
 
-// Today panel: the prioritized "what to move next" surface. Items are
-// computed server-side and capped at 3. Empty (no non-closed jobs) shows a
-// single aspirational line plus the Add Job CTA, never a list of zeros. This
-// is the extensible container later features plug additional item kinds into.
+// Persistent apply-goal meter, pinned at the bottom of the Today panel. This
+// is a goal, not a priority slot, so it is always present when the user has
+// jobs. Reuses the board-rating bar style; no new tokens. The benchmark line
+// is the role-tailored ballpark sentence (see lib/jobSourceAdvisor/applyBenchmarks).
+function ApplyGoalMeter({
+  goal,
+  withDivider,
+}: {
+  goal: ApplyGoal
+  withDivider: boolean
+}) {
+  const met = goal.loggedThisWeek >= APPLY_TARGET
+  const pct = Math.min(100, (goal.loggedThisWeek / APPLY_TARGET) * 100)
+  const subline = met
+    ? "Pace met. Steady beats bursts, keep it going."
+    : "15 to 20 a week is the researched sweet spot, and steady beats bursts."
+
+  return (
+    <div
+      className={cn(
+        "mt-3",
+        withDivider && "border-t border-gray-100 pt-3"
+      )}
+    >
+      <h3 className="font-display text-sm font-medium text-[#1C1E21]">
+        Apply goal
+      </h3>
+      <p className="mt-1 text-xs text-gray-500">
+        {goal.loggedThisWeek} / {APPLY_TARGET} this week
+      </p>
+      <div className="mt-1.5 h-1 w-full rounded-full bg-gray-100">
+        <div
+          className="h-1 rounded-full bg-[#482C4C]"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <p className="mt-1.5 text-xs leading-snug text-gray-500">{subline}</p>
+      <p className="mt-1 text-[11px] leading-snug text-gray-400">
+        {goal.benchmarkLine}
+      </p>
+    </div>
+  )
+}
+
+// Today panel: prioritized "what to move next" items (capped server-side at
+// 3) plus a persistent apply-goal meter pinned at the bottom. Empty state (no
+// non-closed jobs, applyGoal null) shows a single aspirational line plus the
+// Add Job CTA, never a list of zeros. This is the extensible container later
+// features plug additional item kinds into.
 function TodayPanel({
   items,
+  applyGoal,
   onAddJob,
 }: {
   items: TodayItem[]
+  applyGoal: ApplyGoal | null
   onAddJob: () => void
 }) {
+  if (!applyGoal) {
+    return (
+      <Panel>
+        <h2 className="font-display text-sm font-medium text-[#1C1E21]">
+          Today
+        </h2>
+        <p className="mt-1.5 text-sm leading-snug text-gray-500">
+          Add your first job and Today shows you exactly what to move next.
+        </p>
+        <button
+          type="button"
+          onClick={onAddJob}
+          className="mt-2 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-[#482C4C] px-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
+        >
+          <Plus className="size-4" />
+          Add your first job
+        </button>
+      </Panel>
+    )
+  }
+
   return (
     <Panel>
       <h2 className="font-display text-sm font-medium text-[#1C1E21]">Today</h2>
-      {items.length === 0 ? (
-        <>
-          <p className="mt-1.5 text-sm leading-snug text-gray-500">
-            Add your first job and Today shows you exactly what to move next.
-          </p>
-          <button
-            type="button"
-            onClick={onAddJob}
-            className="mt-2 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-[#482C4C] px-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
-          >
-            <Plus className="size-4" />
-            Add your first job
-          </button>
-        </>
-      ) : (
+      {items.length > 0 ? (
         <ul className="mt-2 flex flex-col divide-y divide-gray-100">
           {items.map((item, i) => (
             <TodayItemRow key={i} item={item} />
           ))}
         </ul>
-      )}
+      ) : null}
+      <ApplyGoalMeter goal={applyGoal} withDivider={items.length > 0} />
     </Panel>
   )
 }
 
-export function CommandRail({ stats, advisor, today }: Props) {
+export function CommandRail({ stats, advisor, today, applyGoal }: Props) {
   const [addOpen, setAddOpen] = useState(false)
 
   return (
@@ -336,7 +430,11 @@ export function CommandRail({ stats, advisor, today }: Props) {
       <div className="flex flex-col gap-4">
         <StatsPanel stats={stats} />
         <AdvisorPanel advisor={advisor} />
-        <TodayPanel items={today} onAddJob={() => setAddOpen(true)} />
+        <TodayPanel
+          items={today}
+          applyGoal={applyGoal}
+          onAddJob={() => setAddOpen(true)}
+        />
       </div>
       <AddJobModal open={addOpen} onOpenChange={setAddOpen} />
     </aside>
