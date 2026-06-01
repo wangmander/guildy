@@ -1,7 +1,11 @@
 import { redirect } from "next/navigation"
 
 import { Board, type JobRow, type InterviewerInfo } from "@/components/app/board"
-import { CommandRail, type RailStats } from "@/components/app/command-rail"
+import {
+  CommandRail,
+  type RailStats,
+  type TodayItem,
+} from "@/components/app/command-rail"
 import { TopNav } from "@/components/app/top-nav"
 import { selectAdvisor } from "@/lib/jobSourceAdvisor/boardRatings"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
@@ -31,6 +35,7 @@ export default async function AppPage({
     { data: profile },
     { data: interviewerRows },
     { data: noteRows },
+    { data: prepRows },
   ] = await Promise.all([
     supabase
       .from("jobs")
@@ -58,6 +63,9 @@ export default async function AppPage({
       .eq("user_id", user.id)
       .eq("type", "note")
       .order("created_at", { ascending: false }),
+    // Prep presence per job for the Today panel. One aggregated read of
+    // job_id only; a job counts as prepped if any prep_versions row exists.
+    supabase.from("prep_versions").select("job_id").eq("user_id", user.id),
   ])
 
   const hasResume = !!profile?.resume_text && profile.resume_text.trim().length > 0
@@ -100,6 +108,83 @@ export default async function AppPage({
   // jobs are ordered created_at desc, so nonClosed is already recency-first.
   const advisor = selectAdvisor(nonClosed.map((j) => j.role_title))
 
+  // Today panel: prioritized "what to move next", capped at 3, server-built
+  // from real kanban + prep state. nonClosed is recency-first, so stable
+  // sorts preserve recency for ties.
+  const preppedJobIds = new Set((prepRows ?? []).map((r) => r.job_id))
+  const INTERVIEW_STAGES = new Set([
+    "screen",
+    "hiring_manager",
+    "interview_loop",
+    "final",
+  ])
+  // Full Loop (interview_loop / final) > Hiring Manager > Screen.
+  const STAGE_RANK: Record<string, number> = {
+    final: 3,
+    interview_loop: 3,
+    hiring_manager: 2,
+    screen: 1,
+  }
+  const STAGE_LABEL: Record<string, string> = {
+    screen: "Screen",
+    hiring_manager: "Hiring Manager",
+    interview_loop: "Full Loop",
+    final: "Full Loop",
+  }
+
+  const todayItems: TodayItem[] = []
+  if (nonClosed.length > 0) {
+    // 1. Prep due: interview-stage jobs with no prep, latest-stage first.
+    const prepDue = nonClosed
+      .filter((j) => INTERVIEW_STAGES.has(j.stage) && !preppedJobIds.has(j.id))
+      .sort((a, b) => STAGE_RANK[b.stage] - STAGE_RANK[a.stage])
+    for (const j of prepDue) {
+      todayItems.push({
+        kind: "prep_due",
+        jobId: j.id,
+        company: j.company_name,
+        stageLabel: STAGE_LABEL[j.stage],
+      })
+    }
+
+    // 2. Quick Prep gap: one Applied job with no prep (capped at 1 slot).
+    if (todayItems.length < 3) {
+      const gap = nonClosed.find(
+        (j) => j.stage === "applied" && !preppedJobIds.has(j.id)
+      )
+      if (gap) {
+        todayItems.push({
+          kind: "quick_prep_gap",
+          jobId: gap.id,
+          company: gap.company_name,
+        })
+      }
+    }
+
+    // 3. Source nudge: top advisor board, seed mode only (boards known
+    // server-side), single slot.
+    if (
+      todayItems.length < 3 &&
+      advisor.mode === "seed" &&
+      advisor.roleLabel &&
+      advisor.boards.length > 0
+    ) {
+      const top = advisor.boards[0]
+      todayItems.push({
+        kind: "source_nudge",
+        board: top.board,
+        role: advisor.roleLabel,
+        score: top.score,
+      })
+    }
+
+    // 4. Apply-pace fallback: single, fills a remaining slot.
+    if (todayItems.length < 3) {
+      todayItems.push({ kind: "apply_pace", jobCount: nonClosed.length })
+    }
+  }
+  const today = todayItems.slice(0, 3)
+
   return (
     <div className="min-h-screen bg-[#F8F9FA]">
       <TopNav
@@ -111,7 +196,7 @@ export default async function AppPage({
       />
       <main className="mx-auto w-full max-w-[1440px] py-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:gap-0">
-          <CommandRail stats={railStats} advisor={advisor} />
+          <CommandRail stats={railStats} advisor={advisor} today={today} />
           <div className="min-w-0 flex-1">
             <Board
               jobs={jobRows}

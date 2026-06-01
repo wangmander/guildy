@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Compass, Plus } from "lucide-react"
+import Link from "next/link"
+import { ArrowRight, Compass, ExternalLink, Plus } from "lucide-react"
 
 import { getJobSourceAdvisorAction } from "@/app/app/actions"
 import {
@@ -19,9 +20,51 @@ export type RailStats = {
   offers: number
 }
 
+// Today panel items, server-built in app/app/page.tsx and passed in as a
+// typed array. Discriminated on `kind`. The renderer below maps each kind to
+// a row; new task types (e.g. a future Target Company List nudge) extend this
+// union and add a branch, keeping the panel an extensible container.
+export type TodayItem =
+  | { kind: "prep_due"; jobId: string; company: string; stageLabel: string }
+  | { kind: "quick_prep_gap"; jobId: string; company: string }
+  | { kind: "source_nudge"; board: string; role: string; score: number }
+  | { kind: "apply_pace"; jobCount: number }
+
 type Props = {
   stats: RailStats
   advisor: Advisor
+  today: TodayItem[]
+}
+
+// Board landing URLs for the source-nudge item. boardRatings.ts stays the
+// pure ratings source; link targets live here. Boards with no canonical URL
+// (e.g. "Company career pages") render as text with no link.
+const BOARD_URLS: Record<string, string> = {
+  Wellfound: "https://wellfound.com/jobs",
+  "Built In": "https://builtin.com/jobs",
+  Glassdoor: "https://www.glassdoor.com/Job/index.htm",
+  Indeed: "https://www.indeed.com/",
+  "YC Work at a Startup": "https://www.workatastartup.com/",
+  "HN Who's Hiring": "https://news.ycombinator.com/",
+  Otta: "https://app.otta.com/",
+  "Otta / Welcome to the Jungle": "https://app.otta.com/",
+  "Lenny's Job Board": "https://www.lennysjobs.com/",
+  RepVue: "https://www.repvue.com/companies",
+  Dribbble: "https://dribbble.com/jobs",
+  Behance: "https://www.behance.net/joblist",
+  "Designer News": "https://www.designernews.co/",
+  "Kaggle Jobs": "https://www.kaggle.com/",
+  Hired: "https://hired.com/",
+}
+
+// LinkedIn gets a role-keyword search deep link; other known boards link to
+// their job root; unknown or URL-less boards return null (text only).
+function boardUrl(board: string, role: string): string | null {
+  if (board === "LinkedIn") {
+    return `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(role)}`
+  }
+  const base = BOARD_URLS[board]
+  return base ? base : null
 }
 
 function Panel({
@@ -178,50 +221,114 @@ function AdvisorPanel({ advisor }: { advisor: Advisor }) {
   )
 }
 
-// Contextual actions container. Kept deliberately extensible: Feature 2 adds
-// a fuller "Today" panel of task items here. New task types render as
-// additional blocks below, so this stays a container, not a single hardcoded
-// action.
-function ActionsPanel({
-  jobsTracked,
+// A single internal deep-link row (prep-due, quick-prep gap). Opens the
+// job's prep overlay via the Board's ?job= search param.
+function ActionRow({ href, label }: { href: string; label: string }) {
+  return (
+    <li>
+      <Link
+        href={href}
+        className="group -mx-2 flex items-center justify-between gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-gray-50"
+      >
+        <span className="text-sm leading-snug text-[#1C1E21]">{label}</span>
+        <ArrowRight className="size-3.5 shrink-0 text-gray-400 transition-colors group-hover:text-[#4E3BDD]" />
+      </Link>
+    </li>
+  )
+}
+
+function TodayItemRow({ item }: { item: TodayItem }) {
+  switch (item.kind) {
+    case "prep_due":
+      return (
+        <ActionRow
+          href={`/app?job=${item.jobId}`}
+          label={`Prep your ${item.company} ${item.stageLabel} round.`}
+        />
+      )
+    case "quick_prep_gap":
+      return (
+        <ActionRow
+          href={`/app?job=${item.jobId}`}
+          label={`Run Quick Prep on ${item.company}.`}
+        />
+      )
+    case "source_nudge": {
+      const url = boardUrl(item.board, item.role)
+      const label = `Check ${item.board} for ${item.role} roles, your strongest source (${item.score}/10).`
+      if (!url) {
+        return (
+          <li className="px-0 py-1.5 text-sm leading-snug text-[#1C1E21]">
+            {label}
+          </li>
+        )
+      }
+      return (
+        <li>
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group -mx-2 flex items-center justify-between gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-gray-50"
+          >
+            <span className="text-sm leading-snug text-[#1C1E21]">{label}</span>
+            <ExternalLink className="size-3.5 shrink-0 text-gray-400 transition-colors group-hover:text-[#4E3BDD]" />
+          </a>
+        </li>
+      )
+    }
+    case "apply_pace": {
+      const jobWord = item.jobCount === 1 ? "job" : "jobs"
+      return (
+        <li className="py-1.5 text-xs leading-snug text-gray-500">
+          You&rsquo;ve tracked {item.jobCount} {jobWord}. 15 to 20 applications a
+          week consistently beats bursts.
+        </li>
+      )
+    }
+  }
+}
+
+// Today panel: the prioritized "what to move next" surface. Items are
+// computed server-side and capped at 3. Empty (no non-closed jobs) shows a
+// single aspirational line plus the Add Job CTA, never a list of zeros. This
+// is the extensible container later features plug additional item kinds into.
+function TodayPanel({
+  items,
   onAddJob,
 }: {
-  jobsTracked: number
+  items: TodayItem[]
   onAddJob: () => void
 }) {
-  if (jobsTracked === 0) {
-    return (
-      <Panel>
-        <h2 className="font-display text-sm font-medium text-[#1C1E21]">
-          Get started
-        </h2>
-        <button
-          type="button"
-          onClick={onAddJob}
-          className="mt-2 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-[#482C4C] px-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
-        >
-          <Plus className="size-4" />
-          Add your first job
-        </button>
-      </Panel>
-    )
-  }
-
-  const jobWord = jobsTracked === 1 ? "job" : "jobs"
-
   return (
     <Panel>
-      <h2 className="font-display text-sm font-medium text-[#1C1E21]">Pace</h2>
-      <p className="mt-1.5 text-xs leading-snug text-gray-500">
-        You&rsquo;ve tracked {jobsTracked} {jobWord}. 15 to 20 applications per
-        week consistently lands interviews more reliably than applying in
-        bursts.
-      </p>
+      <h2 className="font-display text-sm font-medium text-[#1C1E21]">Today</h2>
+      {items.length === 0 ? (
+        <>
+          <p className="mt-1.5 text-sm leading-snug text-gray-500">
+            Add your first job and Today shows you exactly what to move next.
+          </p>
+          <button
+            type="button"
+            onClick={onAddJob}
+            className="mt-2 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-[#482C4C] px-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
+          >
+            <Plus className="size-4" />
+            Add your first job
+          </button>
+        </>
+      ) : (
+        <ul className="mt-2 flex flex-col divide-y divide-gray-100">
+          {items.map((item, i) => (
+            <TodayItemRow key={i} item={item} />
+          ))}
+        </ul>
+      )}
     </Panel>
   )
 }
 
-export function CommandRail({ stats, advisor }: Props) {
+export function CommandRail({ stats, advisor, today }: Props) {
   const [addOpen, setAddOpen] = useState(false)
 
   return (
@@ -229,10 +336,7 @@ export function CommandRail({ stats, advisor }: Props) {
       <div className="flex flex-col gap-4">
         <StatsPanel stats={stats} />
         <AdvisorPanel advisor={advisor} />
-        <ActionsPanel
-          jobsTracked={stats.jobsTracked}
-          onAddJob={() => setAddOpen(true)}
-        />
+        <TodayPanel items={today} onAddJob={() => setAddOpen(true)} />
       </div>
       <AddJobModal open={addOpen} onOpenChange={setAddOpen} />
     </aside>
