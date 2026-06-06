@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { ChevronDown, Plus } from "lucide-react"
+import * as Popover from "@radix-ui/react-popover"
+import { ChevronDown, Info, Lock, Plus } from "lucide-react"
 
 import { DEFAULT_COL_LABEL } from "@/lib/compMatrix/colSeed"
 import {
@@ -65,6 +66,25 @@ const VALUE_ROWS: Array<{ key: keyof NormalizedComp; label: string }> = [
   { key: "steady_state_total", label: "Steady-state total" },
 ]
 
+// Plain-language explanations for the non-obvious computed rows. Keyed by the
+// row label. Base / Signing bonus / Annual bonus / Location need none.
+const ROW_EXPLAIN: Record<string, string> = {
+  "Annualized equity": "Total equity grant divided by the vesting years.",
+  "Year-1 total":
+    "First-year pay: base plus signing bonus plus bonus plus one year of equity.",
+  "Steady-state total":
+    "Ongoing yearly pay past year one: base plus bonus plus annual equity. Excludes the one-time signing bonus.",
+  "COL-adjusted steady-state":
+    "Steady-state pay adjusted for cost of living, so offers in different cities compare fairly. National average is 1.0.",
+}
+
+// Row labels for the locked teaser, in the same order as the populated grid.
+const TEASER_ROWS: Array<{ label: string; emphasized?: boolean }> = [
+  ...VALUE_ROWS.map((r) => ({ label: r.label })),
+  { label: "Location (COL x)" },
+  { label: "COL-adjusted steady-state", emphasized: true },
+]
+
 // Fixed widths so the grid reads as a true matrix: row labels on the left,
 // job columns packed immediately to their right, left-aligned. The table is
 // w-auto (not w-full) so a single offer sits next to the labels instead of
@@ -75,12 +95,60 @@ const LABEL_COL = "sticky left-0 z-10 w-[210px] whitespace-nowrap bg-white"
 const VALUE_COL = "w-[220px] border-x border-gray-200"
 const HEADLINE_BG = "bg-[#EDE9FE]"
 
+// Label with an optional tap-accessible explanation. Radix Popover (not a
+// hover tooltip) so it works on touch; content is portalled so the matrix's
+// horizontal scroll container never clips it.
+function RowLabel({
+  label,
+  explanation,
+  emphasized,
+}: {
+  label: string
+  explanation?: string
+  emphasized?: boolean
+}) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span
+        className={cn(emphasized ? "font-semibold text-[#1C1E21]" : undefined)}
+      >
+        {label}
+      </span>
+      {explanation ? (
+        <Popover.Root>
+          <Popover.Trigger asChild>
+            <button
+              type="button"
+              aria-label={`What is ${label}`}
+              className="inline-flex size-4 shrink-0 items-center justify-center rounded text-gray-400 transition-colors hover:text-[#4E3BDD]"
+            >
+              <Info className="size-3.5" />
+            </button>
+          </Popover.Trigger>
+          <Popover.Portal>
+            <Popover.Content
+              side="top"
+              align="start"
+              sideOffset={4}
+              collisionPadding={8}
+              className="z-50 max-w-[240px] rounded-md border border-gray-200 bg-white px-3 py-2 text-xs leading-snug text-gray-600 shadow-md"
+            >
+              {explanation}
+              <Popover.Arrow className="fill-white" />
+            </Popover.Content>
+          </Popover.Portal>
+        </Popover.Root>
+      ) : null}
+    </span>
+  )
+}
+
 export function TcMatrix({ columns }: Props) {
   const [expanded, setExpanded] = useState(true)
   const [editingJob, setEditingJob] = useState<TcColumn | null>(null)
   const [addOpen, setAddOpen] = useState(false)
 
-  if (columns.length === 0) return null
+  const locked = columns.length === 0
 
   const computed: Computed[] = columns.map((c) => ({
     ...c,
@@ -148,9 +216,11 @@ export function TcMatrix({ columns }: Props) {
             />
             <span className="font-display text-sm font-medium text-[#1C1E21]">
               Compensation comparison
-              <span className="ml-1.5 text-xs font-normal text-gray-400">
-                · {columns.length}
-              </span>
+              {!locked ? (
+                <span className="ml-1.5 text-xs font-normal text-gray-400">
+                  · {columns.length}
+                </span>
+              ) : null}
             </span>
           </span>
           <span className="mt-1 pl-5 text-xs leading-snug text-gray-500">
@@ -168,7 +238,73 @@ export function TcMatrix({ columns }: Props) {
         </button>
       </div>
 
-      {expanded ? (
+      {expanded && locked ? (
+        <div className="mt-3">
+          <div className="overflow-x-auto">
+            <table className="w-auto border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className={cn(LABEL_COL, "py-2 pr-3 text-left")} />
+                  <th
+                    className={cn(
+                      VALUE_COL,
+                      "border-b border-gray-200 bg-[#F8F9FA] px-3 py-2 text-right align-top"
+                    )}
+                  >
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-400">
+                      <Lock className="size-3.5" />
+                      Locked
+                    </span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {TEASER_ROWS.map((row) => (
+                  <tr
+                    key={row.label}
+                    className={cn(
+                      "border-b",
+                      row.emphasized ? "border-gray-200" : "border-gray-50"
+                    )}
+                  >
+                    <td
+                      className={cn(
+                        LABEL_COL,
+                        "py-2 pr-3 text-left text-xs",
+                        row.emphasized
+                          ? cn(HEADLINE_BG, "font-semibold text-[#1C1E21]")
+                          : "text-gray-500"
+                      )}
+                    >
+                      <RowLabel
+                        label={row.label}
+                        explanation={ROW_EXPLAIN[row.label]}
+                        emphasized={row.emphasized}
+                      />
+                    </td>
+                    <td
+                      className={cn(
+                        VALUE_COL,
+                        "px-3 py-2 text-right",
+                        row.emphasized && HEADLINE_BG
+                      )}
+                    >
+                      <span className="text-gray-300">-</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-3 max-w-prose text-xs leading-snug text-gray-500">
+            Compensation comparison unlocks when a job reaches the Offer stage.
+            Move an offer here to compare base, equity, and
+            cost-of-living-adjusted pay side by side.
+          </p>
+        </div>
+      ) : null}
+
+      {expanded && !locked ? (
         <div className="mt-3 overflow-x-auto">
           <table className="w-auto border-collapse text-sm">
             <thead>
@@ -219,7 +355,10 @@ export function TcMatrix({ columns }: Props) {
                       "py-2 pr-3 text-left text-xs text-gray-500"
                     )}
                   >
-                    {row.label}
+                    <RowLabel
+                      label={row.label}
+                      explanation={ROW_EXPLAIN[row.label]}
+                    />
                   </td>
                   {computed.map((c) => (
                     <ValueCell key={c.jobId} c={c} rowKey={row.key} />
@@ -259,7 +398,11 @@ export function TcMatrix({ columns }: Props) {
                     "py-2.5 pr-3 text-left text-xs font-semibold text-[#1C1E21]"
                   )}
                 >
-                  COL-adjusted steady-state
+                  <RowLabel
+                    label="COL-adjusted steady-state"
+                    explanation={ROW_EXPLAIN["COL-adjusted steady-state"]}
+                    emphasized
+                  />
                 </td>
                 {computed.map((c) => (
                   <ValueCell
