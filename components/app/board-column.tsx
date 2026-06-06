@@ -119,7 +119,7 @@ export function BoardColumn({
         ) : null}
       </div>
 
-      <div className="flex max-h-[calc(100dvh-200px)] flex-col gap-2 overflow-y-auto pr-1">
+      <div className="flex max-h-[60vh] flex-col gap-2 overflow-y-auto pr-1">
         {showHint && (
           <p className="px-1 pb-1 text-[11px] leading-snug text-gray-400">
             {hint}
