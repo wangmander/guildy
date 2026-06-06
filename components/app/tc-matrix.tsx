@@ -65,10 +65,15 @@ const VALUE_ROWS: Array<{ key: keyof NormalizedComp; label: string }> = [
   { key: "steady_state_total", label: "Steady-state total" },
 ]
 
-// Min column widths keep the grid readable; once the total exceeds the panel
-// width the wrapper scrolls horizontally with the label column pinned.
-const LABEL_COL = "sticky left-0 z-10 min-w-[150px] bg-white"
-const VALUE_COL = "min-w-[150px]"
+// Fixed widths so the grid reads as a true matrix: row labels on the left,
+// job columns packed immediately to their right, left-aligned. The table is
+// w-auto (not w-full) so a single offer sits next to the labels instead of
+// stretching to the far right. Wider-than-panel grids scroll inside the
+// wrapper with the label column pinned. Label column holds the longest label
+// ("COL-adjusted steady-state") on one line.
+const LABEL_COL = "sticky left-0 z-10 w-[210px] whitespace-nowrap bg-white"
+const VALUE_COL = "w-[220px] border-x border-gray-200"
+const HEADLINE_BG = "bg-[#EDE9FE]"
 
 export function TcMatrix({ columns }: Props) {
   const [expanded, setExpanded] = useState(true)
@@ -116,7 +121,7 @@ export function TcMatrix({ columns }: Props) {
         className={cn(
           "px-3 py-2 text-right tabular-nums text-[#1C1E21]",
           VALUE_COL,
-          headline && "bg-[#EDE9FE]/40",
+          headline && HEADLINE_BG,
           bold && "font-semibold"
         )}
       >
@@ -127,24 +132,30 @@ export function TcMatrix({ columns }: Props) {
 
   return (
     <section className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-start justify-between gap-2">
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
-          className="flex min-w-0 items-center gap-1.5 text-left"
+          className="flex min-w-0 flex-col text-left"
         >
-          <ChevronDown
-            className={cn(
-              "size-4 shrink-0 text-gray-400 transition-transform",
-              expanded && "rotate-180"
-            )}
-          />
-          <span className="font-display text-sm font-medium text-[#1C1E21]">
-            Compensation comparison
-            <span className="ml-1.5 text-xs font-normal text-gray-400">
-              · {columns.length}
+          <span className="flex items-center gap-1.5">
+            <ChevronDown
+              className={cn(
+                "size-4 shrink-0 text-gray-400 transition-transform",
+                expanded && "rotate-180"
+              )}
+            />
+            <span className="font-display text-sm font-medium text-[#1C1E21]">
+              Compensation comparison
+              <span className="ml-1.5 text-xs font-normal text-gray-400">
+                · {columns.length}
+              </span>
             </span>
+          </span>
+          <span className="mt-1 pl-5 text-xs leading-snug text-gray-500">
+            Offers normalized to compare apples to apples. Cost of living is
+            approximate, US national average = 1.0.
           </span>
         </button>
         <button
@@ -158,117 +169,109 @@ export function TcMatrix({ columns }: Props) {
       </div>
 
       {expanded ? (
-        <div className="mt-3 flex flex-col gap-3">
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  <th className={cn(LABEL_COL, "py-2 pr-3 text-left")} />
-                  {computed.map((c) => (
-                    <th
-                      key={c.jobId}
-                      className={cn(VALUE_COL, "px-3 py-2 text-right align-top")}
-                    >
-                      <span className="block truncate font-medium text-[#1C1E21]">
-                        {c.company}
-                      </span>
-                      <span className="block truncate text-xs font-normal text-gray-500">
-                        {c.role}
-                      </span>
-                      {hasAnyComp(c.comp) ? (
-                        <button
-                          type="button"
-                          onClick={() => setEditingJob(c)}
-                          className="mt-1 text-xs font-normal text-gray-500 transition-colors hover:text-[#4E3BDD]"
-                        >
-                          Edit comp
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setEditingJob(c)}
-                          className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-[#4E3BDD] hover:underline"
-                        >
-                          <Plus className="size-3" />
-                          Add compensation
-                        </button>
-                      )}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {VALUE_ROWS.map((row) => (
-                  <tr key={row.key} className="border-b border-gray-50">
-                    <td
-                      className={cn(
-                        LABEL_COL,
-                        "py-2 pr-3 text-left text-xs text-gray-500"
-                      )}
-                    >
-                      {row.label}
-                    </td>
-                    {computed.map((c) => (
-                      <ValueCell key={c.jobId} c={c} rowKey={row.key} />
-                    ))}
-                  </tr>
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-auto border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-gray-200">
+                <th className={cn(LABEL_COL, "py-2 pr-3 text-left")} />
+                {computed.map((c) => (
+                  <th
+                    key={c.jobId}
+                    className={cn(
+                      VALUE_COL,
+                      "border-b border-gray-200 bg-[#F8F9FA] px-3 py-2 text-right align-top"
+                    )}
+                  >
+                    <span className="block truncate font-medium text-[#1C1E21]">
+                      {c.company}
+                    </span>
+                    <span className="block truncate text-xs font-normal text-gray-500">
+                      {c.role}
+                    </span>
+                    {hasAnyComp(c.comp) ? (
+                      <button
+                        type="button"
+                        onClick={() => setEditingJob(c)}
+                        className="mt-1 text-xs font-normal text-gray-500 transition-colors hover:text-[#4E3BDD]"
+                      >
+                        Edit comp
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setEditingJob(c)}
+                        className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-[#4E3BDD] hover:underline"
+                      >
+                        <Plus className="size-3" />
+                        Add compensation
+                      </button>
+                    )}
+                  </th>
                 ))}
-                <tr className="border-b border-gray-50">
+              </tr>
+            </thead>
+            <tbody>
+              {VALUE_ROWS.map((row) => (
+                <tr key={row.key} className="border-b border-gray-50">
                   <td
                     className={cn(
                       LABEL_COL,
                       "py-2 pr-3 text-left text-xs text-gray-500"
                     )}
                   >
-                    Location (COL x)
+                    {row.label}
                   </td>
                   {computed.map((c) => (
-                    <td
-                      key={c.jobId}
-                      className={cn(
-                        VALUE_COL,
-                        "px-3 py-2 text-right text-xs text-gray-500"
-                      )}
-                    >
-                      {c.n ? (
-                        `${c.comp?.location ?? DEFAULT_COL_LABEL} (${c.n.col_multiplier}x)`
-                      ) : (
-                        <span className="text-gray-300">-</span>
-                      )}
-                    </td>
+                    <ValueCell key={c.jobId} c={c} rowKey={row.key} />
                   ))}
                 </tr>
-                <tr className="border-t border-gray-200">
+              ))}
+              <tr className="border-b border-gray-50">
+                <td
+                  className={cn(
+                    LABEL_COL,
+                    "py-2 pr-3 text-left text-xs text-gray-500"
+                  )}
+                >
+                  Location (COL x)
+                </td>
+                {computed.map((c) => (
                   <td
+                    key={c.jobId}
                     className={cn(
-                      LABEL_COL,
-                      "bg-[#EDE9FE]/40 py-2.5 pr-3 text-left text-xs font-semibold text-[#1C1E21]"
+                      VALUE_COL,
+                      "px-3 py-2 text-right text-xs text-gray-500"
                     )}
                   >
-                    COL-adjusted steady-state
+                    {c.n ? (
+                      `${c.comp?.location ?? DEFAULT_COL_LABEL} (${c.n.col_multiplier}x)`
+                    ) : (
+                      <span className="text-gray-300">-</span>
+                    )}
                   </td>
-                  {computed.map((c) => (
-                    <ValueCell
-                      key={c.jobId}
-                      c={c}
-                      rowKey="col_adjusted_steady"
-                      headline
-                    />
-                  ))}
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          {columns.length === 1 ? (
-            <p className="text-xs text-gray-500">
-              Add another offer to compare them side by side.
-            </p>
-          ) : null}
-
-          <p className="text-[11px] leading-snug text-gray-400">
-            Cost of living is approximate, US national average = 1.0.
-          </p>
+                ))}
+              </tr>
+              <tr className="border-b border-gray-200">
+                <td
+                  className={cn(
+                    LABEL_COL,
+                    HEADLINE_BG,
+                    "py-2.5 pr-3 text-left text-xs font-semibold text-[#1C1E21]"
+                  )}
+                >
+                  COL-adjusted steady-state
+                </td>
+                {computed.map((c) => (
+                  <ValueCell
+                    key={c.jobId}
+                    c={c}
+                    rowKey="col_adjusted_steady"
+                    headline
+                  />
+                ))}
+              </tr>
+            </tbody>
+          </table>
         </div>
       ) : null}
 

@@ -197,15 +197,15 @@ export default async function AppPage({
       ? { loggedThisWeek, projection: applyProjection(nonClosed[0].role_title) }
       : null
 
-  // TC comparison matrix: one column per late-stage job (Full Loop or Offer).
+  // TC comparison matrix: one column per Offer-stage job. The matrix is for
+  // comparing real offers, so it stays hidden until a job reaches Offer.
   // Comp rows fetched in one query above; attached by job_id here.
-  const LATE_STAGES = new Set(["interview_loop", "final", "offer"])
   const compByJobId: Record<string, JobCompensation> = {}
   for (const row of (compRows ?? []) as JobCompensation[]) {
     compByJobId[row.job_id] = row
   }
   const tcColumns: TcColumn[] = jobRows
-    .filter((j) => LATE_STAGES.has(j.stage))
+    .filter((j) => j.stage === "offer")
     .map((j) => ({
       jobId: j.id,
       company: j.company_name,
