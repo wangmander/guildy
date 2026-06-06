@@ -7,10 +7,12 @@ import {
   type RailStats,
   type TodayItem,
 } from "@/components/app/command-rail"
+import { TcMatrix, type TcColumn } from "@/components/app/tc-matrix"
 import { TopNav } from "@/components/app/top-nav"
 import { benchmarkLine } from "@/lib/jobSourceAdvisor/applyBenchmarks"
 import { selectAdvisor } from "@/lib/jobSourceAdvisor/boardRatings"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
+import type { JobCompensation } from "@/types"
 
 // Patch 5.4: Vercel server actions inherit maxDuration from the invoking
 // page. 240s covers worst-case Deep flow (Haiku 60s + Sonnet 180s) past the
@@ -38,6 +40,7 @@ export default async function AppPage({
     { data: interviewerRows },
     { data: noteRows },
     { data: prepRows },
+    { data: compRows },
   ] = await Promise.all([
     supabase
       .from("jobs")
@@ -68,6 +71,9 @@ export default async function AppPage({
     // Prep presence per job for the Today panel. One aggregated read of
     // job_id only; a job counts as prepped if any prep_versions row exists.
     supabase.from("prep_versions").select("job_id").eq("user_id", user.id),
+    // Comp rows for the TC matrix. One read for all of the user's rows; the
+    // late-stage columns are filtered client-of-query below (no N+1).
+    supabase.from("job_compensation").select("*").eq("user_id", user.id),
   ])
 
   const hasResume = !!profile?.resume_text && profile.resume_text.trim().length > 0
@@ -198,6 +204,23 @@ export default async function AppPage({
       ? { loggedThisWeek, benchmarkLine: benchmarkLine(nonClosed[0].role_title) }
       : null
 
+  // TC comparison matrix: one column per late-stage job (Full Loop or Offer).
+  // Comp rows fetched in one query above; attached by job_id here.
+  const LATE_STAGES = new Set(["interview_loop", "final", "offer"])
+  const compByJobId: Record<string, JobCompensation> = {}
+  for (const row of (compRows ?? []) as JobCompensation[]) {
+    compByJobId[row.job_id] = row
+  }
+  const tcColumns: TcColumn[] = jobRows
+    .filter((j) => LATE_STAGES.has(j.stage))
+    .map((j) => ({
+      jobId: j.id,
+      company: j.company_name,
+      role: j.role_title,
+      tc: j.tc,
+      comp: compByJobId[j.id] ?? null,
+    }))
+
   return (
     <div className="min-h-screen bg-[#F8F9FA]">
       <TopNav
@@ -231,6 +254,9 @@ export default async function AppPage({
               initialOpenJobId={initialOpenJobId}
             />
           </div>
+        </div>
+        <div className="px-4 lg:px-8">
+          <TcMatrix columns={tcColumns} />
         </div>
       </main>
     </div>

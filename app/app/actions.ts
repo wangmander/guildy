@@ -1584,3 +1584,58 @@ export async function getJobSourceAdvisorAction(
   if (!boards) return { ok: false }
   return { ok: true, boards }
 }
+
+// Feature 3: upsert one job_compensation row per job for the TC matrix.
+// Free feature, no subscription gate. Auth + ownership checked.
+const jobCompSchema = z.object({
+  job_id: z.string().uuid(),
+  base: z.number().nonnegative().nullable().optional(),
+  signing_bonus: z.number().nonnegative().nullable().optional(),
+  annual_bonus_pct: z.number().min(0).max(1000).nullable().optional(),
+  equity_grant_total: z.number().nonnegative().nullable().optional(),
+  vesting_years: z.number().min(0).max(20).nullable().optional(),
+  location: z.string().max(120).nullable().optional(),
+  benefits_notes: z.string().max(2000).nullable().optional(),
+})
+
+export async function upsertJobCompAction(
+  input: z.infer<typeof jobCompSchema>
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const parsed = jobCompSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, error: "Invalid input" }
+
+  const supabase = await createSupabaseServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: "Not signed in" }
+
+  const { data: job, error: fetchError } = await supabase
+    .from("jobs")
+    .select("id")
+    .eq("id", parsed.data.job_id)
+    .eq("user_id", user.id)
+    .maybeSingle()
+  if (fetchError) return { ok: false, error: fetchError.message }
+  if (!job) return { ok: false, error: "Job not found" }
+
+  const d = parsed.data
+  const { error: upsertError } = await supabase.from("job_compensation").upsert(
+    {
+      job_id: d.job_id,
+      user_id: user.id,
+      base: d.base ?? null,
+      signing_bonus: d.signing_bonus ?? null,
+      annual_bonus_pct: d.annual_bonus_pct ?? null,
+      equity_grant_total: d.equity_grant_total ?? null,
+      vesting_years: d.vesting_years ?? null,
+      location: d.location ?? null,
+      benefits_notes: d.benefits_notes ?? null,
+    },
+    { onConflict: "job_id" }
+  )
+  if (upsertError) return { ok: false, error: upsertError.message }
+
+  revalidatePath("/app")
+  return { ok: true }
+}

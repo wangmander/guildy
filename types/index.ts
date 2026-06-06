@@ -85,3 +85,19 @@ export interface StageLabel {
   stage_key: StageKey
   custom_label: string
 }
+
+// Feature 3: TC comparison matrix. One row per job, all comp fields nullable.
+export interface JobCompensation {
+  id: string
+  job_id: string
+  user_id: string
+  base: number | null
+  signing_bonus: number | null
+  annual_bonus_pct: number | null
+  equity_grant_total: number | null
+  vesting_years: number | null
+  location: string | null
+  benefits_notes: string | null
+  created_at: string
+  updated_at: string
+}
