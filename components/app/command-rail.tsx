@@ -16,37 +16,30 @@ import {
   type Advisor,
   type BoardRating,
 } from "@/lib/jobSourceAdvisor/boardRatings"
+import type { ApplyProjection } from "@/lib/jobSourceAdvisor/applyProjections"
 import { cn } from "@/lib/utils"
 
 import { AddJobModal } from "./add-job-modal"
 
-export type RailStats = {
-  jobsTracked: number
-  activeInterviews: number
-  offers: number
-}
-
 // Today panel items, server-built in app/app/page.tsx and passed in as a
 // typed array. Discriminated on `kind`. The renderer below maps each kind to
 // a row; new task types (e.g. a future Target Company List nudge) extend this
-// union and add a branch, keeping the panel an extensible container. The
-// apply goal is NOT an item here, it is a persistent meter pinned at the
-// bottom of the panel (see ApplyGoal / ApplyGoalMeter below).
+// union and add a branch, keeping the panel an extensible container.
 export type TodayItem =
   | { kind: "prep_due"; jobId: string; company: string; stageLabel: string }
   | { kind: "quick_prep_gap"; jobId: string; company: string }
   | { kind: "source_nudge"; board: string; role: string; score: number }
 
-// Persistent apply-goal data. Null when the user has no non-closed jobs (the
+// Apply-goal hero data. Null when the user has no non-closed jobs (the Today
 // empty state shows instead). loggedThisWeek counts jobs created in the last
-// rolling 7 days; benchmarkLine is the role-tailored ballpark sentence.
+// rolling 7 days; projection is the estimate-labeled, range-based outlook
+// derived from the researched base rates.
 export type ApplyGoal = {
   loggedThisWeek: number
-  benchmarkLine: string
+  projection: ApplyProjection
 }
 
 type Props = {
-  stats: RailStats
   advisor: Advisor
   today: TodayItem[]
   applyGoal: ApplyGoal | null
@@ -104,46 +97,47 @@ function Panel({
   )
 }
 
-function StatsPanel({ stats }: { stats: RailStats }) {
-  const hasJobs = stats.jobsTracked > 0
-
-  if (!hasJobs) {
-    return (
-      <Panel>
-        <h2 className="font-display text-sm font-medium text-[#1C1E21]">
-          Command center
-        </h2>
-        <p className="mt-1.5 text-sm leading-snug text-gray-500">
-          Add your first job to activate your command center.
-        </p>
-      </Panel>
-    )
-  }
-
-  const rows: Array<{ label: string; value: number }> = [
-    { label: "Jobs tracked", value: stats.jobsTracked },
-    { label: "Active interviews", value: stats.activeInterviews },
-    { label: "Offers", value: stats.offers },
-  ]
+// Apply-goal hero, top of the rail. Replaces the old Pipeline scoreboard (the
+// kanban already shows per-column counts, and the zeros framing was demeaning).
+// The weekly pace is the focus; honest, estimate-labeled projections recede as
+// supporting context. Reuses the board-rating bar style; no new tokens.
+function ApplyGoalHero({ goal }: { goal: ApplyGoal }) {
+  const met = goal.loggedThisWeek >= APPLY_TARGET
+  const pct = Math.min(100, (goal.loggedThisWeek / APPLY_TARGET) * 100)
+  const subline = met
+    ? "Pace met. Steady beats bursts, keep it going."
+    : "15 to 20 a week is the researched sweet spot, and steady beats bursts."
 
   return (
     <Panel>
       <h2 className="font-display text-sm font-medium text-[#1C1E21]">
-        Pipeline
+        Apply goal
       </h2>
-      <dl className="mt-2 flex flex-col divide-y divide-gray-100">
-        {rows.map((row) => (
-          <div
-            key={row.label}
-            className="flex items-baseline justify-between py-2"
-          >
-            <dt className="text-xs text-gray-500">{row.label}</dt>
-            <dd className="font-display text-xl font-medium text-[#1C1E21]">
-              {row.value}
-            </dd>
-          </div>
+      <div className="mt-2 flex items-baseline gap-1.5">
+        <span className="font-display text-2xl font-medium text-[#1C1E21]">
+          {goal.loggedThisWeek}
+        </span>
+        <span className="text-xs text-gray-500">
+          / {APPLY_TARGET} this week
+        </span>
+      </div>
+      <div className="mt-2 h-1.5 w-full rounded-full bg-gray-100">
+        <div
+          className="h-1.5 rounded-full bg-[#482C4C]"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <p className="mt-1.5 text-xs leading-snug text-gray-500">{subline}</p>
+      <div className="mt-2.5 border-t border-gray-100 pt-2.5">
+        <p className="text-[11px] leading-snug text-gray-400">
+          {goal.projection.leadIn}
+        </p>
+        {goal.projection.lines.map((line, i) => (
+          <p key={i} className="mt-1 text-[11px] leading-snug text-gray-500">
+            {line}
+          </p>
         ))}
-      </dl>
+      </div>
     </Panel>
   )
 }
@@ -328,65 +322,20 @@ function TodayItemRow({ item }: { item: TodayItem }) {
   }
 }
 
-// Persistent apply-goal meter, pinned at the bottom of the Today panel. This
-// is a goal, not a priority slot, so it is always present when the user has
-// jobs. Reuses the board-rating bar style; no new tokens. The benchmark line
-// is the role-tailored ballpark sentence (see lib/jobSourceAdvisor/applyBenchmarks).
-function ApplyGoalMeter({
-  goal,
-  withDivider,
-}: {
-  goal: ApplyGoal
-  withDivider: boolean
-}) {
-  const met = goal.loggedThisWeek >= APPLY_TARGET
-  const pct = Math.min(100, (goal.loggedThisWeek / APPLY_TARGET) * 100)
-  const subline = met
-    ? "Pace met. Steady beats bursts, keep it going."
-    : "15 to 20 a week is the researched sweet spot, and steady beats bursts."
-
-  return (
-    <div
-      className={cn(
-        "mt-3",
-        withDivider && "border-t border-gray-100 pt-3"
-      )}
-    >
-      <h3 className="font-display text-sm font-medium text-[#1C1E21]">
-        Apply goal
-      </h3>
-      <p className="mt-1 text-xs text-gray-500">
-        {goal.loggedThisWeek} / {APPLY_TARGET} this week
-      </p>
-      <div className="mt-1.5 h-1 w-full rounded-full bg-gray-100">
-        <div
-          className="h-1 rounded-full bg-[#482C4C]"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <p className="mt-1.5 text-xs leading-snug text-gray-500">{subline}</p>
-      <p className="mt-1 text-[11px] leading-snug text-gray-400">
-        {goal.benchmarkLine}
-      </p>
-    </div>
-  )
-}
-
 // Today panel: prioritized "what to move next" items (capped server-side at
-// 3) plus a persistent apply-goal meter pinned at the bottom. Empty state (no
-// non-closed jobs, applyGoal null) shows a single aspirational line plus the
-// Add Job CTA, never a list of zeros. This is the extensible container later
-// features plug additional item kinds into.
+// 3). Empty state (no non-closed jobs) shows a single aspirational line plus
+// the Add Job CTA, never a list of zeros. When there are jobs but nothing
+// actionable, the panel hides (the apply-goal hero carries the rail).
 function TodayPanel({
   items,
-  applyGoal,
+  hasJobs,
   onAddJob,
 }: {
   items: TodayItem[]
-  applyGoal: ApplyGoal | null
+  hasJobs: boolean
   onAddJob: () => void
 }) {
-  if (!applyGoal) {
+  if (!hasJobs) {
     return (
       <Panel>
         <h2 className="font-display text-sm font-medium text-[#1C1E21]">
@@ -407,32 +356,31 @@ function TodayPanel({
     )
   }
 
+  if (items.length === 0) return null
+
   return (
     <Panel>
       <h2 className="font-display text-sm font-medium text-[#1C1E21]">Today</h2>
-      {items.length > 0 ? (
-        <ul className="mt-2 flex flex-col divide-y divide-gray-100">
-          {items.map((item, i) => (
-            <TodayItemRow key={i} item={item} />
-          ))}
-        </ul>
-      ) : null}
-      <ApplyGoalMeter goal={applyGoal} withDivider={items.length > 0} />
+      <ul className="mt-2 flex flex-col divide-y divide-gray-100">
+        {items.map((item, i) => (
+          <TodayItemRow key={i} item={item} />
+        ))}
+      </ul>
     </Panel>
   )
 }
 
-export function CommandRail({ stats, advisor, today, applyGoal }: Props) {
+export function CommandRail({ advisor, today, applyGoal }: Props) {
   const [addOpen, setAddOpen] = useState(false)
 
   return (
     <aside className="w-full shrink-0 px-4 lg:w-[300px] lg:px-8 lg:pr-0">
       <div className="flex flex-col gap-4">
-        <StatsPanel stats={stats} />
+        {applyGoal ? <ApplyGoalHero goal={applyGoal} /> : null}
         <AdvisorPanel advisor={advisor} />
         <TodayPanel
           items={today}
-          applyGoal={applyGoal}
+          hasJobs={applyGoal !== null}
           onAddJob={() => setAddOpen(true)}
         />
       </div>

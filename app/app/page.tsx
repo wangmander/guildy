@@ -4,12 +4,11 @@ import { Board, type JobRow, type InterviewerInfo } from "@/components/app/board
 import {
   CommandRail,
   type ApplyGoal,
-  type RailStats,
   type TodayItem,
 } from "@/components/app/command-rail"
 import { TcMatrix, type TcColumn } from "@/components/app/tc-matrix"
 import { TopNav } from "@/components/app/top-nav"
-import { benchmarkLine } from "@/lib/jobSourceAdvisor/applyBenchmarks"
+import { applyProjection } from "@/lib/jobSourceAdvisor/applyProjections"
 import { selectAdvisor } from "@/lib/jobSourceAdvisor/boardRatings"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import type { JobCompensation } from "@/types"
@@ -107,12 +106,6 @@ export default async function AppPage({
   // from the user's actual cards. Closed cards are excluded (hidden on Home).
   const jobRows = (jobs ?? []) as JobRow[]
   const nonClosed = jobRows.filter((j) => j.stage !== "closed")
-  const activeStages = new Set(["screen", "hiring_manager", "interview_loop", "final"])
-  const railStats: RailStats = {
-    jobsTracked: nonClosed.length,
-    activeInterviews: nonClosed.filter((j) => activeStages.has(j.stage)).length,
-    offers: nonClosed.filter((j) => j.stage === "offer").length,
-  }
   // jobs are ordered created_at desc, so nonClosed is already recency-first.
   const advisor = selectAdvisor(nonClosed.map((j) => j.role_title))
 
@@ -192,7 +185,7 @@ export default async function AppPage({
   // Apply goal: a persistent meter pinned at the bottom of the Today panel,
   // not a priority slot. loggedThisWeek counts jobs created in the last
   // rolling 7 days (any stage/state, it measures logging activity, not true
-  // applications which we cannot see). benchmarkLine is tailored to the most
+  // applications which we cannot see). The projection is tailored to the most
   // recent non-closed role. Null when the user has no non-closed jobs.
   const sevenDaysAgoMs = Date.now() - 7 * 24 * 60 * 60 * 1000
   const rawJobs = (jobs ?? []) as Array<{ created_at: string }>
@@ -201,7 +194,7 @@ export default async function AppPage({
   ).length
   const applyGoal: ApplyGoal | null =
     nonClosed.length > 0
-      ? { loggedThisWeek, benchmarkLine: benchmarkLine(nonClosed[0].role_title) }
+      ? { loggedThisWeek, projection: applyProjection(nonClosed[0].role_title) }
       : null
 
   // TC comparison matrix: one column per late-stage job (Full Loop or Offer).
@@ -233,7 +226,6 @@ export default async function AppPage({
       <main className="mx-auto w-full max-w-[1440px] py-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:gap-0">
           <CommandRail
-            stats={railStats}
             advisor={advisor}
             today={today}
             applyGoal={applyGoal}

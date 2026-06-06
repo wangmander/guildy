@@ -180,6 +180,16 @@ function inferField(roleTitle: string): Field {
   return "general"
 }
 
+// Expose the existing matchers so other surfaces (apply projections) can reuse
+// them without duplicating the keyword lists. No numbers, lists, or logic
+// change; this only wraps the internal inferField / inferSeniority.
+export function inferSegment(roleTitle: string): {
+  field: Field
+  seniority: Seniority
+} {
+  return { field: inferField(roleTitle), seniority: inferSeniority(roleTitle) }
+}
+
 // One honest ballpark sentence for the user's role. The specific line renders
 // only when BOTH seniority is explicit (entry/senior) AND field is known;
 // otherwise it falls back to the general per-offer range and generic copy.
