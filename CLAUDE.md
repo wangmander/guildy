@@ -71,7 +71,10 @@ Total: 32-41 hours, ~4-5 focused build sessions.
 Models locked:
 - QUICK_PREP_MODEL = "claude-haiku-4-5-20251001"
 - DEEP_PREP_MODEL = "claude-sonnet-4-6"
+- NEGOTIATION_PREP_MODEL = "claude-opus-4-8" (V2.1 Feature 4, Negotiation Prep; no fallback)
 - extract-jd.ts = gpt-4o-mini (stays)
+
+V2.1 Command Center (shipped on v2-pivot): F1 left rail (Stats/Job Source Advisor/Today), F2 Today panel, F3 TC Comparison matrix, F4 Negotiation Prep. F4 adds the `negotiation_preps` table (one row per generation, persist-don't-overwrite + context_hash cache, RLS mirrors prep_versions; migration applied manually) and is gated on the existing $19.99 subscription. The $49.99 Ultra tier is NOT built. App `maxDuration` is 300 (Opus + Haiku worst case).
 
 Deferred to V2.1 post-launch:
 - Hotlinks nav

@@ -17,7 +17,10 @@ import type { JobCompensation } from "@/types"
 // page. 240s covers worst-case Deep flow (Haiku 60s + Sonnet 180s) past the
 // AbortController fires. Lives here because Next 14 "use server" files
 // cannot export non-async constants.
-export const maxDuration = 240
+// Feature 4: negotiation worst case is Haiku grounding (60s) + Opus
+// generation (~210s AbortController). 300 is the Vercel Pro hard cap and
+// leaves margin past the cumulative timeout.
+export const maxDuration = 300
 
 type SearchParams = { [key: string]: string | string[] | undefined }
 
@@ -248,7 +251,15 @@ export default async function AppPage({
           </div>
         </div>
         <div className="px-4 lg:px-8">
-          <TcMatrix columns={tcColumns} />
+          <TcMatrix
+            columns={tcColumns}
+            subscriptionStatus={
+              (profile?.subscription_status as string | null) ?? "free"
+            }
+            currentPeriodEnd={
+              (profile?.current_period_end as string | null) ?? null
+            }
+          />
         </div>
       </main>
     </div>

@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import * as Popover from "@radix-ui/react-popover"
-import { ChevronDown, Info, Lock, Plus } from "lucide-react"
+import { ChevronDown, Handshake, Info, Lock, Plus } from "lucide-react"
 
 import { DEFAULT_COL_LABEL } from "@/lib/compMatrix/colSeed"
 import {
@@ -15,6 +15,8 @@ import type { JobCompensation } from "@/types"
 
 import { AddJobModal } from "./add-job-modal"
 import { CompEditModal } from "./widgets/comp-edit-modal"
+import { NegotiationPanel } from "./widgets/negotiation-panel"
+import { UpgradeModal } from "./widgets/upgrade-modal"
 
 export type TcColumn = {
   jobId: string
@@ -26,6 +28,18 @@ export type TcColumn = {
 
 type Props = {
   columns: TcColumn[]
+  subscriptionStatus: string
+  currentPeriodEnd: string | null
+}
+
+// Same rule as the server-side Negotiation/Deep gate: active, or past_due
+// within a 3-day grace window.
+function isSubscribed(status: string, periodEnd: string | null): boolean {
+  if (status === "active") return true
+  if (status === "past_due" && periodEnd) {
+    return new Date(periodEnd).getTime() + 3 * 24 * 60 * 60 * 1000 > Date.now()
+  }
+  return false
 }
 
 function usd(n: number): string {
@@ -143,10 +157,26 @@ function RowLabel({
   )
 }
 
-export function TcMatrix({ columns }: Props) {
+export function TcMatrix({
+  columns,
+  subscriptionStatus,
+  currentPeriodEnd,
+}: Props) {
   const [expanded, setExpanded] = useState(true)
   const [editingJob, setEditingJob] = useState<TcColumn | null>(null)
   const [addOpen, setAddOpen] = useState(false)
+  const [negotiateJob, setNegotiateJob] = useState<TcColumn | null>(null)
+  const [upgradeOpen, setUpgradeOpen] = useState(false)
+
+  const subscribed = isSubscribed(subscriptionStatus, currentPeriodEnd)
+
+  function onNegotiate(c: TcColumn) {
+    if (subscribed) {
+      setNegotiateJob(c)
+    } else {
+      setUpgradeOpen(true)
+    }
+  }
 
   const locked = columns.length === 0
 
@@ -342,6 +372,22 @@ export function TcMatrix({ columns }: Props) {
                         Add compensation
                       </button>
                     )}
+                    <div className="mt-1">
+                      <button
+                        type="button"
+                        onClick={() => onNegotiate(c)}
+                        disabled={!hasAnyComp(c.comp)}
+                        title={
+                          !hasAnyComp(c.comp)
+                            ? "Add the offer's compensation first"
+                            : undefined
+                        }
+                        className="inline-flex items-center gap-1 text-xs font-medium text-[#4E3BDD] transition-opacity hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-40"
+                      >
+                        <Handshake className="size-3 shrink-0" />
+                        Negotiate
+                      </button>
+                    </div>
                   </th>
                 ))}
               </tr>
@@ -429,6 +475,13 @@ export function TcMatrix({ columns }: Props) {
         onOpenChange={setAddOpen}
         defaultStage="offer"
       />
+      <NegotiationPanel
+        job={negotiateJob}
+        onOpenChange={(open) => {
+          if (!open) setNegotiateJob(null)
+        }}
+      />
+      <UpgradeModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
     </section>
   )
 }

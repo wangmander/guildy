@@ -72,3 +72,20 @@ export async function trackKanbanJobCreated(
 ): Promise<void> {
   await captureServer("kanban_job_created", userId, { source })
 }
+
+// Feature 4: Negotiation Prep. CTA-clicked fires server-side from
+// getCachedNegotiationAction (the panel-open path); generated fires after a
+// successful negotiation_preps insert.
+export async function trackNegotiationCtaClicked(
+  userId: string,
+  jobId: string
+): Promise<void> {
+  await captureServer("negotiation_cta_clicked", userId, { job_id: jobId })
+}
+
+export async function trackNegotiationGenerated(
+  userId: string,
+  jobId: string
+): Promise<void> {
+  await captureServer("negotiation_generated", userId, { job_id: jobId })
+}

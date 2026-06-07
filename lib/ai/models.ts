@@ -2,3 +2,6 @@
 // must import from here — never hardcode the strings.
 export const QUICK_PREP_MODEL = "claude-haiku-4-5-20251001"
 export const DEEP_PREP_MODEL = "claude-sonnet-4-6"
+// Feature 4: Negotiation Prep runs on the newest Opus for max-quality
+// qualitative reasoning. No silent fallback to Sonnet/Haiku if unavailable.
+export const NEGOTIATION_PREP_MODEL = "claude-opus-4-8"

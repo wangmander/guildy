@@ -4,9 +4,29 @@ import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { z } from "zod"
 
-import { trackFirstPrepGenerated } from "@/lib/analytics"
+import Anthropic from "@anthropic-ai/sdk"
+
+import {
+  trackFirstPrepGenerated,
+  trackNegotiationCtaClicked,
+  trackNegotiationGenerated,
+} from "@/lib/analytics"
 import { generatePrep } from "@/lib/ai/generate-prep"
-import { DEEP_PREP_MODEL, QUICK_PREP_MODEL } from "@/lib/ai/models"
+import {
+  buildNegotiationContextHash,
+  fetchNegotiationContext,
+  generateNegotiation,
+} from "@/lib/ai/generate-negotiation"
+import type {
+  NegotiationOfferNormalized,
+  NegotiationOutput,
+} from "@/lib/ai/negotiation-types"
+import {
+  DEEP_PREP_MODEL,
+  NEGOTIATION_PREP_MODEL,
+  QUICK_PREP_MODEL,
+} from "@/lib/ai/models"
+import { normalizeComp } from "@/lib/compMatrix/normalize"
 import {
   parseFullLoopRounds,
   type ParserOutput,
@@ -1638,4 +1658,292 @@ export async function upsertJobCompAction(
 
   revalidatePath("/app")
   return { ok: true }
+}
+
+// ---------------------------------------------------------------------------
+// Feature 4: Negotiation Prep
+// ---------------------------------------------------------------------------
+
+export type NegotiationRow = {
+  id: string
+  job_id: string
+  model_used: string
+  context_hash: string
+  inputs: {
+    target: string
+    leverage: string | null
+    offer_raw: unknown
+    offer_normalized: NegotiationOfferNormalized
+  }
+  output: NegotiationOutput & {
+    grounded: boolean
+    offer_normalized: NegotiationOfferNormalized
+  }
+  created_at: string
+}
+
+type CompRow = {
+  base: number | null
+  signing_bonus: number | null
+  annual_bonus_pct: number | null
+  equity_grant_total: number | null
+  vesting_years: number | null
+  location: string | null
+  updated_at?: string | null
+}
+
+function compHasData(comp: CompRow | null): boolean {
+  if (!comp) return false
+  return (
+    (comp.base ?? 0) > 0 ||
+    (comp.signing_bonus ?? 0) > 0 ||
+    (comp.annual_bonus_pct ?? 0) > 0 ||
+    (comp.equity_grant_total ?? 0) > 0
+  )
+}
+
+function snapshotNormalized(comp: CompRow): NegotiationOfferNormalized {
+  const n = normalizeComp({
+    base: comp.base,
+    signing_bonus: comp.signing_bonus,
+    annual_bonus_pct: comp.annual_bonus_pct,
+    equity_grant_total: comp.equity_grant_total,
+    vesting_years: comp.vesting_years,
+    location: comp.location,
+  })
+  return {
+    year1_total: n.year1_total,
+    steady_state_total: n.steady_state_total,
+    col_adjusted_steady: n.col_adjusted_steady,
+  }
+}
+
+// Shared $19.99 subscription gate, identical rule to the Phase 6b Deep
+// paywall (active OR past_due within a 3-day grace window). Returns null when
+// allowed, or the requiresUpgrade result when blocked.
+// Future Ultra-tier ($49.99) gate would slot in alongside this check; not
+// built. Negotiation Prep ships on the existing single $19.99 tier.
+async function negotiationSubGate(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  userId: string
+): Promise<{ ok: false; error: string; requiresUpgrade: true } | null> {
+  const { data: subProfile } = await supabase
+    .from("user_profiles")
+    .select("subscription_status, current_period_end")
+    .eq("id", userId)
+    .maybeSingle()
+  const status = (subProfile?.subscription_status as string | null) ?? "free"
+  const periodEnd = subProfile?.current_period_end
+    ? new Date(subProfile.current_period_end as string)
+    : null
+  const inGrace =
+    status === "past_due" &&
+    periodEnd !== null &&
+    periodEnd.getTime() + 3 * 24 * 60 * 60 * 1000 > Date.now()
+  if (status === "active" || inGrace) return null
+  return {
+    ok: false,
+    error: "Upgrade to Negotiation Prep ($19.99/mo) to generate this.",
+    requiresUpgrade: true,
+  }
+}
+
+const cachedNegotiationSchema = z.object({ job_id: z.string().uuid() })
+
+export type CachedNegotiationResult =
+  | { ok: true; row: NegotiationRow | null; stale: boolean }
+  | { ok: false; error: string; requiresUpgrade?: boolean }
+
+export async function getCachedNegotiationAction(
+  input: z.infer<typeof cachedNegotiationSchema>
+): Promise<CachedNegotiationResult> {
+  const parsed = cachedNegotiationSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, error: "Invalid input" }
+
+  const supabase = await createSupabaseServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: "Not signed in" }
+
+  const { data: job, error: jobError } = await supabase
+    .from("jobs")
+    .select("id")
+    .eq("id", parsed.data.job_id)
+    .eq("user_id", user.id)
+    .maybeSingle()
+  if (jobError) return { ok: false, error: jobError.message }
+  if (!job) return { ok: false, error: "Job not found" }
+
+  const gate = await negotiationSubGate(supabase, user.id)
+  if (gate) return gate
+
+  // Panel-open analytics. Fires only past the gate (subscriber path).
+  await trackNegotiationCtaClicked(user.id, parsed.data.job_id)
+
+  const { data: row } = await supabase
+    .from("negotiation_preps")
+    .select("id, job_id, model_used, context_hash, inputs, output, created_at")
+    .eq("job_id", parsed.data.job_id)
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (!row) return { ok: true, row: null, stale: false }
+
+  // Best-effort staleness: comp edited after this row was generated.
+  const { data: comp } = await supabase
+    .from("job_compensation")
+    .select("updated_at")
+    .eq("job_id", parsed.data.job_id)
+    .eq("user_id", user.id)
+    .maybeSingle()
+  const stale =
+    !!comp?.updated_at &&
+    new Date(comp.updated_at as string).getTime() >
+      new Date(row.created_at as string).getTime()
+
+  return { ok: true, row: row as unknown as NegotiationRow, stale }
+}
+
+const generateNegotiationSchema = z.object({
+  job_id: z.string().uuid(),
+  target: z.string().trim().min(1).max(4000),
+  leverage: z.string().trim().max(4000).nullable().optional(),
+})
+
+export type GenerateNegotiationResult =
+  | { ok: true; row: NegotiationRow }
+  | { ok: false; error: string; requiresUpgrade?: boolean }
+
+export async function generateNegotiationAction(
+  input: z.infer<typeof generateNegotiationSchema>
+): Promise<GenerateNegotiationResult> {
+  const parsed = generateNegotiationSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input",
+    }
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: "Not signed in" }
+
+  const { data: job, error: jobError } = await supabase
+    .from("jobs")
+    .select("id, company_name, role_title, stage")
+    .eq("id", parsed.data.job_id)
+    .eq("user_id", user.id)
+    .maybeSingle()
+  if (jobError) return { ok: false, error: jobError.message }
+  if (!job) return { ok: false, error: "Job not found" }
+
+  const gate = await negotiationSubGate(supabase, user.id)
+  if (gate) return gate
+
+  if (job.stage !== "offer") {
+    return {
+      ok: false,
+      error: "Negotiation Prep is available once a job reaches the Offer stage.",
+    }
+  }
+
+  const { data: comp } = await supabase
+    .from("job_compensation")
+    .select(
+      "base, signing_bonus, annual_bonus_pct, equity_grant_total, vesting_years, location, updated_at"
+    )
+    .eq("job_id", parsed.data.job_id)
+    .eq("user_id", user.id)
+    .maybeSingle()
+  if (!compHasData(comp as CompRow | null)) {
+    return { ok: false, error: "Add the offer's compensation first." }
+  }
+  const compRow = comp as CompRow
+
+  const target = parsed.data.target
+  const leverage = parsed.data.leverage?.trim() ? parsed.data.leverage.trim() : null
+
+  const contextHash = buildNegotiationContextHash({
+    comp: {
+      base: compRow.base,
+      signing_bonus: compRow.signing_bonus,
+      annual_bonus_pct: compRow.annual_bonus_pct,
+      equity_grant_total: compRow.equity_grant_total,
+      vesting_years: compRow.vesting_years,
+      location: compRow.location,
+    },
+    target,
+    leverage,
+  })
+
+  // Idempotency: identical inputs return the existing row, no model call.
+  const { data: existing } = await supabase
+    .from("negotiation_preps")
+    .select("id, job_id, model_used, context_hash, inputs, output, created_at")
+    .eq("job_id", parsed.data.job_id)
+    .eq("user_id", user.id)
+    .eq("context_hash", contextHash)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (existing) return { ok: true, row: existing as unknown as NegotiationRow }
+
+  const offerNormalized = snapshotNormalized(compRow)
+
+  let output: NegotiationOutput
+  let grounded = false
+  try {
+    const apiKey = process.env.ANTHROPIC_API_KEY
+    let companyContext: string | null = null
+    if (apiKey) {
+      const client = new Anthropic({ apiKey })
+      companyContext = await fetchNegotiationContext(client, {
+        company: job.company_name,
+        role: job.role_title,
+      })
+    }
+    grounded = companyContext !== null
+    output = await generateNegotiation({
+      company: job.company_name,
+      role: job.role_title,
+      target,
+      leverage,
+      offer_normalized: offerNormalized,
+      companyContext,
+    })
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Generation failed",
+    }
+  }
+
+  const { data: inserted, error: insertError } = await supabase
+    .from("negotiation_preps")
+    .insert({
+      job_id: parsed.data.job_id,
+      user_id: user.id,
+      model_used: NEGOTIATION_PREP_MODEL,
+      context_hash: contextHash,
+      inputs: {
+        target,
+        leverage,
+        offer_raw: compRow,
+        offer_normalized: offerNormalized,
+      },
+      output: { ...output, grounded, offer_normalized: offerNormalized },
+    })
+    .select("id, job_id, model_used, context_hash, inputs, output, created_at")
+    .single()
+  if (insertError) return { ok: false, error: insertError.message }
+
+  await trackNegotiationGenerated(user.id, parsed.data.job_id)
+  revalidatePath("/app")
+  return { ok: true, row: inserted as unknown as NegotiationRow }
 }
