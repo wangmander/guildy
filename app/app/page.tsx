@@ -6,8 +6,10 @@ import {
   type ApplyGoal,
   type TodayItem,
 } from "@/components/app/command-rail"
-import { TcMatrix, type TcColumn } from "@/components/app/tc-matrix"
+import { TcMatrixSheet } from "@/components/app/tc-matrix-sheet"
+import { type TcColumn } from "@/components/app/tc-matrix"
 import { TopNav } from "@/components/app/top-nav"
+import { type CompPrioritiesRaw } from "@/lib/compMatrix/dimensions"
 import { applyProjection } from "@/lib/jobSourceAdvisor/applyProjections"
 import { selectAdvisor } from "@/lib/jobSourceAdvisor/boardRatings"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
@@ -54,7 +56,7 @@ export default async function AppPage({
     supabase
       .from("user_profiles")
       .select(
-        "resume_text, subscription_status, current_period_end, stripe_customer_id"
+        "resume_text, subscription_status, current_period_end, stripe_customer_id, comp_priorities"
       )
       .eq("id", user.id)
       .maybeSingle(),
@@ -226,7 +228,7 @@ export default async function AppPage({
         }
         hasStripeCustomer={!!profile?.stripe_customer_id}
       />
-      <main className="mx-auto w-full max-w-[1440px] py-6">
+      <main className="mx-auto w-full max-w-[1440px] pt-6 pb-24">
         <div className="flex flex-col gap-4 lg:flex-row lg:gap-0">
           <CommandRail
             advisor={advisor}
@@ -250,17 +252,18 @@ export default async function AppPage({
             />
           </div>
         </div>
-        <div className="px-4 lg:px-8">
-          <TcMatrix
-            columns={tcColumns}
-            subscriptionStatus={
-              (profile?.subscription_status as string | null) ?? "free"
-            }
-            currentPeriodEnd={
-              (profile?.current_period_end as string | null) ?? null
-            }
-          />
-        </div>
+        <TcMatrixSheet
+          columns={tcColumns}
+          subscriptionStatus={
+            (profile?.subscription_status as string | null) ?? "free"
+          }
+          currentPeriodEnd={
+            (profile?.current_period_end as string | null) ?? null
+          }
+          compPriorities={
+            (profile?.comp_priorities as CompPrioritiesRaw) ?? null
+          }
+        />
       </main>
     </div>
   )

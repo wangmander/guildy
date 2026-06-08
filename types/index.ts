@@ -98,6 +98,15 @@ export interface JobCompensation {
   vesting_years: number | null
   location: string | null
   benefits_notes: string | null
+  // Matrix rebuild: per-offer soft ratings { soft_dim_key: 1-10 }.
+  ratings: Record<string, number>
   created_at: string
   updated_at: string
+}
+
+// Matrix rebuild: per-user comparison priorities on user_profiles. Nullable in
+// the DB; null resolves in code to the preset soft set + equal weights.
+export interface CompPriorities {
+  enabled_soft: string[]
+  weights: Record<string, number>
 }

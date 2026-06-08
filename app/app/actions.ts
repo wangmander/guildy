@@ -27,6 +27,7 @@ import {
   QUICK_PREP_MODEL,
 } from "@/lib/ai/models"
 import { normalizeComp } from "@/lib/compMatrix/normalize"
+import { SCORED_KEYS, SOFT_KEYS } from "@/lib/compMatrix/dimensions"
 import {
   parseFullLoopRounds,
   type ParserOutput,
@@ -1616,6 +1617,9 @@ const jobCompSchema = z.object({
   vesting_years: z.number().min(0).max(20).nullable().optional(),
   location: z.string().max(120).nullable().optional(),
   benefits_notes: z.string().max(2000).nullable().optional(),
+  // Matrix rebuild: per-offer soft ratings { soft_dim_key: 1-10 }. Omitted =
+  // leave existing ratings untouched.
+  ratings: z.record(z.string(), z.number().int().min(1).max(10)).optional(),
 })
 
 export async function upsertJobCompAction(
@@ -1640,21 +1644,84 @@ export async function upsertJobCompAction(
   if (!job) return { ok: false, error: "Job not found" }
 
   const d = parsed.data
-  const { error: upsertError } = await supabase.from("job_compensation").upsert(
-    {
-      job_id: d.job_id,
-      user_id: user.id,
-      base: d.base ?? null,
-      signing_bonus: d.signing_bonus ?? null,
-      annual_bonus_pct: d.annual_bonus_pct ?? null,
-      equity_grant_total: d.equity_grant_total ?? null,
-      vesting_years: d.vesting_years ?? null,
-      location: d.location ?? null,
-      benefits_notes: d.benefits_notes ?? null,
-    },
-    { onConflict: "job_id" }
-  )
+  const payload: Record<string, unknown> = {
+    job_id: d.job_id,
+    user_id: user.id,
+    base: d.base ?? null,
+    signing_bonus: d.signing_bonus ?? null,
+    annual_bonus_pct: d.annual_bonus_pct ?? null,
+    equity_grant_total: d.equity_grant_total ?? null,
+    vesting_years: d.vesting_years ?? null,
+    location: d.location ?? null,
+    benefits_notes: d.benefits_notes ?? null,
+  }
+  // Only write ratings when provided. Keys validated against the soft-dim
+  // registry; the caller merges existing values so disabled dims persist.
+  if (d.ratings !== undefined) {
+    const clean: Record<string, number> = {}
+    for (const [k, v] of Object.entries(d.ratings)) {
+      if (SOFT_KEYS.includes(k)) clean[k] = v
+    }
+    payload.ratings = clean
+  }
+  const { error: upsertError } = await supabase
+    .from("job_compensation")
+    .upsert(payload, { onConflict: "job_id" })
   if (upsertError) return { ok: false, error: upsertError.message }
+
+  revalidatePath("/app")
+  return { ok: true }
+}
+
+// Matrix rebuild: per-user comparison priorities (which soft dims are enabled
+// and per-dimension weights). Owner-scoped. Partial updates merge onto the
+// existing value.
+const compPrioritiesSchema = z.object({
+  enabled_soft: z.array(z.string()).optional(),
+  weights: z.record(z.string(), z.number().min(0).max(100)).optional(),
+})
+
+export async function updateCompPrioritiesAction(
+  input: z.infer<typeof compPrioritiesSchema>
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const parsed = compPrioritiesSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, error: "Invalid input" }
+
+  const supabase = await createSupabaseServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: "Not signed in" }
+
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("comp_priorities")
+    .eq("id", user.id)
+    .maybeSingle()
+  const existing =
+    (profile?.comp_priorities as {
+      enabled_soft?: string[]
+      weights?: Record<string, number>
+    } | null) ?? null
+
+  const enabledSoft = parsed.data.enabled_soft
+    ? parsed.data.enabled_soft.filter((k) => SOFT_KEYS.includes(k))
+    : existing?.enabled_soft ?? []
+
+  let weights = existing?.weights ?? {}
+  if (parsed.data.weights) {
+    const clean: Record<string, number> = {}
+    for (const [k, v] of Object.entries(parsed.data.weights)) {
+      if (SCORED_KEYS.includes(k)) clean[k] = v
+    }
+    weights = clean
+  }
+
+  const { error } = await supabase
+    .from("user_profiles")
+    .update({ comp_priorities: { enabled_soft: enabledSoft, weights } })
+    .eq("id", user.id)
+  if (error) return { ok: false, error: error.message }
 
   revalidatePath("/app")
   return { ok: true }

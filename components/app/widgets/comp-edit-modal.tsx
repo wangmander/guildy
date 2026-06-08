@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { COL_SEED, DEFAULT_COL_LABEL } from "@/lib/compMatrix/colSeed"
+import { PRESET_SOFT_KEYS, SOFT_DIMS } from "@/lib/compMatrix/dimensions"
 import { parseMoneyString } from "@/lib/compMatrix/normalize"
 import { cn } from "@/lib/utils"
 import type { JobCompensation } from "@/types"
@@ -63,16 +64,28 @@ function Field({
 
 function CompForm({
   job,
+  enabledSoft,
   onSaved,
   onCancel,
 }: {
   job: CompEditJob
+  enabledSoft: string[]
   onSaved: () => void
   onCancel: () => void
 }) {
   const existing = job.comp
   // Display-only pre-fill of base from a clean tc string, empty columns only.
   const tcPrefill = !existing ? parseMoneyString(job.tc) : null
+
+  const enabledSoftDims = SOFT_DIMS.filter((d) => enabledSoft.includes(d.key))
+  const [ratings, setRatings] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {}
+    for (const d of enabledSoftDims) {
+      const v = existing?.ratings?.[d.key]
+      init[d.key] = typeof v === "number" ? String(v) : ""
+    }
+    return init
+  })
 
   const [base, setBase] = useState(
     existing?.base != null
@@ -106,6 +119,18 @@ function CompForm({
   async function save() {
     setPending(true)
     setError(null)
+    // Merge onto existing ratings so disabled dims (not shown here) persist.
+    const mergedRatings: Record<string, number> = {
+      ...(existing?.ratings ?? {}),
+    }
+    for (const d of enabledSoftDims) {
+      const raw = ratings[d.key]
+      if (raw && raw !== "") {
+        mergedRatings[d.key] = Number(raw)
+      } else {
+        delete mergedRatings[d.key]
+      }
+    }
     const res = await upsertJobCompAction({
       job_id: job.jobId,
       base: parseMoney(base),
@@ -115,6 +140,7 @@ function CompForm({
       vesting_years: parsePlain(vesting),
       location,
       benefits_notes: notes.trim() ? notes.trim() : null,
+      ratings: mergedRatings,
     })
     setPending(false)
     if (res.ok) {
@@ -197,6 +223,34 @@ function CompForm({
         />
       </Field>
 
+      {enabledSoftDims.length > 0 ? (
+        <div className="flex flex-col gap-2">
+          <span className="text-xs font-medium text-[#1C1E21]">
+            Your ratings (1-10)
+          </span>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {enabledSoftDims.map((d) => (
+              <Field key={d.key} label={d.label}>
+                <select
+                  className={inputClass}
+                  value={ratings[d.key] ?? ""}
+                  onChange={(e) =>
+                    setRatings((r) => ({ ...r, [d.key]: e.target.value }))
+                  }
+                >
+                  <option value="">Not rated</option>
+                  {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                    <option key={n} value={String(n)}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {error ? <p className="text-xs text-red-700">{error}</p> : null}
 
       <div className="mt-1 flex items-center justify-end gap-2">
@@ -222,14 +276,18 @@ function CompForm({
 
 export function CompEditModal({
   job,
+  enabledSoft,
   onOpenChange,
 }: {
   job: CompEditJob | null
+  // Optional so the paused F4 negotiation panel can mount this unchanged;
+  // defaults to the preset soft set.
+  enabledSoft?: string[]
   onOpenChange: (open: boolean) => void
 }) {
   return (
     <Dialog open={!!job} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-h-[85vh] max-w-md overflow-y-auto">
         {job ? (
           <>
             <DialogHeader>
@@ -241,6 +299,7 @@ export function CompEditModal({
             <CompForm
               key={job.jobId}
               job={job}
+              enabledSoft={enabledSoft ?? PRESET_SOFT_KEYS}
               onSaved={() => onOpenChange(false)}
               onCancel={() => onOpenChange(false)}
             />

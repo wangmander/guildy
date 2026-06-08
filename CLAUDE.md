@@ -74,7 +74,9 @@ Models locked:
 - NEGOTIATION_PREP_MODEL = "claude-opus-4-8" (V2.1 Feature 4, Negotiation Prep; no fallback)
 - extract-jd.ts = gpt-4o-mini (stays)
 
-V2.1 Command Center (shipped on v2-pivot): F1 left rail (Stats/Job Source Advisor/Today), F2 Today panel, F3 TC Comparison matrix, F4 Negotiation Prep. F4 adds the `negotiation_preps` table (one row per generation, persist-don't-overwrite + context_hash cache, RLS mirrors prep_versions; migration applied manually) and is gated on the existing $19.99 subscription. The $49.99 Ultra tier is NOT built. App `maxDuration` is 300 (Opus + Haiku worst case).
+V2.1 Command Center (on v2-pivot): F1 left rail (Stats/Job Source Advisor/Today), F2 Today panel, F3 TC Comparison matrix. The matrix was REBUILT into a normalized 1-10 rated comparison (comp dims base/bonus/equity auto-rate relative to the offers on the table, soft dims user-rate 1-10, user-weighted overall picks a winner; year-1 total kept as the one dollar figure, COL-adjusted and steady-state removed from the view but kept in `normalize.ts`/`colSeed.ts`). Registry `lib/compMatrix/dimensions.ts`, scoring `lib/compMatrix/scoring.ts`. The matrix lives in a persistent bottom strip that raises a full-width sheet (`tc-matrix-sheet.tsx`). New columns (apply via Supabase SQL editor, prod cannot take db push): `job_compensation.ratings jsonb` and `user_profiles.comp_priorities jsonb`.
+
+F4 Negotiation Prep is PAUSED and RE-SEQUENCED to come after the matrix rebuild (it branches off the rated matrix; walk-away anchors on year-1). Its code is preserved and rides inside the sheet; its migration `negotiation_preps` stays unapplied. `NEGOTIATION_PREP_MODEL = "claude-opus-4-8"`, gated on the existing $19.99 subscription, no $49.99 Ultra tier. App `maxDuration` is 300.
 
 Deferred to V2.1 post-launch:
 - Hotlinks nav
