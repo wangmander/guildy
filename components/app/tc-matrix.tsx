@@ -71,6 +71,78 @@ const HEADLINE_BG = "bg-[#EDE9FE]"
 
 const Dash = () => <span className="text-gray-300">-</span>
 
+// A value row. scoredCount === 0 (no offer has this dimension) grays the whole
+// row, excluded from the overall (the scoring math already excludes it). When
+// at least one offer has it, the row is active: offers missing the value get a
+// needs-input amber cell that opens that offer's comp modal.
+function MatrixRow({
+  label,
+  columns,
+  present,
+  renderValue,
+  onAdd,
+}: {
+  label: string
+  columns: TcColumn[]
+  present: (c: TcColumn) => boolean
+  renderValue: (c: TcColumn) => React.ReactNode
+  onAdd: (c: TcColumn) => void
+}) {
+  const gray = columns.filter(present).length === 0
+  return (
+    <tr className="border-b border-gray-50">
+      <td
+        className={cn(
+          LABEL_COL,
+          "py-2 pr-3 text-left text-xs",
+          gray ? "text-gray-300" : "text-gray-500"
+        )}
+      >
+        {label}
+      </td>
+      {columns.map((c) => {
+        if (gray) {
+          return (
+            <td
+              key={c.jobId}
+              className={cn(VALUE_COL, "px-3 py-2 text-right")}
+            >
+              <Dash />
+            </td>
+          )
+        }
+        if (present(c)) {
+          return (
+            <td
+              key={c.jobId}
+              className={cn(VALUE_COL, "px-3 py-2 text-right text-[#1C1E21]")}
+            >
+              {renderValue(c)}
+            </td>
+          )
+        }
+        return (
+          <td
+            key={c.jobId}
+            className={cn(
+              VALUE_COL,
+              "border-amber-200 bg-amber-50 px-3 py-2 text-right"
+            )}
+          >
+            <button
+              type="button"
+              onClick={() => onAdd(c)}
+              className="text-xs font-medium text-amber-700 hover:underline"
+            >
+              Add
+            </button>
+          </td>
+        )
+      })}
+    </tr>
+  )
+}
+
 export function TcMatrix({
   columns,
   subscriptionStatus,
@@ -102,12 +174,6 @@ export function TcMatrix({
     overallScore(c.comp, { compMax, enabledSoft, weights })
   )
   const winIdx = multi ? winnerIndex(overalls) : -1
-
-  const unratedExists =
-    multi &&
-    enabledSoftDims.some((d) =>
-      columns.some((c) => softRating(d.key, c.comp) === null)
-    )
 
   return (
     <section>
@@ -194,97 +260,60 @@ export function TcMatrix({
             </tr>
           </thead>
           <tbody>
-            {/* Comp dims: dollar value plus an auto 1-10 (multi-offer). */}
+            {/* Comp dims: dollar value plus an auto 1-10 (multi-offer). An
+                offer is "present" at the offer level (has a comp row), so a $0
+                sub-field renders normally; only no-comp offers highlight. */}
             {COMP_DIMS.map((d) => (
-              <tr key={d.key} className="border-b border-gray-50">
-                <td
-                  className={cn(
-                    LABEL_COL,
-                    "py-2 pr-3 text-left text-xs text-gray-500"
-                  )}
-                >
-                  {d.label}
-                </td>
-                {columns.map((c) => {
-                  const has = hasAnyComp(c.comp)
+              <MatrixRow
+                key={d.key}
+                label={d.label}
+                columns={columns}
+                present={(c) => hasAnyComp(c.comp)}
+                renderValue={(c) => {
                   const rating = autoRating(d.key, c.comp, compMax[d.key] ?? 0)
                   return (
-                    <td
-                      key={c.jobId}
-                      className={cn(
-                        VALUE_COL,
-                        "px-3 py-2 text-right text-[#1C1E21]"
-                      )}
-                    >
-                      {has ? (
-                        <span className="inline-flex items-baseline gap-1.5">
-                          <span className="tabular-nums">
-                            {usd(dimValue(d.key, c.comp))}
-                          </span>
-                          {multi && rating !== null ? (
-                            <span className="rounded bg-gray-100 px-1 text-xs font-medium text-gray-600">
-                              {rating}/10
-                            </span>
-                          ) : null}
+                    <span className="inline-flex items-baseline gap-1.5">
+                      <span className="tabular-nums">
+                        {usd(dimValue(d.key, c.comp))}
+                      </span>
+                      {multi && rating !== null ? (
+                        <span className="rounded bg-gray-100 px-1 text-xs font-medium text-gray-600">
+                          {rating}/10
                         </span>
-                      ) : (
-                        <Dash />
-                      )}
-                    </td>
+                      ) : null}
+                    </span>
                   )
-                })}
-              </tr>
+                }}
+                onAdd={setEditingJob}
+              />
             ))}
 
-            {/* Anchor: year-1 total, dollar only, no rating. */}
-            <tr className="border-b border-gray-50">
-              <td
-                className={cn(
-                  LABEL_COL,
-                  "py-2 pr-3 text-left text-xs text-gray-500"
-                )}
-              >
-                Year-1 total
-              </td>
-              {columns.map((c) => (
-                <td
-                  key={c.jobId}
-                  className={cn(
-                    VALUE_COL,
-                    "px-3 py-2 text-right tabular-nums text-[#1C1E21]"
-                  )}
-                >
-                  {hasAnyComp(c.comp) ? usd(dimValue("year1_total", c.comp)) : <Dash />}
-                </td>
-              ))}
-            </tr>
+            {/* Anchor: year-1 total, dollar only, no rating. Same has-comp-row
+                presence rule as the comp dims. */}
+            <MatrixRow
+              label="Year-1 total"
+              columns={columns}
+              present={(c) => hasAnyComp(c.comp)}
+              renderValue={(c) => (
+                <span className="tabular-nums">
+                  {usd(dimValue("year1_total", c.comp))}
+                </span>
+              )}
+              onAdd={setEditingJob}
+            />
 
-            {/* Enabled soft dims: the user's 1-10 per offer. */}
+            {/* Enabled soft dims: the user's 1-10 per offer, present per cell. */}
             {enabledSoftDims.map((d) => (
-              <tr key={d.key} className="border-b border-gray-50">
-                <td
-                  className={cn(
-                    LABEL_COL,
-                    "py-2 pr-3 text-left text-xs text-gray-500"
-                  )}
-                >
-                  {d.label}
-                </td>
-                {columns.map((c) => {
-                  const r = softRating(d.key, c.comp)
-                  return (
-                    <td
-                      key={c.jobId}
-                      className={cn(
-                        VALUE_COL,
-                        "px-3 py-2 text-right tabular-nums text-[#1C1E21]"
-                      )}
-                    >
-                      {r !== null ? `${r}/10` : <Dash />}
-                    </td>
-                  )
-                })}
-              </tr>
+              <MatrixRow
+                key={d.key}
+                label={d.label}
+                columns={columns}
+                present={(c) => softRating(d.key, c.comp) !== null}
+                renderValue={(c) => (
+                  <span className="tabular-nums">{softRating(d.key, c.comp)}/10</span>
+                )}
+                onAdd={setEditingJob}
+              />
             ))}
 
             {/* Overall: multi-offer only, winner highlighted. */}
@@ -328,13 +357,6 @@ export function TcMatrix({
           </tbody>
         </table>
       </div>
-
-      {unratedExists ? (
-        <p className="mt-3 text-[11px] leading-snug text-gray-400">
-          Rate every offer on each dimension for a complete comparison. Unrated
-          dimensions are left out of that offer&rsquo;s overall.
-        </p>
-      ) : null}
 
       <CompEditModal
         job={editingJob}
