@@ -1,5 +1,6 @@
 "use server"
 
+import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { createClient } from "@supabase/supabase-js"
 
@@ -176,6 +177,14 @@ export async function completeOnboardingAction(handoffId?: string) {
 
   if (!user) redirect("/login")
 
+  // The client passes the localStorage handoff (same-context fallback). When
+  // the email was opened in a different browser/device, localStorage is empty
+  // and the handoff arrives in the guildy_handoff cookie set at /auth/callback.
+  const cookieStore = await cookies()
+  const cookieHandoff = cookieStore.get("guildy_handoff")?.value
+  const effectiveHandoff =
+    handoffId && handoffId.length > 0 ? handoffId : cookieHandoff
+
   const { data: profile } = await supabase
     .from("user_profiles")
     .select("resume_text")
@@ -199,15 +208,26 @@ export async function completeOnboardingAction(handoffId?: string) {
   // Fully isolated and best-effort: any failure logs and the user still
   // lands on /app. A missing, invalid, or expired uuid is a no-op.
   let openJobId: string | null = null
-  if (handoffId && handoffId.length > 0) {
+  if (effectiveHandoff && effectiveHandoff.length > 0) {
     try {
-      openJobId = await consumeHandoff(handoffId, user.id, resumeText)
+      openJobId = await consumeHandoff(effectiveHandoff, user.id, resumeText)
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error(
         "[completeOnboarding] handoff consume failed:",
         err instanceof Error ? err.message : err
       )
+    }
+  }
+
+  // Clear the cookie carrier once consumed so a later re-onboard does not
+  // replay it. Best-effort; the row is also deleted in consumeHandoff.
+  if (cookieHandoff) {
+    try {
+      cookieStore.set("guildy_handoff", "", { path: "/", maxAge: 0 })
+    } catch {
+      // Cookie mutation not available in this context; the TTL expiry and the
+      // consumeHandoff row delete both still apply.
     }
   }
 

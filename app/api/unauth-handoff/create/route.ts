@@ -63,10 +63,14 @@ export async function POST(req: Request) {
       .select("id")
       .single()
     if (error || !data) {
+      // Log the PostgREST code + details (no PII) so a prod failure is
+      // self-diagnosing: PGRST205 = missing table, 42501 = RLS/key issue.
       // eslint-disable-next-line no-console
       console.error(
         "[unauth-handoff/create] insert failed:",
-        error?.message
+        error?.code,
+        error?.message,
+        error?.details
       )
       return NextResponse.json(
         { error: "Could not save handoff" },

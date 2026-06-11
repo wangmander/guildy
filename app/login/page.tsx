@@ -21,10 +21,25 @@ export default function LoginPage() {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
 
+    // Carry the unauth Quick Prep handoff inside the email link so it survives
+    // the round trip even when the user opens the email in a different browser
+    // or device (localStorage does not cross contexts). Works for both the
+    // confirm-signup template (new users) and the magic-link template
+    // (returning users), since both derive their link from this redirect.
+    let emailRedirectTo = `${window.location.origin}/auth/callback`
+    try {
+      const handoff = window.localStorage.getItem("guildy_handoff")
+      if (handoff) {
+        emailRedirectTo += `?handoff=${encodeURIComponent(handoff)}`
+      }
+    } catch {
+      // localStorage unavailable; the link still works, just without the carry.
+    }
+
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo,
       },
     })
 
