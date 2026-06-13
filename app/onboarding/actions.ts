@@ -55,6 +55,8 @@ export async function saveResumeTextAction(formData: FormData): Promise<ActionRe
 // user proceeds to an empty /app. It never blocks signup.
 
 const HANDOFF_TTL_MS = 60 * 60 * 1000
+const HANDOFF_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function handoffAdminClient() {
   return createClient(
@@ -62,6 +64,28 @@ function handoffAdminClient() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { autoRefreshToken: false, persistSession: false } }
   )
+}
+
+// Phase 8.5: pre-fill onboarding with the resume the visitor already pasted on
+// the marketing site, so a handoff user clicks through with no manual paste.
+// Read-only by uuid (the capability token), TTL-respected. Does NOT consume or
+// delete the row; consumeHandoff still runs at completion. Returns null on any
+// miss so the onboarding box just stays empty.
+export async function getHandoffResumeAction(
+  handoffId: string
+): Promise<string | null> {
+  if (!handoffId || !HANDOFF_UUID_RE.test(handoffId)) return null
+  const admin = handoffAdminClient()
+  const { data, error } = await admin
+    .from("unauth_handoffs")
+    .select("resume_text, created_at")
+    .eq("id", handoffId)
+    .maybeSingle()
+  if (error || !data) return null
+  const ageMs = Date.now() - new Date(data.created_at as string).getTime()
+  if (ageMs > HANDOFF_TTL_MS) return null
+  const resume = data.resume_text
+  return typeof resume === "string" && resume.trim().length > 0 ? resume : null
 }
 
 // First non-empty line of the JD, capped at 80 chars. The unauth flow has

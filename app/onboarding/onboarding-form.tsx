@@ -1,8 +1,12 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useEffect, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { saveResumeTextAction, completeOnboardingAction } from "./actions"
+import {
+  saveResumeTextAction,
+  completeOnboardingAction,
+  getHandoffResumeAction,
+} from "./actions"
 
 export function OnboardingForm({ initialText }: { initialText: string }) {
   const router = useRouter()
@@ -10,6 +14,28 @@ export function OnboardingForm({ initialText }: { initialText: string }) {
   const [savedText, setSavedText] = useState(initialText)
   const [status, setStatus] = useState<{ tone: "info" | "success" | "error"; text: string } | null>(null)
   const [pending, startTransition] = useTransition()
+
+  // Phase 8.5: pre-fill the box with the resume the visitor pasted on the
+  // marketing site, so a handoff user clicks through with no manual paste.
+  // Only when the user has no resume yet; never overwrites typed text.
+  useEffect(() => {
+    if (initialText.trim().length > 0) return
+    let uuid: string | null = null
+    try {
+      uuid = window.localStorage.getItem("guildy_handoff")
+    } catch {
+      uuid = null
+    }
+    if (!uuid) return
+    let cancelled = false
+    getHandoffResumeAction(uuid).then((resume) => {
+      if (cancelled || !resume) return
+      setText((cur) => (cur.trim().length === 0 ? resume : cur))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [initialText])
 
   function handleContinue() {
     const trimmed = text.trim()
