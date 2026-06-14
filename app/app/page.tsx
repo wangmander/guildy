@@ -12,6 +12,12 @@ import { TopNav } from "@/components/app/top-nav"
 import { type CompPrioritiesRaw } from "@/lib/compMatrix/dimensions"
 import { applyProjection } from "@/lib/jobSourceAdvisor/applyProjections"
 import { selectAdvisor } from "@/lib/jobSourceAdvisor/boardRatings"
+import {
+  deriveQuest,
+  deriveReadiness,
+  highestMilestone,
+  type JobQuest,
+} from "@/lib/quests/quests"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 import type { JobCompensation } from "@/types"
 
@@ -49,7 +55,7 @@ export default async function AppPage({
     supabase
       .from("jobs")
       .select(
-        "id, company_name, role_title, tc, state, stage, source_url, jd_text, latest_message, full_loop_session_config, created_at"
+        "id, company_name, role_title, tc, state, stage, source_url, jd_text, latest_message, full_loop_session_config, created_at, prep_status"
       )
       .eq("user_id", user.id)
       .order("created_at", { ascending: false }),
@@ -219,6 +225,30 @@ export default async function AppPage({
       comp: compByJobId[j.id] ?? null,
     }))
 
+  // Quest system (Phase 2A): per-job quest + coarse readiness, and the single
+  // highest milestone (drives the guide gem). Derived from kanban + prep_status
+  // state; no new data model.
+  const questByJobId: Record<string, JobQuest> = {}
+  for (const j of nonClosed) {
+    const info = interviewerByJobId[j.id]
+    const hasInterviewer = !!(info && (info.name || info.title || info.link))
+    const hasJd = !!j.jd_text && j.jd_text.trim().length > 0
+    const readiness = deriveReadiness(j.prep_status, hasJd, hasInterviewer)
+    const cfg = j.full_loop_session_config as
+      | Record<string, { enabled?: boolean }>
+      | null
+    const roundCount = cfg
+      ? Object.values(cfg).filter((r) => r?.enabled).length || 4
+      : 4
+    questByJobId[j.id] = deriveQuest(
+      j.stage,
+      j.company_name,
+      readiness,
+      roundCount
+    )
+  }
+  const milestone = highestMilestone(nonClosed.map((j) => j.stage))
+
   return (
     <div className="min-h-screen bg-[#F8F9FA]">
       <TopNav
@@ -234,6 +264,7 @@ export default async function AppPage({
             advisor={advisor}
             today={today}
             applyGoal={applyGoal}
+            milestone={milestone}
           />
           <div className="min-w-0 flex-1">
             <Board
@@ -248,6 +279,7 @@ export default async function AppPage({
               }
               interviewerByJobId={interviewerByJobId}
               noteByJobId={noteByJobId}
+              questByJobId={questByJobId}
               initialOpenJobId={initialOpenJobId}
             />
           </div>

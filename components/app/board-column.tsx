@@ -17,11 +17,13 @@ import { AddJobModal } from "./add-job-modal"
 import type { JobRow } from "./board"
 import { EmptyCard } from "./empty-card"
 import { JobCard } from "./job-card"
+import type { JobQuest } from "@/lib/quests/quests"
 
 type Props = {
   columnKey: UiColumnKey
   label: string
   jobs: JobRow[]
+  questByJobId: Record<string, JobQuest>
   variant: CardVariant
   hint?: string
   isSearchActive: boolean
@@ -38,6 +40,7 @@ export function BoardColumn({
   columnKey,
   label,
   jobs,
+  questByJobId,
   variant,
   hint,
   isSearchActive,
@@ -133,6 +136,7 @@ export function BoardColumn({
             role={job.role_title}
             meta={job.tc ?? undefined}
             variant={variant}
+            quest={questByJobId[job.id]}
             onOpen={onJobOpen}
             onMoveLeft={() => onJobMoveLeft(job.id)}
             onMoveRight={() => onJobMoveRight(job.id)}

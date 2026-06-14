@@ -11,10 +11,12 @@ import { EmptyCard } from "./empty-card"
 import { JobCard } from "./job-card"
 
 import type { JobRow } from "./board"
+import type { JobQuest } from "@/lib/quests/quests"
 
 type Props = {
   label: string
   jobs: JobRow[]
+  questByJobId: Record<string, JobQuest>
   isSearchActive: boolean
   draggedJobId: string | null
   onJobOpen: (jobId: string) => void
@@ -26,6 +28,7 @@ type Props = {
 export function AppliedColumn({
   label,
   jobs,
+  questByJobId,
   isSearchActive,
   draggedJobId,
   onJobOpen,
@@ -88,6 +91,7 @@ export function AppliedColumn({
             role={job.role_title}
             meta={job.tc ?? undefined}
             variant="inactive"
+            quest={questByJobId[job.id]}
             onActivate={() => setActivatingJob(job)}
             onOpen={onJobOpen}
             onDragStart={onDragStart}

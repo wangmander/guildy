@@ -8,6 +8,7 @@ import {
   Compass,
   ExternalLink,
   Plus,
+  X,
 } from "lucide-react"
 
 import { getJobSourceAdvisorAction } from "@/app/app/actions"
@@ -17,9 +18,11 @@ import {
   type BoardRating,
 } from "@/lib/jobSourceAdvisor/boardRatings"
 import type { ApplyProjection } from "@/lib/jobSourceAdvisor/applyProjections"
+import { type Milestone } from "@/lib/quests/quests"
 import { cn } from "@/lib/utils"
 
 import { AddJobModal } from "./add-job-modal"
+import { GuideGem, type GuidePose } from "./widgets/guide-gem"
 
 // Today panel items, server-built in app/app/page.tsx and passed in as a
 // typed array. Discriminated on `kind`. The renderer below maps each kind to
@@ -43,6 +46,7 @@ type Props = {
   advisor: Advisor
   today: TodayItem[]
   applyGoal: ApplyGoal | null
+  milestone: Milestone | null
 }
 
 const APPLY_TARGET = 15
@@ -78,6 +82,24 @@ function boardUrl(board: string, role: string): string | null {
   return base ? base : null
 }
 
+// Quest-voice line for a Today item. Shared by the Today rows and the hero's
+// "Next quest" so they always agree.
+function todayCoachLine(item: TodayItem): string {
+  switch (item.kind) {
+    case "prep_due":
+      if (item.stageLabel === "Screen") return `Prep your ${item.company} screen`
+      if (item.stageLabel === "Hiring Manager")
+        return `Read the room before the ${item.company} HM call`
+      if (item.stageLabel === "Full Loop")
+        return `Prep all rounds at ${item.company}`
+      return `Prep your ${item.company} ${item.stageLabel} round`
+    case "quick_prep_gap":
+      return `Get a first read on ${item.company}`
+    case "source_nudge":
+      return `Check ${item.board} for ${item.role} roles, your strongest source (${item.score}/10)`
+  }
+}
+
 function Panel({
   children,
   className,
@@ -101,7 +123,13 @@ function Panel({
 // kanban already shows per-column counts, and the zeros framing was demeaning).
 // The weekly pace is the focus; honest, estimate-labeled projections recede as
 // supporting context. Reuses the board-rating bar style; no new tokens.
-function ApplyGoalHero({ goal }: { goal: ApplyGoal }) {
+function ApplyGoalHero({
+  goal,
+  nextQuest,
+}: {
+  goal: ApplyGoal
+  nextQuest: string | null
+}) {
   const met = goal.loggedThisWeek >= APPLY_TARGET
   const pct = Math.min(100, (goal.loggedThisWeek / APPLY_TARGET) * 100)
   const subline = met
@@ -110,8 +138,9 @@ function ApplyGoalHero({ goal }: { goal: ApplyGoal }) {
 
   return (
     <Panel>
-      <h2 className="font-display text-sm font-medium text-[#1C1E21]">
-        Apply goal
+      <p className="type-eyebrow text-[var(--text-muted)]">Quest</p>
+      <h2 className="mt-0.5 font-display text-sm font-medium text-[#1C1E21]">
+        Keep the pipeline alive
       </h2>
       <div className="mt-2 flex items-baseline gap-1.5">
         <span className="font-display text-2xl font-medium text-[#1C1E21]">
@@ -138,6 +167,12 @@ function ApplyGoalHero({ goal }: { goal: ApplyGoal }) {
           </p>
         ))}
       </div>
+      {nextQuest ? (
+        <p className="mt-2.5 border-t border-gray-100 pt-2.5 text-xs leading-snug text-[var(--text-body)]">
+          <span className="text-[var(--text-muted)]">Next quest: </span>
+          {nextQuest}
+        </p>
+      ) : null}
     </Panel>
   )
 }
@@ -283,21 +318,15 @@ function TodayItemRow({ item }: { item: TodayItem }) {
   switch (item.kind) {
     case "prep_due":
       return (
-        <ActionRow
-          href={`/app?job=${item.jobId}`}
-          label={`Prep your ${item.company} ${item.stageLabel} round.`}
-        />
+        <ActionRow href={`/app?job=${item.jobId}`} label={todayCoachLine(item)} />
       )
     case "quick_prep_gap":
       return (
-        <ActionRow
-          href={`/app?job=${item.jobId}`}
-          label={`Run Quick Prep on ${item.company}.`}
-        />
+        <ActionRow href={`/app?job=${item.jobId}`} label={todayCoachLine(item)} />
       )
     case "source_nudge": {
       const url = boardUrl(item.board, item.role)
-      const label = `Check ${item.board} for ${item.role} roles, your strongest source (${item.score}/10).`
+      const label = todayCoachLine(item)
       if (!url) {
         return (
           <li className="px-0 py-1.5 text-sm leading-snug text-[#1C1E21]">
@@ -370,13 +399,79 @@ function TodayPanel({
   )
 }
 
-export function CommandRail({ advisor, today, applyGoal }: Props) {
+export function CommandRail({
+  advisor,
+  today,
+  applyGoal,
+  milestone,
+}: Props) {
   const [addOpen, setAddOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
+  const [dismissed, setDismissed] = useState(false)
+
+  // Milestone dismissal is session-only (no migration). Read after mount so SSR
+  // and first client render match (both treat it as not-yet-dismissed).
+  useEffect(() => {
+    setMounted(true)
+    if (!milestone) return
+    try {
+      if (sessionStorage.getItem(`guildy_ms_${milestone.key}`) === "1") {
+        setDismissed(true)
+      }
+    } catch {
+      // sessionStorage unavailable; milestone simply stays shown.
+    }
+  }, [milestone?.key])
+
+  const milestoneVisible = mounted && !!milestone && !dismissed
+
+  function dismissMilestone() {
+    if (!milestone) return
+    try {
+      sessionStorage.setItem(`guildy_ms_${milestone.key}`, "1")
+    } catch {
+      // ignore
+    }
+    setDismissed(true)
+  }
+
+  const nextQuest =
+    applyGoal === null
+      ? "Add a job to start the quest line"
+      : today.length > 0
+        ? todayCoachLine(today[0])
+        : null
+
+  // Guide gem pose by present context: a live milestone celebrates, a live top
+  // quest or tip offers, otherwise it rests.
+  const pose: GuidePose = milestoneVisible
+    ? "celebrating"
+    : nextQuest
+      ? "offering"
+      : "resting"
 
   return (
     <aside className="w-full shrink-0 px-4 lg:w-[300px] lg:px-8 lg:pr-0">
       <div className="flex flex-col gap-4">
-        {applyGoal ? <ApplyGoalHero goal={applyGoal} /> : null}
+        <GuideGem pose={pose} />
+        {milestoneVisible && milestone ? (
+          <div className="flex items-start gap-2 rounded-[var(--radius-12)] border border-[var(--accent-tint-border)] bg-[var(--accent-tint-bg)] px-3 py-2.5">
+            <p className="type-card-sublabel flex-1 text-[var(--accent-deep)]">
+              {milestone.text}
+            </p>
+            <button
+              type="button"
+              onClick={dismissMilestone}
+              aria-label="Dismiss"
+              className="shrink-0 text-[var(--accent-deep)]/60 transition-colors hover:text-[var(--accent-deep)]"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        ) : null}
+        {applyGoal ? (
+          <ApplyGoalHero goal={applyGoal} nextQuest={nextQuest} />
+        ) : null}
         <AdvisorPanel advisor={advisor} />
         <TodayPanel
           items={today}

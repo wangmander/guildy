@@ -3,6 +3,7 @@
 import { useRef } from "react"
 import { ChevronLeft, ChevronRight, GripVertical } from "lucide-react"
 
+import { readinessLabel, type JobQuest, type Readiness } from "@/lib/quests/quests"
 import { cn } from "@/lib/utils"
 
 import type { CardVariant } from "@/lib/stages"
@@ -13,6 +14,7 @@ type Props = {
   role: string
   meta?: string
   variant: CardVariant
+  quest?: JobQuest
   onOpen?: (jobId: string) => void
   onActivate?: () => void
   onMoveLeft?: () => void
@@ -24,12 +26,32 @@ type Props = {
   isDragging?: boolean
 }
 
+const READINESS_CHIP: Record<Readiness, string> = {
+  not_ready: "bg-[var(--surface-sunken)] text-[var(--text-muted)]",
+  getting_there: "bg-[var(--indigo-tint-bg)] text-[var(--indigo)]",
+  ready: "bg-[var(--accent-chip-bg)] text-[var(--accent-deep)]",
+}
+
+function ReadinessChip({ readiness }: { readiness: Readiness }) {
+  return (
+    <span
+      className={cn(
+        "shrink-0 rounded-[var(--radius-7)] px-1.5 py-0.5 text-[11px] font-medium",
+        READINESS_CHIP[readiness]
+      )}
+    >
+      {readinessLabel(readiness)}
+    </span>
+  )
+}
+
 export function JobCard({
   jobId,
   company,
   role,
   meta,
   variant,
+  quest,
   onOpen,
   onActivate,
   onMoveLeft,
@@ -131,6 +153,33 @@ export function JobCard({
           )}
         </div>
       </div>
+      {quest && (
+        <div className="mt-2 flex flex-col gap-1">
+          <div className="flex items-start justify-between gap-2">
+            <span className="type-card-sublabel text-[var(--text-body)]">
+              {quest.line}
+            </span>
+            <ReadinessChip readiness={quest.readiness} />
+          </div>
+          {quest.secondaryLine && (
+            <span className="type-card-sublabel text-[var(--text-muted)]">
+              {quest.secondaryLine}
+            </span>
+          )}
+          {quest.ctaLabel && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                open()
+              }}
+              className="self-start text-xs font-medium text-[var(--accent-deep)] transition-colors hover:underline"
+            >
+              {quest.ctaLabel}
+            </button>
+          )}
+        </div>
+      )}
       {onActivate && (
         <button
           type="button"

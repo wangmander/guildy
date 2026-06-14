@@ -30,6 +30,7 @@ import {
   type StageKey,
   type UiColumnKey,
 } from "@/lib/stages"
+import type { JobQuest } from "@/lib/quests/quests"
 
 import { AppliedColumn } from "./applied-column"
 import { BoardColumn } from "./board-column"
@@ -46,6 +47,7 @@ export type JobRow = {
   jd_text: string | null
   latest_message: string | null
   full_loop_session_config: FullLoopSessionConfig | null
+  prep_status: string
 }
 
 export type InterviewerInfo = {
@@ -62,6 +64,7 @@ type Props = {
   currentPeriodEnd: string | null
   interviewerByJobId: Record<string, InterviewerInfo>
   noteByJobId: Record<string, string>
+  questByJobId: Record<string, JobQuest>
   initialOpenJobId: string | null
 }
 
@@ -73,6 +76,7 @@ export function Board({
   currentPeriodEnd,
   interviewerByJobId,
   noteByJobId,
+  questByJobId,
   initialOpenJobId,
 }: Props) {
   const router = useRouter()
@@ -435,6 +439,7 @@ export function Board({
                     key={col.key}
                     label={col.label}
                     jobs={grouped.applied}
+                    questByJobId={questByJobId}
                     isSearchActive={isSearchActive}
                     draggedJobId={draggedJobId}
                     onJobOpen={open}
@@ -450,6 +455,7 @@ export function Board({
                   columnKey={col.key}
                   label={col.label}
                   jobs={grouped[col.key]}
+                  questByJobId={questByJobId}
                   variant={col.variant}
                   hint="Cards land here when you move them from Applied"
                   isSearchActive={isSearchActive}
