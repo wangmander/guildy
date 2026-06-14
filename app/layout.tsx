@@ -1,6 +1,6 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
+import { Inter, Bricolage_Grotesque, Hanken_Grotesk } from "next/font/google"
 import { GeistSans } from "geist/font/sans"
 import "./globals.css"
 
@@ -10,6 +10,22 @@ const inter = Inter({
   subsets: ["latin"],
   display: "swap",
   variable: "--font-inter",
+})
+
+// Design system foundation (spec 1b): Bricolage for display/numerals/brand,
+// Hanken for UI/body (body default). opsz axis intentionally not wired.
+const bricolage = Bricolage_Grotesque({
+  subsets: ["latin"],
+  display: "swap",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-bricolage",
+})
+
+const hanken = Hanken_Grotesk({
+  subsets: ["latin"],
+  display: "swap",
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-hanken",
 })
 
 export const metadata: Metadata = {
@@ -25,9 +41,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${GeistSans.variable} antialiased`}
+      className={`${inter.variable} ${GeistSans.variable} ${bricolage.variable} ${hanken.variable} antialiased`}
     >
-      <body className="min-h-screen bg-gray-50">
+      <body className="min-h-screen">
         <PostHogProvider>{children}</PostHogProvider>
       </body>
     </html>

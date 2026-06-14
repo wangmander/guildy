@@ -1,0 +1,518 @@
+================================================================================
+GUILDY DASHBOARD — ENGINEERING HANDOFF SPEC
+Exact values extracted from the production design file. Nothing rounded or guessed.
+================================================================================
+
+Viewport the design targets: 1512 × 945 (desktop). Layout is fluid; kanban scrolls
+horizontally below ~5 columns of 208px min-width.
+
+Three render surfaces:
+  1. Dashboard (always visible)
+  2. Compensation sheet (modal, centered, z-index 50)
+  3. Job-prep overlay (full-screen, z-index 60)
+
+
+================================================================================
+1. DESIGN TOKENS
+================================================================================
+
+--------------------------------------------------------------------------------
+1a. COLOR — by role
+--------------------------------------------------------------------------------
+
+NEUTRAL GROUNDS & SURFACES
+  --page-bg              #EBEEF2   app background (cool slate)
+  --surface             #FFFFFF   cards, header, top bar, modals
+  --surface-sunken      #F4F6F9   secondary buttons, icon-button bg
+  --surface-rail        #E6E9EE   prep overlay side rails (recessed)
+  --rail-border         #DCE0E6   border for recessed rails
+  --overlay-bg          #EDEFF2   prep overlay backdrop fill
+  --tab-track           #EEF0F4   segmented control track (prep header)
+
+TEXT
+  --text-primary        #1B2330   headings, values, primary copy
+  --text-secondary      #3A4453   body copy inside cards
+  --text-body           #566072   secondary body / table row labels
+  --text-muted          #7A8696   muted labels, sublabels
+  --text-faint          #94A0AE   captions, counts, placeholder-ish
+  --text-fainter        #A2ACB9   timestamps, empty-state text
+  --text-rail-label     #9098A3   uppercase labels inside recessed rails
+
+BORDERS / DIVIDERS
+  --border              #E4E8EE   default card/surface border
+  --border-card         #E6EAEF   job card border
+  --border-strong       #D4DAE2   hover border, dashed empty state
+  --divider             #EEF1F5   hairline dividers, section separators
+  --divider-faint       #F2F4F7   table row separators
+  --divider-kanban      #EEF1F5   between kanban stage columns
+  --divider-intake      #E0E4EA   stronger divider after Applied column
+
+PRIMARY / INK CTA (Add Job, dark buttons)
+  --ink                 #1B2330   primary button bg, brand mark
+  --ink-hover           #2A3342   primary button hover
+  ink button text       #FFFFFF
+  ink shadow            0 8px 20px -6px rgba(27,35,48,0.40), 0 2px 4px rgba(27,35,48,0.18)
+  ink shadow hover      0 12px 26px -8px rgba(27,35,48,0.48)
+
+ACCENT — PURPLE (the "plum" accent; comp + prep + offer stage)
+  --accent              #7C50CE   primary accent (offer band, comp CTA, sparkles)
+  --accent-deep         #6D3DBE   accent text, hover, emphasis numbers
+  --accent-deeper       #5E2FAE   deep-prep button hover
+  --accent-press        #5A2BA8   text-link hover
+  --accent-grad         linear-gradient(135deg,#7C50CE,#6535B0)  Deep Prep tab
+  --accent-tint-bg      #F4EFFB   negotiation hook bg
+  --accent-tint-bg2     #F8F4FE   comp pill bg
+  --accent-tint-border  #E2D6F3   negotiation hook border
+  --accent-tint-border2 #EAD9F7   comp pill border
+  --accent-chip-bg      #EAE2F6   offer count chip bg
+  --accent-chip-bg2     #E7DBF8   "BEST" badge bg
+  --accent-dot-light    #A855F7   Latchmore comp dot
+  accent shadow         0 6px 16px -4px rgba(91,33,182,0.38)
+  accent glow (hooks)   0 8px 20px -8px rgba(91,33,182,0.16)
+
+PER-STAGE KANBAN RAMP (top band 3px + label + count chip + hook tint)
+  Each stage = {band color, label/text color, count-chip bg, hook bg, hook border}
+  Applied        band #97A1AD  text #62707E  chip #E5E9EE  (neutral, no hook)
+  Screen         band #5E97A0  text #3E767E  chip #E2EFF0  hook bg #EFF6F6  border #DAEAEA
+  Hiring Manager band #6680BC  text #45598F  chip #E6ECF5  hook bg #EFF3F9  border #DCE5F1
+  Full Loop      band #8A72B6  text #6A5398  chip #ECE7F3  (empty stage)
+  Offer          band #7C50CE  text #6D3DBE  chip #EAE2F6  hook bg #F4EFFB  border #E2D6F3
+  Hook icon/title colors match the stage text color.
+
+WARNING / SCHEDULED (Today urgent card + toast)
+  --warn-bg             #FEF6E9   urgent card bg
+  --warn-border         #F3D9A6   urgent card border
+  --warn-border-hover   #E9C158
+  --warn-accent         #F59E0B   icon chip bg (amber)
+  --warn-text           #B45309   timestamp label
+  --warn-text-soft      #9A7B3C   sublabel
+  --warn-arrow          #D9A441
+  --warn-dot            #E0A93C   toast dot
+  warn icon shadow      0 2px 6px -1px rgba(217,119,6,0.45)
+  urgent hover shadow   0 6px 16px -8px rgba(180,83,9,0.35)
+
+WHERE-TO-LOOK accent (indigo, distinct from purple accent)
+  --indigo              #4338CA   icon + top source score
+  --indigo-tint-bg      #EEF0FB   icon chip bg, top score pill bg
+  source-score (other)  text #7A8696  bg #EEF1F5
+
+COMP / SALARY PILL (neutral on cards)
+  text #4A5566   bg #EEF1F5   radius 8px   padding 4px 9px
+
+SCROLLBAR
+  thumb #D4DAE2 (with 2px transparent border, background-clip content-box), track transparent, 9px
+
+--------------------------------------------------------------------------------
+1b. TYPOGRAPHY
+--------------------------------------------------------------------------------
+
+Font families (Google Fonts):
+  Display / numerals / brand : 'Bricolage Grotesque', sans-serif  (wght 400,500,600,700; opsz 12..96)
+  UI / body                  : 'Hanken Grotesque', system-ui, sans-serif  (wght 400,500,600,700)
+  (Playfair Display is loaded in <head> but NOT used anywhere — safe to drop.)
+
+Body default: Hanken Grotesque, color #1B2330, -webkit-font-smoothing:antialiased,
+text-rendering:optimizeLegibility.
+Utility: .tnum { font-variant-numeric: tabular-nums } on every number.
+
+TYPE SCALE (role — family / size / weight / line-height / letter-spacing)
+  Hero numeral (apply goal "0")   Bricolage / 60px / 600 / 1.0  / -0.03em
+  Hero denominator ("/ 15")       Bricolage / 26px / 600 / 1.0  / -0.01em
+  Display brand ("guildy")        Bricolage / 27px / 600 / 1.0  / -0.01em
+  Prep H1 ("Screening round")     Bricolage / 26px / 600 / 1.0  / -0.02em
+  Comp H2 / modal title           Bricolage / 21px / 600 / —    / -0.01em
+  Section H2 (prep)               Bricolage / 19px / 600 / —    / -0.01em
+  Insights stat                   Bricolage / 19px / 600 / 1.0  / —
+  Job card company                Bricolage / 17px / 600 / —    / -0.01em
+  Applied card company            Bricolage / 16.5px / 600 / —  / -0.01em
+  Comp table value (Base etc)     Bricolage / 14.5px / 600 / —  / -0.01em
+  Comp Year-1 total value         Bricolage / 16px / 600 / —    / -0.01em
+  Comp Overall (best) number      Bricolage / 19px / 700 / —    / —
+  Add Job button                  Hanken / 15px / 600 / — / 0.01em
+  Search input                    Hanken / 15px / 400 / — / —
+  Where-to-look title             Hanken / 14.5px / 600 / 1.2 / —
+  Today / Insights heading        Hanken / 14.5px / 700 / — / —
+  Prep section body               Hanken / 14.5px / 400 / 1.65 / —
+  Body / list items               Hanken / 14px / 400-500 / 1.45-1.5 / —
+  Hook title ("Deep Prep")        Bricolage / 14px / 500 / 1.1 / —
+  Card sublabels / desc           Hanken / 13.5px / 400 / 1.4-1.5 / —
+  Salary pill                     Hanken / 12.5px / 600 / — / —
+  Stage column label (UPPER)      Hanken / 12.5px / 700 / — / 0.05em / uppercase
+  Count chip                      Hanken / 12px / 700 / — / —
+  Caption / meta                  Hanken / 12-12.5px / 500-600 / 1.45 / —
+  Eyebrow label "APPLY GOAL"      Hanken / 11px / 700 / — / 0.14em / uppercase
+  Rail label "ROLE" "INPUTS"      Hanken / 10.5px / 700 / — / 0.1em / uppercase
+  Hook sublabel                   Hanken / 11px / 400 / — / —
+  Model badge "HAIKU 4.5"         Hanken / 9.5px / 700 / — / 0.04em / uppercase
+
+--------------------------------------------------------------------------------
+1c. SPACING / RADIUS / SHADOW
+--------------------------------------------------------------------------------
+
+SPACING SCALE (px actually used): 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
+  16, 18, 20, 22, 24, 26, 30, 32, 34, 48
+  App padding: header 16/30, main 22/30, prep overlay 24/24/64.
+  Card padding: 14 (job), 18 (rail sections), 24 (hero), 30/34 (prep sections).
+  Standard gaps: rail stack 18, card stack 11, kanban none (flush, divided).
+
+BORDER RADIUS
+  5   checkbox square, pace-meter segment
+  7   small icon button, count chip
+  8   icon button, salary pill
+  9   icon chip (30px), segmented control button
+  10  secondary button
+  11  prep hooks, deep-prep button, comp icon chip
+  12  top-bar icon button, urgent card, segmented track
+  13  Add Job button, urgent icon chip, toast
+  14  job card, search bar, rail sections, table header corners
+  16  Insights / Where / Today / prep rail cards
+  18  kanban module, prep content module, hero (20)
+  20  hero card, comp modal
+  50% circles (avatars, dots, close button, deep-prep checks)
+
+ELEVATION (shadow ramp)
+  E0 hairline      0 1px 2px rgba(16,24,40,0.04)        rail cards, search
+  E1 card          0 1px 2px rgba(16,24,40,0.05)        applied job cards
+  E1b kanban       0 1px 3px rgba(16,24,40,0.06)        kanban module
+  E2 raised card   0 2px 6px rgba(16,24,40,0.06)        screen/HM job cards
+  E2b offer card   0 2px 8px rgba(16,24,40,0.06)        offer job cards
+  E3 prep module   0 8px 26px -10px rgba(16,24,40,0.14), 0 1px 2px rgba(16,24,40,0.04)
+  E4 hero          0 10px 30px -16px rgba(27,35,48,0.26), 0 2px 6px rgba(16,24,40,0.05)
+  E5 toast         0 14px 34px -10px rgba(16,24,40,0.32)
+  E6 modal         0 30px 70px -24px rgba(18,26,38,0.5)
+  Accent CTA       0 6px 16px -4px rgba(91,33,182,0.38)
+  Ink CTA          0 8px 20px -6px rgba(27,35,48,0.40), 0 2px 4px rgba(27,35,48,0.18)
+  Modal scrim      rgba(18,26,38,0.44)  (comp);  prep has no scrim (opaque #EDEFF2)
+
+MOTION
+  @keyframes guildyFade  opacity 0->1                          (overlays/scrims, 0.2-0.22s ease)
+  @keyframes guildyUp    translateY(40px)+opacity0 -> 0/1      (modal/toast, 0.3-0.32s cubic-bezier(0.22,1,0.36,1))
+  @keyframes guildyPulse bg #E3E7EE <-> #C5C8EE                (first pace-meter segment, 2.4s ease-in-out infinite)
+  Button hover lift: transform: translateY(-1px); active resets to translateY(0).
+  Toast auto-dismisses after 6000ms.
+
+
+================================================================================
+2. COMPONENT SPECS
+================================================================================
+
+--------------------------------------------------------------------------------
+APPLY-GOAL HERO  (left rail, top)
+--------------------------------------------------------------------------------
+Structure: white rounded card, decorative radial blob top-right, eyebrow,
+big numeral row, 15-segment pace meter, "0 of 15 logged", supporting copy.
+  Container: bg #FFFFFF, border 1px #E4E8EE, radius 20px, padding 24/24/22,
+             shadow E4, position relative, overflow hidden.
+  Blob: absolute, top -40 right -40, 140x140, radius 50%,
+        background radial-gradient(circle, rgba(79,70,229,0.06), transparent 70%).
+  Eyebrow "Apply goal": 11px/700/0.14em uppercase #7A8696, margin-bottom 14.
+  Numeral row: flex align baseline gap 9.
+     "0"   Bricolage 60/600/1.0/-0.03em #1B2330 (.tnum)
+     "/ 15" Bricolage 26/600 #A2ACB9 (.tnum)
+     "this week" pushed right (margin-left auto, align-self flex-end,
+        padding-bottom 9): 11px/700/0.1em uppercase #94A0AE.
+  Pace meter: flex gap 4, margin 18/0/9. 15 spans, each flex:1 height 9 radius 5.
+     Segment 1: bg #E3E7EE + animation guildyPulse 2.4s ease-in-out infinite.
+     Segments 2-15: bg #E2E7EE.
+  "0 of 15 logged": 12px/600 #A2ACB9, margin-bottom 14.
+  Copy: 13.5px/1.5 #566072.
+  States: static (no hover). Numerals/segments are the only things that change
+     with progress (fill segments left→right; pulse on the next unfilled one).
+
+--------------------------------------------------------------------------------
+INSIGHTS CARD  (left rail)
+--------------------------------------------------------------------------------
+  Container: bg #FFFFFF, border 1px #E4E8EE, radius 16px, shadow E0, overflow hidden.
+  Header: flex align-center gap 9, padding 14/16/12, border-bottom 1px #EEF1F5.
+     Lightbulb icon stroke #8A93A3 (15px). "Insights" 13px/700/0.02em #1B2330.
+     "Live estimate" pushed right: 10px/600/0.09em uppercase #A2ACB9.
+  Body: padding 15/16, flex column gap 13.
+     Row = stat + text (flex align-start gap 11):
+       stat Bricolage 19/600/1.0 #1B2330 (.tnum, flex-shrink 0)
+       text 12.5px/1.45 #7A8696
+     Divider between rows: height 1 bg #EEF1F5.
+     Row 1: "0.5–2%" / "of applications convert to interviews in tech."
+     Row 2: "50–100" / "applications for a typical senior offer, about 3–7 weeks at your pace."
+  States: static.
+
+--------------------------------------------------------------------------------
+WHERE-TO-LOOK CARD  (left rail, collapsible)
+--------------------------------------------------------------------------------
+  Container: bg #FFFFFF, border 1px #E4E8EE, radius 16px, shadow E0, overflow hidden.
+  Trigger button: full width, flex align-center gap 12, padding 16/18, bg transparent.
+     hover: background #F7F9FB.
+     Icon chip: 30x30 radius 9 bg #EEF0FB; compass icon stroke+fill #4338CA (indigo).
+     Title "Where to look" 14.5px/600 #1B2330; sub "9 boards for Software Engineer"
+        12.5px #94A0AE.
+     Chevron 16px stroke #A2ACB9 (down when collapsed).
+  Expanded panel (state: open): padding 2/18/16, border-top 1px #EEF1F5, flex column.
+     Each row: flex space-between, padding 9/0, rows 2+ have border-top 1px #EEF1F5.
+       Label 13px/500 #3A4453.
+       Score pill: 12px/600, radius 7, padding 2/8.
+         Top source (LinkedIn 9/10): text #4338CA bg #EEF0FB.
+         Others (Wellfound 8/10, HN 7/10): text #7A8696 bg #EEF1F5.
+  States: collapsed (default) / expanded (toggles whereOpen).
+
+--------------------------------------------------------------------------------
+TODAY CARD  (left rail)
+--------------------------------------------------------------------------------
+  Container: bg #FFFFFF, border 1px #E4E8EE, radius 16px, shadow E0, padding 18/18/8.
+  Heading "Today": 14.5px/700 #1B2330, margin-bottom 10.
+  URGENT/SCHEDULED item (first): bg #FEF6E9, border 1px #F3D9A6, radius 12,
+     padding 12/13, flex align-start gap 11, margin-bottom 14.
+     hover: border #E9C158, shadow 0 6px 16px -8px rgba(180,83,9,0.35).
+     Amber icon chip: 30x30 radius 9 bg #F59E0B, clock icon stroke #FFFFFF,
+        shadow 0 2px 6px -1px rgba(217,119,6,0.45).
+     Stack: "TOMORROW · 2:00 PM" 10.5px/700/0.06em #B45309;
+            "Prep your Lighthorse Screen round." 13.5px/1.4/600 #1B2330;
+            "Scheduled in 18 hours — start Deep Prep now." 11.5px/1.35 #9A7B3C.
+     Arrow icon 15px stroke #D9A441 (margin-top 9).
+  Calm items (2,3): full width, flex align-start gap 12, padding 11/0,
+     border-top 1px #EEF1F5, bg transparent. hover: opacity 0.7.
+     Text 13.5px/1.45 #3A4453; trailing arrow/external icon stroke #AEB7C2.
+     (Item 3 uses external-link icon, not arrow.)
+  States: urgent (deadline present) vs calm (default list row).
+
+--------------------------------------------------------------------------------
+KANBAN COLUMN HEADER
+--------------------------------------------------------------------------------
+  Columns live flush inside ONE white module (bg #FFFFFF, border 1px #E4E8EE,
+  radius 18, shadow E1b), separated by 1px vertical dividers (#EEF1F5; the
+  divider AFTER Applied is #E0E4EA to set intake apart). No per-column boxes.
+  Each column: flex:1 1 0, min-width 208, flex column.
+  Top band: height 3px, full width, color = stage band color (see ramp).
+  Header row: flex space-between, padding 14/14/11.
+     Label: 12.5px/700/0.05em uppercase, stage text color.
+     Count chip: 12px/700, radius 7, padding 1/7 (1/8 for Offer), stage chip bg + text.
+     Add (+) button (all except Applied): 26x26 radius 8, transparent, icon #A2ACB9;
+        hover bg #EAEDF2 color #4A5566 (Offer hover: bg #EAE2F6 color #6D3DBE).
+  Body: flex:1 overflow-y auto, padding 0/12/14, flex column gap 11.
+  Empty stage (Full Loop): dashed box border 1.5px dashed #D4DAE2 radius 14
+     padding 18/14, centered text 12.5px/1.5 #A2ACB9
+     "Cards land here when you move them from earlier stages."
+
+--------------------------------------------------------------------------------
+JOB CARD
+--------------------------------------------------------------------------------
+  Container: bg #FFFFFF, border 1px #E6EAEF, radius 14, padding 14.
+     Applied variant: shadow E1, hover border #D4DAE2.
+     Screen/HM variant: shadow E2, CLICKABLE (opens prep),
+        hover border #C9A6F0 + glow 0 8px 20px -8px rgba(91,33,182,0.16).
+     Offer variant: shadow E2b, hover border #D4DAE2.
+  Title row: company name Bricolage 17/600/-0.01em #1B2330 (Applied: 16.5).
+     Move chevrons (Screen/HM/Offer): two 24x24 buttons, radius 7,
+        border 1px #E6EAEF, bg #F4F6F9, icon #A2ACB9 / #7A8696;
+        hover border #D4DAE2 color #4A5566 (Offer hover color #6D3DBE).
+  Salary pill: inline-block, 12.5px/600 #4A5566, bg #EEF1F5, radius 8,
+     padding 4/9, margin-top 9 (Applied: no top margin, sits under title).
+  Applied card action: full-width "They Responded" button, margin-top 12,
+     padding 9, bg #F4F6F9, border 1px #E4E8EE, radius 10, 13px/600 #46505F;
+     hover bg #EEF1F5 border #D4DAE2 color #4A5566.
+  Screen/HM/Offer cards carry a prep/negotiation hook instead (see below).
+  States: default / hover / (Screen+HM) clickable.
+
+--------------------------------------------------------------------------------
+DEEP PREP CTA  (hook inside Screen & Hiring Manager cards)
+--------------------------------------------------------------------------------
+  Full-width button, margin-top 12, flex align-center gap 10, padding 9/11,
+  radius 11, text-align left. Colored to the stage:
+     Screen:        bg #EFF6F6 border #DAEAEA; hover border #B8D9D9 bg #E6F1F1;
+                    sparkle fill #5E97A0; title color #3E767E.
+     Hiring Manager:bg #EFF3F9 border #DCE5F1; hover border #BFD0E8 bg #E5ECF6;
+                    sparkle fill #6680BC; title color #45598F.
+  Sparkle icon 15px (4-point star path), in 18x18 slot.
+  Title "Deep Prep" Bricolage 14/500/1.1 (stage color).
+  Sublabel 11px #7A8696 ("Sharpen your loop answers" / "Read the room before the manager call").
+  Trailing chevron 14px stroke #94A0AE.
+  States: default / hover.
+
+--------------------------------------------------------------------------------
+NEGOTIATION PREP CTA  (hook inside Offer cards)
+--------------------------------------------------------------------------------
+  Same geometry as Deep Prep hook, purple-tinted, opens the comp sheet on click:
+     bg #F4EFFB, border 1px #E2D6F3; hover border #CDB6EC bg #EDE4F9.
+     Sparkle fill #7C50CE. Title "Negotiation Prep" Bricolage 14/500 #6D3DBE.
+     Sublabel 11px #7A8696 "Map your counter and walk in ready".
+     Trailing chevron stroke #94A0AE.
+  States: default / hover. onClick -> openSheet.
+
+--------------------------------------------------------------------------------
+COMPENSATION BAR  (footer; two states)
+--------------------------------------------------------------------------------
+  ACTIVE state (>=1 offer): footer, flex align-center gap 20, padding 15/30,
+     cursor pointer, background linear-gradient(180deg,#F8F2FE,#F1E7FB),
+     border-top 1px #E6D8F6, shadow 0 -6px 26px -10px rgba(91,33,182,0.16).
+     hover: gradient(180deg,#F1E7FB,#E9DAF8).
+     Left: 38x38 radius 11 bg #7C50CE chart icon #FFFFFF (shadow 0 4px 12px -2px
+        rgba(91,33,182,0.34)) + title "Compensation comparison" Bricolage 16/600
+        #1B2330 + "2 offers" Bricolage 15/500 #7C50CE + sub 12px #7A8696
+        "A milestone worth a closer look. See how they stack up."
+     Center: offer pills (flex gap 9). Pill: 12.5px/600 #6D3DBE, bg #F8F4FE,
+        border 1px #EAD9F7, radius 9, padding 6/12; leading dot 7x7
+        (#A855F7 Latchmore, #7C50CE Helixwave); range text #7A8696/500.
+     Right: "Compare offers" button, padding 11/18, bg #7C50CE #FFFFFF, radius 11,
+        14px/600, shadow accent; hover bg #6D3DBE translateY(-1px). Chevron-up icon.
+  LOCKED state (no offers): footer, flex gap 13, padding 16/30, bg #FFFFFF,
+     border-top 1px #E4E8EE. Lock icon chip 30x30 radius 9 bg #EEF1F5 icon #A2ACB9.
+     "Compensation comparison" 14/600 #7A8696 + "Unlocks when your first offer lands."
+     13px #A2ACB9. Not clickable.
+  States: active / locked (driven by compState prop = 'active' | 'locked').
+
+--------------------------------------------------------------------------------
+COMPENSATION SHEET  (modal)
+--------------------------------------------------------------------------------
+  Overlay: position fixed/absolute inset 0, z-index 50, flex center, padding 32.
+     Scrim: rgba(18,26,38,0.44), animation guildyFade 0.22s. Click scrim -> close.
+  Dialog: width 100% max-width 1040, max-height 88vh, flex column, bg #FFFFFF,
+     radius 20, overflow hidden, shadow E6, animation guildyUp 0.3s.
+  Header: flex space-between, padding 22/26, border-bottom 1px #EEF1F5.
+     Title "Compensation comparison" Bricolage 21/600/-0.01em #1B2330.
+     Sub 12.5px/1.45 #94A0AE max-width 580
+        "Comp is rated relative to these offers; the soft scores are yours.
+         Overall is a weighted decision aid, not exact science."
+     Actions (right): "Priorities" ghost button (8/13 padding, border 1px #E4E8EE,
+        13px/600 #46505F, hover bg #F4F6F9); "Add offer" ink button (bg #1B2330
+        #FFFFFF, hover #2A3342); close 36x36 radius 10 border 1px #E4E8EE icon #7A8696.
+  Body: flex:1 overflow-y auto, padding 14/26/26. One <table>, border-collapse.
+     Column widths: 30% / 35% / 35%.
+     Column headers (vertical-align bottom, padding 15/18):
+        Latchmore: bg #F7F8FB, radius top-left 14. Name Bricolage 18/600 #1B2330,
+           role 12px/500 #94A0AE, links "Edit comp" 12px #94A0AE +
+           "Negotiate" 12px #6D3DBE (handshake icon).
+        Helixwave (BEST): bg #F3EFFB, radius top-right 14, border-top 2px #7C50CE.
+           "BEST" badge 10px/700/0.05em #6D3DBE bg #E7DBF8 radius 6 padding 2/6,
+           then name; same links.
+     Rows (label cell padding 13/4 13.5px #566072; value cells padding 13/18
+        right-aligned; Helixwave value cells bg #FAF8FE; each row border-bottom
+        1px #F2F4F7):
+        Base   $210,000 [8/10]   |  $285,000 [10/10]
+        Bonus  $32,000           |  $43,000
+        Equity $48,000 [7/10]    |  $70,000 [10/10]
+           (hard-money values Bricolage 14.5/600/-0.01em #1B2330; score chip
+            11px/600 #566072 bg #EEF1F5 radius 6 padding 1/6 margin-left 8.)
+        Year-1 total (row has border-top 1.5px #E4E8EE; Helixwave cell border-top
+           1.5px #E4D3F8; label 600 #3A4453): $290,000 | $398,000
+           (values Bricolage 16/600.)
+        Benefits        8/10 | 6/10
+        Career growth   6/10 | 9/10
+        Work-life bal.  9/10 | 7/10
+        Culture fit     9/10 | 7/10
+           (soft scores 13.5px/600 #3A4453.)
+        Overall (label bg #F4F0FC radius bottom-left 14, 14/700 #1B2330):
+           Latchmore cell bg #F4F0FC -> "7.4" Bricolage 17/600 #3A4453.
+           Helixwave cell bg #ECE3FB radius bottom-right 14 -> "BEST" badge
+              (10px/700 #FFFFFF bg #7C50CE radius 6 padding 2/7) + "8.2"
+              Bricolage 19/700 #6D3DBE.
+     Footnote: margin 16/4/0, 12px/1.5 #A2ACB9
+        "Weighted by your priorities. Helixwave leads on total comp and growth;
+         Latchmore wins on benefits, balance, and culture. Adjust priorities to
+         see the overall shift."
+  States: open / closed (sheetOpen, only when compState='active').
+
+
+================================================================================
+3. CODE
+================================================================================
+The production source is built as inline-styled markup (single source of truth).
+Below is that exact markup reduced to standard HTML with the framework attributes
+translated:
+  - sc-if value="{{x}}"          -> render the block when state x is true
+  - onClick="{{handler}}"        -> the JS handler named in section 3c
+  - style-hover / style-active / style-focus -> the :hover/:active/:focus rules
+    documented inline per component in section 2 (apply them as real pseudo-classes)
+All px/hex/weights below are verbatim from the design.
+
+--------------------------------------------------------------------------------
+3a. GLOBAL HEAD / RESET
+--------------------------------------------------------------------------------
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700&family=Hanken+Grotesque:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{font-family:'Hanken Grotesque',system-ui,sans-serif;background:#EBEEF2;
+       color:#1B2330;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
+  .tnum{font-variant-numeric:tabular-nums;}
+  ::-webkit-scrollbar{width:9px;height:9px;}
+  ::-webkit-scrollbar-thumb{background:#D4DAE2;border-radius:6px;border:2px solid transparent;background-clip:content-box;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  @keyframes guildyPulse{0%,100%{background:#E3E7EE;}50%{background:#C5C8EE;}}
+  @keyframes guildyUp{from{transform:translateY(40px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+  @keyframes guildyFade{from{opacity:0;}to{opacity:1;}}
+</style>
+
+--------------------------------------------------------------------------------
+3b. FULL DASHBOARD + COMP SHEET MARKUP
+--------------------------------------------------------------------------------
+NOTE: the complete, verbatim markup for the dashboard, the compensation bar (both
+states), and the compensation sheet is in the project file "Guildy Dashboard.dc.html"
+(the rendered <x-dc> body). Every value in sections 1 and 2 above is taken from it
+1:1, so the spec and the source cannot drift. To lift the standalone HTML:
+  1. Open Guildy Dashboard.dc.html
+  2. Copy everything between <div data-screen-label="Guildy Dashboard" ...> and the
+     matching </div> at end of file — that is the dashboard + comp bar + comp sheet
+     + prep overlay.
+  3. Replace the three framework attributes as described in 3a/3c.
+The structural skeleton is:
+
+<div class="app">  <!-- height:100vh; display:flex; column; bg #EBEEF2; position:relative; overflow:hidden -->
+  <header class="topbar"> brand (300px) | search (flex,max 680) | menu btn (300px) </header>
+  <main>  <!-- flex; gap 22; padding 22 30 0; min-height 0; overflow hidden -->
+    <aside class="left-rail">  <!-- flex 0 0 300px; column; gap 18; overflow-y auto -->
+      <section class="hero">...</section>
+      <section class="insights">...</section>
+      <section class="where">...</section>
+      <section class="today">...</section>
+    </aside>
+    <section class="board-wrap">  <!-- flex 1; overflow hidden -->
+      <div class="board">  <!-- flex; white module; radius 18; overflow-x auto -->
+        <div class="col applied">band+header+body(AddJob CTA + 5 cards)</div>
+        <div class="divider intake"></div>
+        <div class="col screen">band+header(+)+body(Lighthorse card w/ Deep Prep)</div>
+        <div class="divider"></div>
+        <div class="col hm">band+header(+)+body(Verisol card w/ Deep Prep)</div>
+        <div class="divider"></div>
+        <div class="col loop">band+header(+)+empty-state</div>
+        <div class="divider"></div>
+        <div class="col offer">band+header(+)+body(Latchmore, Helixwave w/ Negotiation)</div>
+      </div>
+    </section>
+  </main>
+  <footer class="comp-bar">  <!-- active OR locked variant -->
+  <div class="comp-sheet-modal"> ... </div>   <!-- when sheetOpen -->
+  <div class="prep-overlay"> ... </div>        <!-- when prepOpen -->
+</div>
+
+The exact inline styles for each node are enumerated value-by-value in section 2;
+apply them directly, or read them from the source file node-for-node.
+
+--------------------------------------------------------------------------------
+3c. STATE / JS (the only behavior)
+--------------------------------------------------------------------------------
+State:
+  sheetOpen  : bool   compensation sheet visible (gated by compActive)
+  prepOpen   : bool   job-prep overlay visible
+  whereOpen  : bool   "Where to look" expanded
+  bannerOpen : bool   prep toast visible
+  compState  : 'active' | 'locked'   (prop) — active shows the gradient comp bar,
+               locked shows the muted lock bar; sheet only opens when active.
+
+Handlers:
+  openSheet()     -> if compActive: sheetOpen = true        (comp bar, Compare offers,
+                                                              Negotiation Prep hooks)
+  closeSheet()    -> sheetOpen = false                       (scrim, X)
+  openPrep()      -> prepOpen = true; bannerOpen = true;
+                     setTimeout(()=> bannerOpen=false, 6000)  (Screen/HM job cards)
+  closePrep()     -> clearTimeout; prepOpen = false           (prep X)
+  dismissBanner() -> clearTimeout; bannerOpen = false         (toast X)
+  toggleWhere()   -> whereOpen = !whereOpen                   (Where-to-look trigger)
+
+Derived:
+  compActive = compState === 'active'
+  compLocked = !compActive
+  sheetOpen  = sheetOpen && compActive
+
+That is the entire interaction model. Everything else is static presentation.
+
+================================================================================
+END OF SPEC
+================================================================================

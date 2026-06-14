@@ -16,11 +16,11 @@
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
+  --accent-ui: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
+  --border-ui: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
   --chart-1: oklch(0.646 0.222 41.116);
@@ -52,11 +52,11 @@
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
   --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
+  --accent-ui: oklch(0.269 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.396 0.141 25.723);
   --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
+  --border-ui: oklch(0.269 0 0);
   --input: oklch(0.269 0 0);
   --ring: oklch(0.439 0 0);
   --chart-1: oklch(0.488 0.243 264.376);
@@ -90,11 +90,11 @@
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
+  --color-accent: var(--accent-ui);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
+  --color-border: var(--border-ui);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-chart-1: var(--chart-1);
@@ -120,8 +120,13 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /* Design system foundation (spec 3a): Hanken body, slate page bg, ink text. */
   body {
-    @apply bg-background text-foreground;
+    font-family: var(--font-hanken), system-ui, sans-serif;
+    background: var(--page-bg);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
   
   /* Scrollbar hidden at rest, revealed on scroll via JS .is-scrolling class */
@@ -145,5 +150,361 @@
   }
   .scroll-hide.is-scrolling::-webkit-scrollbar-thumb {
     background: rgba(0, 0, 0, 0.18);
+  }
+}
+
+/* ==========================================================================
+   GUILDY DESIGN SYSTEM FOUNDATION (spec section 1)
+   Phase 1: tokens, type scale, fonts, reset only. No component restyles.
+   Values are 1:1 from docs/guildy-engineering-spec.txt. Token names are exact.
+   ========================================================================== */
+
+:root {
+  /* 1a. Neutral grounds & surfaces */
+  --page-bg: #EBEEF2;
+  --surface: #FFFFFF;
+  --surface-sunken: #F4F6F9;
+  --surface-rail: #E6E9EE;
+  --rail-border: #DCE0E6;
+  --overlay-bg: #EDEFF2;
+  --tab-track: #EEF0F4;
+
+  /* 1a. Text */
+  --text-primary: #1B2330;
+  --text-secondary: #3A4453;
+  --text-body: #566072;
+  --text-muted: #7A8696;
+  --text-faint: #94A0AE;
+  --text-fainter: #A2ACB9;
+  --text-rail-label: #9098A3;
+
+  /* 1a. Borders / dividers (--border is the spec slate border, distinct from
+     the shadcn UI border which now lives in --border-ui). */
+  --border: #E4E8EE;
+  --border-card: #E6EAEF;
+  --border-strong: #D4DAE2;
+  --divider: #EEF1F5;
+  --divider-faint: #F2F4F7;
+  --divider-kanban: #EEF1F5;
+  --divider-intake: #E0E4EA;
+
+  /* 1a. Primary / ink CTA */
+  --ink: #1B2330;
+  --ink-hover: #2A3342;
+  --ink-text: #FFFFFF;
+
+  /* 1a. Accent purple (spec --accent; shadcn accent lives in --accent-ui) */
+  --accent: #7C50CE;
+  --accent-deep: #6D3DBE;
+  --accent-deeper: #5E2FAE;
+  --accent-press: #5A2BA8;
+  --accent-grad: linear-gradient(135deg, #7C50CE, #6535B0);
+  --accent-tint-bg: #F4EFFB;
+  --accent-tint-bg2: #F8F4FE;
+  --accent-tint-border: #E2D6F3;
+  --accent-tint-border2: #EAD9F7;
+  --accent-chip-bg: #EAE2F6;
+  --accent-chip-bg2: #E7DBF8;
+  --accent-dot-light: #A855F7;
+
+  /* 1a. Per-stage kanban ramp { band, text, chip, hook-bg, hook-border } */
+  --stage-applied-band: #97A1AD;
+  --stage-applied-text: #62707E;
+  --stage-applied-chip: #E5E9EE;
+  --stage-screen-band: #5E97A0;
+  --stage-screen-text: #3E767E;
+  --stage-screen-chip: #E2EFF0;
+  --stage-screen-hook-bg: #EFF6F6;
+  --stage-screen-hook-border: #DAEAEA;
+  --stage-hm-band: #6680BC;
+  --stage-hm-text: #45598F;
+  --stage-hm-chip: #E6ECF5;
+  --stage-hm-hook-bg: #EFF3F9;
+  --stage-hm-hook-border: #DCE5F1;
+  --stage-loop-band: #8A72B6;
+  --stage-loop-text: #6A5398;
+  --stage-loop-chip: #ECE7F3;
+  --stage-offer-band: #7C50CE;
+  --stage-offer-text: #6D3DBE;
+  --stage-offer-chip: #EAE2F6;
+  --stage-offer-hook-bg: #F4EFFB;
+  --stage-offer-hook-border: #E2D6F3;
+
+  /* 1a. Warning / scheduled */
+  --warn-bg: #FEF6E9;
+  --warn-border: #F3D9A6;
+  --warn-border-hover: #E9C158;
+  --warn-accent: #F59E0B;
+  --warn-text: #B45309;
+  --warn-text-soft: #9A7B3C;
+  --warn-arrow: #D9A441;
+  --warn-dot: #E0A93C;
+
+  /* 1a. Where-to-look indigo */
+  --indigo: #4338CA;
+  --indigo-tint-bg: #EEF0FB;
+  --source-score-text: #7A8696;
+  --source-score-bg: #EEF1F5;
+
+  /* 1a. Comp / salary pill (neutral) */
+  --salary-text: #4A5566;
+  --salary-bg: #EEF1F5;
+
+  /* 1c. Border radius (px tokens; circles use 50%) */
+  --radius-5: 5px;
+  --radius-7: 7px;
+  --radius-8: 8px;
+  --radius-9: 9px;
+  --radius-10: 10px;
+  --radius-11: 11px;
+  --radius-12: 12px;
+  --radius-13: 13px;
+  --radius-14: 14px;
+  --radius-16: 16px;
+  --radius-18: 18px;
+  --radius-20: 20px;
+
+  /* 1c. Elevation ramp */
+  --shadow-e0: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-e1: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-e1b: 0 1px 3px rgba(16, 24, 40, 0.06);
+  --shadow-e2: 0 2px 6px rgba(16, 24, 40, 0.06);
+  --shadow-e2b: 0 2px 8px rgba(16, 24, 40, 0.06);
+  --shadow-e3: 0 8px 26px -10px rgba(16, 24, 40, 0.14), 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-e4: 0 10px 30px -16px rgba(27, 35, 48, 0.26), 0 2px 6px rgba(16, 24, 40, 0.05);
+  --shadow-e5: 0 14px 34px -10px rgba(16, 24, 40, 0.32);
+  --shadow-e6: 0 30px 70px -24px rgba(18, 26, 38, 0.5);
+  --shadow-accent-cta: 0 6px 16px -4px rgba(91, 33, 182, 0.38);
+  --shadow-ink-cta: 0 8px 20px -6px rgba(27, 35, 48, 0.4), 0 2px 4px rgba(27, 35, 48, 0.18);
+}
+
+/* 1b. Tabular numerals utility (apply on every number) */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 1b. Font-family helpers (body default is Hanken via the body rule above) */
+.font-bricolage {
+  font-family: var(--font-bricolage), sans-serif;
+}
+.font-hanken {
+  font-family: var(--font-hanken), system-ui, sans-serif;
+}
+
+/* 1b. Type scale. family / size / weight / line-height / letter-spacing per
+   role. Ranges in the spec are set to a representative value. */
+.type-hero-numeral {
+  font-family: var(--font-bricolage), sans-serif;
+  font-size: 60px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+.type-hero-denominator {
+  font-family: var(--font-bricolage), sans-serif;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+.type-display-brand {
+  font-family: var(--font-bricolage), sans-serif;
+  font-size: 27px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+.type-prep-h1 {
+  font-family: var(--font-bricolage), sans-serif;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.type-comp-h2 {
+  font-family: var(--font-bricolage), sans-serif;
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.type-section-h2 {
+  font-family: var(--font-bricolage), sans-serif;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.type-insights-stat {
+  font-family: var(--font-bricolage), sans-serif;
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1;
+}
+.type-job-company {
+  font-family: var(--font-bricolage), sans-serif;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.type-applied-company {
+  font-family: var(--font-bricolage), sans-serif;
+  font-size: 16.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.type-comp-value {
+  font-family: var(--font-bricolage), sans-serif;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.type-comp-year1 {
+  font-family: var(--font-bricolage), sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.type-comp-overall {
+  font-family: var(--font-bricolage), sans-serif;
+  font-size: 19px;
+  font-weight: 700;
+}
+.type-hook-title {
+  font-family: var(--font-bricolage), sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.1;
+}
+.type-add-job {
+  font-family: var(--font-hanken), system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.type-search {
+  font-family: var(--font-hanken), system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 400;
+}
+.type-where-title {
+  font-family: var(--font-hanken), system-ui, sans-serif;
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.type-today-heading {
+  font-family: var(--font-hanken), system-ui, sans-serif;
+  font-size: 14.5px;
+  font-weight: 700;
+}
+.type-prep-body {
+  font-family: var(--font-hanken), system-ui, sans-serif;
+  font-size: 14.5px;
+  font-weight: 400;
+  line-height: 1.65;
+}
+.type-body {
+  font-family: var(--font-hanken), system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+.type-card-sublabel {
+  font-family: var(--font-hanken), system-ui, sans-serif;
+  font-size: 13.5px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+.type-salary-pill {
+  font-family: var(--font-hanken), system-ui, sans-serif;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.type-stage-label {
+  font-family: var(--font-hanken), system-ui, sans-serif;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.type-count-chip {
+  font-family: var(--font-hanken), system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+}
+.type-caption {
+  font-family: var(--font-hanken), system-ui, sans-serif;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+.type-eyebrow {
+  font-family: var(--font-hanken), system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.type-rail-label {
+  font-family: var(--font-hanken), system-ui, sans-serif;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.type-hook-sublabel {
+  font-family: var(--font-hanken), system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 400;
+}
+.type-model-badge {
+  font-family: var(--font-hanken), system-ui, sans-serif;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* 3a. Global scrollbar. Component-scoped .scroll-hide rules above override
+   this for those elements. */
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-thumb {
+  background: #D4DAE2;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 1c / 3a. Motion keyframes */
+@keyframes guildyPulse {
+  0%,
+  100% {
+    background: #E3E7EE;
+  }
+  50% {
+    background: #C5C8EE;
+  }
+}
+@keyframes guildyUp {
+  from {
+    transform: translateY(40px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes guildyFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
