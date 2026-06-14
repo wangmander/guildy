@@ -1,0 +1,235 @@
+================================================================================
+GUILDY — GEM GUIDE: ENGINEERING HANDOFF SPEC
+Exact values from "Guildy Gem Guide.html". Nothing rounded. Companion to
+guildy-engineering-spec.txt (the dashboard spec) — reuses its token names.
+================================================================================
+
+WHAT THIS IS
+A single amethyst gem is the guide. It lives on the left rail and states the one
+most-valuable next move in plain language. No quest chrome: no markers, no labels,
+no Track button, no turn-in. Three poses (resting / offering / celebrating) carry
+all the affect. Plum stays the system accent; the gem is the one vivid focal point.
+
+--------------------------------------------------------------------------------
+TOKEN REFERENCES (defined in the dashboard spec — reused verbatim here)
+--------------------------------------------------------------------------------
+  --page-bg          #EBEEF2     --surface          #FFFFFF
+  --text-primary     #1B2330     --text-secondary   #3A4453
+  --text-body        #566072     --text-faint       #94A0AE
+  --border           #E4E8EE     --border-card      #E6EAEF
+  --divider          #EEF1F5
+  --accent           #7C50CE     --accent-deep      #6D3DBE
+  --accent-tint-bg   #F4EFFB     --accent-tint-border #E2D6F3
+  salary-pill        text #4A5566 on bg #EEF1F5
+  accent CTA shadow  0 6px 16px -4px rgba(91,33,182,0.40)
+  cue-amber          #C2410C     (= dashboard Hiring-Manager stage text)
+
+NEW TOKENS (introduced here)
+  Gem material (see GEM MATERIAL block for the full gradient set):
+    --gem-seam         #EBDDFB   facet seam stroke
+    --gem-rim          #F3EBFF   silhouette rim stroke
+    --gem-spark        #FFFFFF   sparkle fill
+  Guidance chrome (gem-voice lavender, distinct from --accent):
+    --gem-label        #A89BCB   "Your next move" eyebrow, onboarding eyebrow
+    --gem-kicker       #9B8DBE   page kicker "Guildy · Gem guide"
+  Status cue (job card):
+    --cue-amber        #C2410C   "New reply"  (reused dashboard value)
+    --cue-scheduled    #6D3DBE   "Screen Tue" (= --accent-deep)
+    --cue-offer        #1B7F57   "Offer in"   (success green — NEW)
+  Milestone surface:
+    --milestone-from   #F3ECFC   gradient start (135deg)
+    --milestone-to     #FBF6F0   gradient end
+    --milestone-border #E7DBF8
+    --dismiss          #B6A8C8   milestone close glyph
+
+
+================================================================================
+1. THE GEM
+================================================================================
+
+GEOMETRY (viewBox "-8 -8 136 136" for every placement; overflow visible so bloom
++ contact shadow extend past the box)
+  Outer octagon: 8 vertices on a circle centered (60,58) r=46, first vertex at
+    -90° (top), step 45°:
+      (60,12) (92.5,25.46) (106,58) (92.54,90.5) (60,104) (27.46,90.5) (14,58) (27.46,25.5)
+  Inner (core) octagon: center (61,53) r=19, same angles:
+      (61,34) (74.43,39.57) (80,53) (74.43,66.43) (61,72) (47.57,66.43) (42,53) (47.57,39.57)
+  Ring facet i = polygon[outer_i, outer_(i+1), inner_(i+1), inner_i]  (8 facets)
+  Core facet = the inner octagon.
+  Contact shadow: <ellipse cx=60 cy=110 rx=30 ry=5.5 fill=url(#SH)>.
+  Core hotspot: <circle cx=61 cy=50 r=20 fill=url(#CORE)>, opacity = per-pose.
+  Bloom: <circle cx=60 cy=56 r=56 fill=url(#BLOOM)> wrapped in
+         translate(60 58) scale(BLOOM) translate(-60 -58), BLOOM = per-pose.
+
+GEM MATERIAL (exact gradients)
+  Ring facet fills — linearGradient x1 0 y1 0 x2 0.3 y2 1, stop0 -> stop1
+   (light upper-left → deep lower-right):
+    R0 #D9C2F4 → #B492EA      R1 #C2A0EC → #9B72DE
+    R2 #9E78DC → #6D3DBE      R3 #7E54C8 → #5226A0
+    R4 #8A5ECF → #5A2BA8      R5 #A885E2 → #7344C4
+    R6 #C6A6EE → #9068D8      R7 #E6D6FA → #C2A0EC
+  Core facet (C): linearGradient (same axis) #F6EFFF → #CBADF0
+  Core hotspot (CORE): radialGradient cx50% cy46% r55%
+    0% #FFFFFF @.95 · 34% #F0E4FF @.55 · 100% #D9C2F4 @0
+  Bloom (BLOOM): radialGradient cx50% cy48% r50%
+    0% #B98CF0 @.6 · 40% #8A5ED2 @.26 · 72% #7C50CE @0
+  Contact shadow (SH): radialGradient cx50% cy50% r50%
+    0% #34176A @.3 · 70% #34176A @0
+  Seams: stroke #EBDDFB width 1.25 opacity 0.8 (linejoin/linecap round) — the
+    inner octagon outline + 8 spoke lines outer_i→inner_i.
+  Rim: outer octagon stroke #F3EBFF width 1.7 opacity 0.9.
+  Sparkle: 4-point star, fill #FFFFFF. Star(x,y,R,rat,op): vertical radius R,
+    horizontal radius R*rat, waist offset w=R*0.13 → points
+    (x,y-R)(x+w,y-w)(x+R*rat,y)(x+w,y+w)(x,y+R)(x-w,y+w)(x-R*rat,y)(x-w,y-w).
+
+PER-POSE DIFFERENCES (the only things that change)
+  RESTING   bloom scale 1.00 · hotspot opacity 0.82 · sparkles: 1
+              star(61,49, R12, rat .62, op .85)            [small core glint]
+  OFFERING  bloom scale 1.14 · hotspot opacity 0.95 · sparkles: 3
+              star(61,49, R24, .66, .97)                    [bright core burst]
+              star(93,30, R8, .70, .92) · star(101,42, R3.6, .80, .80)
+  CELEBRATE bloom scale 1.34 · hotspot opacity 1.00 · sparkles: 5
+              star(61,49, R28, .70, 1.0)
+              star(94,27, R9, .70, .95) · star(26,33, R6.5, .70, .90)
+              star(103,46, R4, .80, .82) · star(20,52, R3.4, .80, .70)
+  Reading: brightness (hotspot opacity) + glow size (bloom scale) + sparkle count
+  all step up rest → offer → celebrate. Nothing else (geometry/fills) changes.
+
+RENDER SIZE PER PLACEMENT (the <svg> width=height; viewBox constant)
+  Page header (decor)        72    pose = offering
+  Pose showcase (this board) 124   one per pose
+  Left-rail "next move" card 76    pose = offering   <-- the canonical rail size
+  Today panel header          26   pose = resting
+  Today list row              30   pose = offering (active row) / resting (others)
+  Milestone card              72    pose = celebrating
+  Onboarding card             46    pose = resting (empty) / offering (active)
+  Job card                    —     NO gem; uses a 6px status dot instead
+  Asset stills exported: gem-{resting,offering,celebrating}.svg at 76,
+    plus -2x at 152. Self-contained; drop into the GEM_ASSETS swap map.
+
+ANIMATION (optional, used on header + milestone in this board)
+  gFloat: translateY 0 → -5px → 0, 4s ease-in-out infinite (idle bob).
+  gGlow:  opacity .75→1, scale 1→1.05, (defined; for a resting shimmer).
+
+
+================================================================================
+2. LEFT-RAIL "YOUR NEXT MOVE" CARD   (the primary surface)
+================================================================================
+Container
+  width 300 · background --surface · border 1px --border · radius 18
+  shadow 0 1px 3px rgba(16,24,40,0.05) · padding 22px 20px 20px
+Gem
+  <svg> 76×76, pose offering, centered (wrapper flex justify-center,
+  margin-bottom 2).
+Eyebrow  "Your next move"
+  font 10.5px / 700 · letter-spacing 0.13em · uppercase · color --gem-label #A89BCB
+  text-align center · margin-bottom 9
+Line
+  font 14.5px / line-height 1.5 · color --text-secondary #3A4453 · centered
+  margin 0 0 16 · leading clause wrapped in <strong> color --text-primary #1B2330
+  weight 700.  e.g. "**Prep your Lighthorse screen next.** Screens reward clear
+  thinking out loud."
+Button (one only)
+  full width · flex center gap 8 · padding 12 · background --accent #7C50CE
+  color #FFFFFF · border none · radius 11 · font Hanken 14 / 600
+  shadow 0 6px 16px -4px rgba(91,33,182,0.40)
+  label is the move verb: "Run Deep Prep" / "Compare & negotiate".
+States: only the gem pose (offering when a move is live; resting when idle/none).
+
+================================================================================
+3. JOB-CARD NEXT-MOVE TREATMENT   (no chrome)
+================================================================================
+Container
+  background --surface · border 1px --border-card #E6EAEF · radius 14
+  padding 15px 16px · shadow 0 2px 6px rgba(16,24,40,0.06) · width 260
+Header row  (flex space-between, gap 8)
+  Company: Bricolage 17 / 600 / -0.01em · color --text-primary
+  Status cue (right): flex gap 5 · font 11px / 600 · color = cue token,
+    preceded by a 6×6 round dot in the same color. NO "quest" mark.
+    "New reply" --cue-amber #C2410C · "Screen Tue" --cue-scheduled #6D3DBE
+    "Offer in" --cue-offer #1B7F57
+Salary pill
+  inline-block · margin-top 9 · font 12.5px / 600 · color #4A5566
+  background #EEF1F5 · radius 8 · padding 4px 9px · tabular-nums
+Next-move line
+  margin 12 0 0 · font 13px / 1.5 · color --text-body #566072
+  (plain coaching line, e.g. "Prep your screen — they reward clear thinking out loud.")
+CTA  (margin-top 12, full width, radius 10, font Hanken 13 / 600)
+  primary:   background --accent #7C50CE · color #FFFFFF · border none · padding 9
+  secondary: background --accent-tint-bg #F4EFFB · color --accent-deep #6D3DBE
+             border 1px --accent-tint-border #E2D6F3 · padding 9
+  (secondary used for "Run Quick Prep"; primary for Deep Prep / Compare & negotiate.)
+No Track button. No turn-in. No marker.
+
+================================================================================
+4. TODAY — THE GEM'S SHORT LIST   (max 3)
+================================================================================
+Panel
+  width 380 · background --surface · border 1px --border · radius 18
+  shadow 0 2px 10px -2px rgba(16,24,40,0.07) · padding 20
+Header  (flex align-center gap 10, margin-bottom 8)
+  Gem <svg> 26×26 pose resting · "Today" font 15 / 700 · color --text-primary
+Row  (flex align-start gap 12, padding 13px 0; rows 2..n add border-top 1px --divider)
+  Gem slot: 30×30 box, <svg> 30×30. pose offering for the active (first) move,
+    resting for the rest.
+  Line: font 13.5px / 1.45 · color --text-secondary; lead clause <strong>
+    color --text-primary.
+  Sub-button (one per row): margin-top 8 · padding 6px 12px · background --surface
+    color --accent-deep #6D3DBE · border 1px --accent-tint-border #E2D6F3
+    radius 8 · font Hanken 12 / 600.  ("Run Deep Prep" / "Run Quick Prep" / "See where to look")
+
+================================================================================
+5. MILESTONE CARD   (dismissible)
+================================================================================
+Container  (position relative)
+  flex align-center gap 16
+  background linear-gradient(135deg, --milestone-from #F3ECFC, --milestone-to #FBF6F0)
+  border 1px --milestone-border #E7DBF8 · radius 16 · padding 18px 20px
+  shadow 0 10px 30px -14px rgba(91,33,182,0.30) · max-width 460
+Gem
+  <svg> 72×72 pose celebrating · (animation gFloat 4s in this board).
+Title
+  Bricolage 18 / 600 / -0.01em · color --text-primary · line-height 1.2
+  e.g. "First offer."
+Body
+  margin 5 0 0 · font 13.5px / 1.5 · color --text-body
+  e.g. "Time to compare and negotiate. I'll line it up."
+Dismiss control
+  absolute top 12 right 12 · 24×24 · background transparent · border none
+  color --dismiss #B6A8C8 · radius 6 · X glyph 13px stroke-width 2.2 round caps.
+Behavior: encouragement only — no streaks, no guilt, no loss state. Dismiss → gem
+returns to resting on the rail.
+
+================================================================================
+6. ONBOARDING LINES   (just-in-time, no forced tour)
+================================================================================
+Card
+  background --surface · border 1px --border · radius 16
+  shadow 0 1px 3px rgba(16,24,40,0.05) · padding 22
+Eyebrow  (the moment label)
+  font 10.5px / 700 · letter-spacing 0.10em · uppercase · color --gem-label #A89BCB
+  margin-bottom 14.  ("Empty board" / "After the first job" / "New stage reached")
+Row  (flex align-start gap 13)
+  Gem <svg> 46×46 — pose resting for a passive prompt (empty board),
+    offering when it points at a move (after first job / new stage).
+  Line: font 14 / 1.55 · color --text-secondary · padding-top 4.
+Copy is one sentence, the gem's voice:
+  Empty board       "Add your first job and I'll line up your first move."
+  After first job   "Got it. Run a Quick Prep on {Company} to see what I can do."
+  New stage reached "You're at the {stage} now. Prep it — they reward clear thinking out loud."
+
+================================================================================
+7. VOICE — WHAT THE GEM SAYS, BY STAGE
+================================================================================
+Terse coach. One move per stage. {Company}/{N} are interpolated.
+  Applied        "Get a first read on {Company}."                                  → Quick Prep
+  Screen         "Prep your {Company} screen. Screens reward clear thinking out loud." → Deep Prep
+  Hiring Manager "Read the room before the {Company} HM call."                       → Deep Prep
+  Full Loop      "Prep all {N} rounds at {Company}."                                 → Deep Prep
+  Offer          "See how {Company} stacks up, then walk in ready to negotiate."     → Compare & negotiate
+Priority when several apply: prep-due interview > quick-prep gap > apply pace.
+The gem says exactly one thing at a time; when nothing is urgent it rests.
+
+================================================================================
+END OF SPEC
+================================================================================

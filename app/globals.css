@@ -250,6 +250,11 @@
   --salary-text: #4A5566;
   --salary-bg: #EEF1F5;
 
+  /* Gem-guide job-card status cues */
+  --cue-amber: #C2410C;
+  --cue-scheduled: var(--accent-deep);
+  --cue-offer: #1B7F57;
+
   /* 1c. Border radius (px tokens; circles use 50%) */
   --radius-5: 5px;
   --radius-7: 7px;

@@ -1,12 +1,13 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Fragment, useEffect, useState } from "react"
 import Link from "next/link"
 import {
   ArrowRight,
   ChevronDown,
   Compass,
   ExternalLink,
+  Lightbulb,
   Plus,
   X,
 } from "lucide-react"
@@ -100,6 +101,8 @@ function todayCoachLine(item: TodayItem): string {
   }
 }
 
+// Rail card base (spec: bg surface, border --border, radius 16, shadow E0,
+// overflow hidden). Each consumer owns its internal padding.
 function Panel({
   children,
   className,
@@ -110,7 +113,7 @@ function Panel({
   return (
     <div
       className={cn(
-        "rounded-xl border border-gray-200 bg-white p-4",
+        "overflow-hidden rounded-[16px] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-e0)]",
         className
       )}
     >
@@ -119,10 +122,10 @@ function Panel({
   )
 }
 
-// Apply-goal hero, top of the rail. Replaces the old Pipeline scoreboard (the
-// kanban already shows per-column counts, and the zeros framing was demeaning).
-// The weekly pace is the focus; honest, estimate-labeled projections recede as
-// supporting context. Reuses the board-rating bar style; no new tokens.
+// Apply-goal hero (spec: radius 20, padding 24/24/22, shadow E4, decorative
+// radial blob, eyebrow, big numeral row, 15-segment pace meter, copy). The
+// estimate projections moved to the Insights card. "Next quest" is preserved
+// as the Phase 2A quest-framing line beneath the meter.
 function ApplyGoalHero({
   goal,
   nextQuest,
@@ -130,71 +133,115 @@ function ApplyGoalHero({
   goal: ApplyGoal
   nextQuest: string | null
 }) {
+  const logged = Math.min(goal.loggedThisWeek, APPLY_TARGET)
   const met = goal.loggedThisWeek >= APPLY_TARGET
-  const pct = Math.min(100, (goal.loggedThisWeek / APPLY_TARGET) * 100)
-  const subline = met
+  const copy = met
     ? "Pace met. Steady beats bursts, keep it going."
     : "15 to 20 a week is the researched sweet spot, and steady beats bursts."
 
   return (
-    <Panel>
-      <p className="type-eyebrow text-[var(--text-muted)]">Quest</p>
-      <h2 className="mt-0.5 font-display text-sm font-medium text-[#1C1E21]">
-        Keep the pipeline alive
-      </h2>
-      <div className="mt-2 flex items-baseline gap-1.5">
-        <span className="font-display text-2xl font-medium text-[#1C1E21]">
+    <div className="relative overflow-hidden rounded-[20px] border border-[var(--border)] bg-[var(--surface)] px-6 pb-[22px] pt-6 shadow-[var(--shadow-e4)]">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-10 -top-10 size-[140px] rounded-full"
+        style={{
+          background:
+            "radial-gradient(circle, rgba(79,70,229,0.06), transparent 70%)",
+        }}
+      />
+      <p className="type-eyebrow text-[var(--text-muted)]">Apply goal</p>
+      <div className="mt-3.5 flex items-baseline gap-[9px]">
+        <span className="type-hero-numeral tabular-nums text-[var(--text-primary)]">
           {goal.loggedThisWeek}
         </span>
-        <span className="text-xs text-gray-500">
-          / {APPLY_TARGET} this week
+        <span className="type-hero-denominator tabular-nums text-[var(--text-fainter)]">
+          / {APPLY_TARGET}
+        </span>
+        <span className="ml-auto self-end pb-[9px] type-rail-label text-[var(--text-faint)]">
+          this week
         </span>
       </div>
-      <div className="mt-2 h-1.5 w-full rounded-full bg-gray-100">
-        <div
-          className="h-1.5 rounded-full bg-[#482C4C]"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <p className="mt-1.5 text-xs leading-snug text-gray-500">{subline}</p>
-      <div className="mt-2.5 border-t border-gray-100 pt-2.5">
-        <p className="text-[11px] leading-snug text-gray-400">
-          {goal.projection.leadIn}
-        </p>
-        {goal.projection.lines.map((line, i) => (
-          <p key={i} className="mt-1 text-[11px] leading-snug text-gray-500">
-            {line}
-          </p>
+      <div className="mb-[9px] mt-[18px] flex gap-1">
+        {Array.from({ length: APPLY_TARGET }).map((_, i) => (
+          <span
+            key={i}
+            className={cn(
+              "h-[9px] flex-1 rounded-[5px]",
+              i < logged
+                ? "bg-[var(--accent)]"
+                : i === logged && !met
+                  ? "animate-[guildyPulse_2.4s_ease-in-out_infinite]"
+                  : "bg-[#E2E7EE]"
+            )}
+          />
         ))}
       </div>
+      <p className="text-[12px] font-semibold tabular-nums text-[var(--text-fainter)]">
+        {goal.loggedThisWeek} of {APPLY_TARGET} logged
+      </p>
+      <p className="mt-3.5 text-[13.5px] leading-[1.5] text-[var(--text-body)]">
+        {copy}
+      </p>
       {nextQuest ? (
-        <p className="mt-2.5 border-t border-gray-100 pt-2.5 text-xs leading-snug text-[var(--text-body)]">
+        <p className="mt-3.5 border-t border-[var(--divider-kanban)] pt-3.5 text-[13px] leading-[1.45] text-[var(--text-body)]">
           <span className="text-[var(--text-muted)]">Next quest: </span>
           {nextQuest}
         </p>
       ) : null}
+    </div>
+  )
+}
+
+// Insights card (spec). Stat-forward rows derived from the same researched
+// ranges as the old hero projection, restructured to {stat, text}.
+function InsightsCard({ rows }: { rows: ApplyProjection["rows"] }) {
+  if (rows.length === 0) return null
+  return (
+    <Panel>
+      <div className="flex items-center gap-[9px] border-b border-[var(--divider-kanban)] px-4 pb-3 pt-3.5">
+        <Lightbulb className="size-[15px] shrink-0 text-[#8A93A3]" />
+        <span className="text-[13px] font-bold tracking-[0.02em] text-[var(--text-primary)]">
+          Insights
+        </span>
+        <span className="ml-auto type-model-badge text-[var(--text-fainter)]">
+          Live estimate
+        </span>
+      </div>
+      <div className="flex flex-col gap-[13px] px-4 py-[15px]">
+        {rows.map((row, i) => (
+          <Fragment key={i}>
+            {i > 0 ? <div className="h-px bg-[var(--divider-kanban)]" /> : null}
+            <div className="flex items-start gap-[11px]">
+              <span className="type-insights-stat shrink-0 tabular-nums text-[var(--text-primary)]">
+                {row.stat}
+              </span>
+              <span className="text-[12.5px] leading-[1.45] text-[var(--text-muted)]">
+                {row.text}
+              </span>
+            </div>
+          </Fragment>
+        ))}
+      </div>
     </Panel>
   )
 }
 
-function BoardRow({ board }: { board: BoardRating }) {
+function BoardRow({ board, isTop }: { board: BoardRating; isTop: boolean }) {
   return (
-    <li className="flex flex-col gap-1 py-2">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium text-[#1C1E21]">
-          {board.board}
-        </span>
-        <span className="shrink-0 rounded-md bg-[#EDE9FE] px-1.5 py-0.5 text-xs font-semibold text-[#4E3BDD]">
-          {board.score}/10
-        </span>
-      </div>
-      <div className="h-1 w-full rounded-full bg-gray-100">
-        <div
-          className="h-1 rounded-full bg-[#482C4C]"
-          style={{ width: `${board.score * 10}%` }}
-        />
-      </div>
-      <span className="text-xs leading-snug text-gray-500">{board.reason}</span>
+    <li className="flex items-center justify-between gap-2 py-[9px] [&:not(:first-child)]:border-t [&:not(:first-child)]:border-[var(--divider-kanban)]">
+      <span className="min-w-0 truncate text-[13px] font-medium text-[#3A4453]">
+        {board.board}
+      </span>
+      <span
+        className={cn(
+          "shrink-0 rounded-[7px] px-2 py-0.5 text-[12px] font-semibold tabular-nums",
+          isTop
+            ? "bg-[var(--indigo-tint-bg)] text-[var(--indigo)]"
+            : "bg-[var(--salary-bg)] text-[var(--text-muted)]"
+        )}
+      >
+        {board.score}/10
+      </span>
     </li>
   )
 }
@@ -233,13 +280,11 @@ function AdvisorPanel({ advisor }: { advisor: Advisor }) {
     }
   }, [advisor.mode, advisor.roleTitle])
 
-  const subhead = advisor.roleLabel
-    ? `Best boards for ${advisor.roleLabel}`
-    : "Best boards for your search"
   const roleText = advisor.roleLabel ?? "your search"
-  const summary = loading
+  const sub = loading
     ? "Finding your board map..."
     : `${boards.length} boards for ${roleText}`
+  const maxScore = boards.reduce((m, b) => Math.max(m, b.score), 0)
 
   return (
     <Panel>
@@ -247,53 +292,58 @@ function AdvisorPanel({ advisor }: { advisor: Advisor }) {
         type="button"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
-        className="flex w-full items-center justify-between gap-2 text-left"
+        className="flex w-full items-center gap-3 px-[18px] py-4 text-left transition-colors hover:bg-[#F7F9FB]"
       >
-        <span className="flex min-w-0 items-center gap-1.5">
-          <Compass className="size-4 shrink-0 text-[#4E3BDD]" />
-          <span className="font-display text-sm font-medium text-[#1C1E21]">
+        <span className="flex size-[30px] shrink-0 items-center justify-center rounded-[9px] bg-[var(--indigo-tint-bg)]">
+          <Compass className="size-4 text-[var(--indigo)]" />
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="text-[14.5px] font-semibold text-[var(--text-primary)]">
             Where to look
+          </span>
+          <span className="truncate text-[12.5px] text-[var(--text-faint)]">
+            {sub}
           </span>
         </span>
         <ChevronDown
           className={cn(
-            "size-4 shrink-0 text-gray-400 transition-transform",
+            "size-4 shrink-0 text-[var(--text-fainter)] transition-transform",
             expanded && "rotate-180"
           )}
         />
       </button>
 
-      {!expanded ? (
-        <p className="mt-1 truncate text-xs text-gray-500">{summary}</p>
-      ) : (
-        <>
-          <p className="mt-1 text-xs text-gray-500">{subhead}</p>
+      {expanded ? (
+        <div className="flex flex-col border-t border-[var(--divider-kanban)] px-[18px] pb-4 pt-0.5">
           {loading ? (
-            <div className="mt-3 flex flex-col gap-3" aria-live="polite">
-              <p className="text-xs text-gray-400">Finding your board map...</p>
+            <div className="flex flex-col gap-3 py-3" aria-live="polite">
               {[0, 1, 2].map((i) => (
-                <div key={i} className="flex flex-col gap-1.5">
-                  <div className="h-3 w-2/3 animate-pulse rounded bg-gray-100" />
-                  <div className="h-1 w-full animate-pulse rounded-full bg-gray-100" />
-                </div>
+                <div
+                  key={i}
+                  className="h-3 w-2/3 animate-pulse rounded bg-[var(--divider)]"
+                />
               ))}
             </div>
           ) : (
             <>
-              <ul className="mt-2 flex flex-col divide-y divide-gray-100">
+              <ul className="flex flex-col">
                 {boards.map((board) => (
-                  <BoardRow key={board.board} board={board} />
+                  <BoardRow
+                    key={board.board}
+                    board={board}
+                    isTop={board.score === maxScore}
+                  />
                 ))}
               </ul>
               {note ? (
-                <p className="mt-2 text-[11px] leading-snug text-gray-400">
+                <p className="mt-2 text-[11px] leading-snug text-[var(--text-fainter)]">
                   {note}
                 </p>
               ) : null}
             </>
           )}
-        </>
-      )}
+        </div>
+      ) : null}
     </Panel>
   )
 }
@@ -302,13 +352,15 @@ function AdvisorPanel({ advisor }: { advisor: Advisor }) {
 // job's prep overlay via the Board's ?job= search param.
 function ActionRow({ href, label }: { href: string; label: string }) {
   return (
-    <li>
+    <li className="[&:not(:first-child)]:border-t [&:not(:first-child)]:border-[var(--divider-kanban)]">
       <Link
         href={href}
-        className="group -mx-2 flex items-center justify-between gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-gray-50"
+        className="flex items-start justify-between gap-3 py-[11px] transition-opacity hover:opacity-70"
       >
-        <span className="text-sm leading-snug text-[#1C1E21]">{label}</span>
-        <ArrowRight className="size-3.5 shrink-0 text-gray-400 transition-colors group-hover:text-[#4E3BDD]" />
+        <span className="text-[13.5px] leading-[1.45] text-[#3A4453]">
+          {label}
+        </span>
+        <ArrowRight className="mt-0.5 size-3.5 shrink-0 text-[#AEB7C2]" />
       </Link>
     </li>
   )
@@ -329,21 +381,23 @@ function TodayItemRow({ item }: { item: TodayItem }) {
       const label = todayCoachLine(item)
       if (!url) {
         return (
-          <li className="px-0 py-1.5 text-sm leading-snug text-[#1C1E21]">
+          <li className="py-[11px] text-[13.5px] leading-[1.45] text-[#3A4453] [&:not(:first-child)]:border-t [&:not(:first-child)]:border-[var(--divider-kanban)]">
             {label}
           </li>
         )
       }
       return (
-        <li>
+        <li className="[&:not(:first-child)]:border-t [&:not(:first-child)]:border-[var(--divider-kanban)]">
           <a
             href={url}
             target="_blank"
             rel="noopener noreferrer"
-            className="group -mx-2 flex items-center justify-between gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-gray-50"
+            className="flex items-start justify-between gap-3 py-[11px] transition-opacity hover:opacity-70"
           >
-            <span className="text-sm leading-snug text-[#1C1E21]">{label}</span>
-            <ExternalLink className="size-3.5 shrink-0 text-gray-400 transition-colors group-hover:text-[#4E3BDD]" />
+            <span className="text-[13.5px] leading-[1.45] text-[#3A4453]">
+              {label}
+            </span>
+            <ExternalLink className="mt-0.5 size-3.5 shrink-0 text-[#AEB7C2]" />
           </a>
         </li>
       )
@@ -366,17 +420,15 @@ function TodayPanel({
 }) {
   if (!hasJobs) {
     return (
-      <Panel>
-        <h2 className="font-display text-sm font-medium text-[#1C1E21]">
-          Today
-        </h2>
-        <p className="mt-1.5 text-sm leading-snug text-gray-500">
+      <Panel className="px-[18px] pb-[18px] pt-[18px]">
+        <h2 className="type-today-heading text-[var(--text-primary)]">Today</h2>
+        <p className="mt-2.5 text-[13.5px] leading-[1.45] text-[var(--text-muted)]">
           Add your first job and Today shows you exactly what to move next.
         </p>
         <button
           type="button"
           onClick={onAddJob}
-          className="mt-2 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-[#482C4C] px-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
+          className="mt-3 inline-flex h-[42px] w-full items-center justify-center gap-1.5 rounded-[13px] bg-[var(--ink)] px-3 text-[15px] font-semibold tracking-[0.01em] text-white shadow-[var(--shadow-ink-cta)] transition-colors hover:bg-[var(--ink-hover)]"
         >
           <Plus className="size-4" />
           Add your first job
@@ -388,9 +440,11 @@ function TodayPanel({
   if (items.length === 0) return null
 
   return (
-    <Panel>
-      <h2 className="font-display text-sm font-medium text-[#1C1E21]">Today</h2>
-      <ul className="mt-2 flex flex-col divide-y divide-gray-100">
+    <Panel className="px-[18px] pb-2 pt-[18px]">
+      <h2 className="type-today-heading mb-2.5 text-[var(--text-primary)]">
+        Today
+      </h2>
+      <ul className="flex flex-col">
         {items.map((item, i) => (
           <TodayItemRow key={i} item={item} />
         ))}
@@ -452,7 +506,7 @@ export function CommandRail({
 
   return (
     <aside className="w-full shrink-0 px-4 lg:w-[300px] lg:px-8 lg:pr-0">
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-[18px]">
         <GuideGem pose={pose} />
         {milestoneVisible && milestone ? (
           <div className="flex items-start gap-2 rounded-[var(--radius-12)] border border-[var(--accent-tint-border)] bg-[var(--accent-tint-bg)] px-3 py-2.5">
@@ -470,7 +524,10 @@ export function CommandRail({
           </div>
         ) : null}
         {applyGoal ? (
-          <ApplyGoalHero goal={applyGoal} nextQuest={nextQuest} />
+          <>
+            <ApplyGoalHero goal={applyGoal} nextQuest={nextQuest} />
+            <InsightsCard rows={applyGoal.projection.rows} />
+          </>
         ) : null}
         <AdvisorPanel advisor={advisor} />
         <TodayPanel

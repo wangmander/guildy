@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -431,12 +432,23 @@ export function Board({
       ) : null}
       <section aria-label="Pipeline" className="w-full">
         <div className="px-4 lg:px-8">
-          <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 lg:grid lg:grid-cols-5 lg:snap-none lg:overflow-visible lg:pb-0">
-            {UI_COLUMNS.map((col) => {
-              if (col.key === "applied") {
-                return (
+          <div className="flex snap-x snap-mandatory overflow-x-auto rounded-[18px] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-e1b)] lg:snap-none">
+            {UI_COLUMNS.map((col, i) => (
+              <Fragment key={col.key}>
+                {i > 0 && (
+                  <div
+                    aria-hidden
+                    className="w-px shrink-0 self-stretch"
+                    style={{
+                      background:
+                        col.key === "screen"
+                          ? "var(--divider-intake)"
+                          : "var(--divider)",
+                    }}
+                  />
+                )}
+                {col.key === "applied" ? (
                   <AppliedColumn
-                    key={col.key}
                     label={col.label}
                     jobs={grouped.applied}
                     questByJobId={questByJobId}
@@ -447,34 +459,32 @@ export function Board({
                     onDragStart={setDraggedJobId}
                     onDragEnd={() => setDraggedJobId(null)}
                   />
-                )
-              }
-              return (
-                <BoardColumn
-                  key={col.key}
-                  columnKey={col.key}
-                  label={col.label}
-                  jobs={grouped[col.key]}
-                  questByJobId={questByJobId}
-                  variant={col.variant}
-                  hint="Cards land here when you move them from Applied"
-                  isSearchActive={isSearchActive}
-                  draggedJobId={draggedJobId}
-                  onJobOpen={open}
-                  onJobMoveLeft={(jobId) => {
-                    const left = leftOfColumn(col.key)
-                    if (left) move(jobId, left, "arrow")
-                  }}
-                  onJobMoveRight={(jobId) => {
-                    const right = rightOfColumn(col.key)
-                    if (right) move(jobId, right, "arrow")
-                  }}
-                  onJobDrop={(jobId) => move(jobId, col.key, "drag")}
-                  onDragStart={setDraggedJobId}
-                  onDragEnd={() => setDraggedJobId(null)}
-                />
-              )
-            })}
+                ) : (
+                  <BoardColumn
+                    columnKey={col.key}
+                    label={col.label}
+                    jobs={grouped[col.key]}
+                    questByJobId={questByJobId}
+                    variant={col.variant}
+                    hint="Cards land here when you move them from earlier stages"
+                    isSearchActive={isSearchActive}
+                    draggedJobId={draggedJobId}
+                    onJobOpen={open}
+                    onJobMoveLeft={(jobId) => {
+                      const left = leftOfColumn(col.key)
+                      if (left) move(jobId, left, "arrow")
+                    }}
+                    onJobMoveRight={(jobId) => {
+                      const right = rightOfColumn(col.key)
+                      if (right) move(jobId, right, "arrow")
+                    }}
+                    onJobDrop={(jobId) => move(jobId, col.key, "drag")}
+                    onDragStart={setDraggedJobId}
+                    onDragEnd={() => setDraggedJobId(null)}
+                  />
+                )}
+              </Fragment>
+            ))}
           </div>
         </div>
       </section>

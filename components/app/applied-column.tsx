@@ -7,11 +7,13 @@ import { cn } from "@/lib/utils"
 
 import { ActivationModal } from "./activation-modal"
 import { AddJobModal } from "./add-job-modal"
-import { EmptyCard } from "./empty-card"
 import { JobCard } from "./job-card"
 
 import type { JobRow } from "./board"
 import type { JobQuest } from "@/lib/quests/quests"
+
+// Applied stage ramp (spec 1a): neutral, no hook.
+const APPLIED = { band: "#97A1AD", text: "#62707E", chip: "#E5E9EE" }
 
 type Props = {
   label: string
@@ -29,7 +31,6 @@ export function AppliedColumn({
   label,
   jobs,
   questByJobId,
-  isSearchActive,
   draggedJobId,
   onJobOpen,
   onJobDrop,
@@ -40,7 +41,6 @@ export function AppliedColumn({
   const [activatingJob, setActivatingJob] = useState<JobRow | null>(null)
   const [isOver, setIsOver] = useState(false)
   const count = jobs.length
-  const ghostCount = count === 0 && !isSearchActive ? 2 : 0
   const canAcceptDrop = draggedJobId !== null
 
   return (
@@ -63,26 +63,37 @@ export function AppliedColumn({
         if (jobId) onJobDrop(jobId)
       }}
       className={cn(
-        "flex min-w-[260px] shrink-0 snap-start flex-col rounded-xl border p-3 transition-colors lg:min-w-0 lg:shrink",
-        canAcceptDrop && isOver && "border-[#482C4C]/40 bg-[#482C4C]/5",
-        canAcceptDrop && !isOver && "border-dashed border-[#482C4C]/20"
+        "flex min-w-[208px] shrink-0 snap-start flex-col transition-colors lg:min-w-0 lg:flex-1 lg:shrink",
+        canAcceptDrop && isOver && "bg-[var(--surface-sunken)]"
       )}
     >
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-400">{label}</h3>
-        <span className="text-xs text-gray-400">{count}</span>
+      <div className="h-[3px] w-full" style={{ background: APPLIED.band }} />
+
+      <div className="flex items-center justify-between gap-2 px-[14px] pb-[11px] pt-[14px]">
+        <span
+          className="flex items-center gap-1.5 whitespace-nowrap text-[12.5px] font-bold uppercase tracking-[0.05em]"
+          style={{ color: APPLIED.text }}
+        >
+          {label}
+          <span
+            className="rounded-[7px] px-[7px] py-px text-[12px] font-bold"
+            style={{ background: APPLIED.chip, color: APPLIED.text }}
+          >
+            {count}
+          </span>
+        </span>
       </div>
 
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="mb-3 inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-[#482C4C] px-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
-      >
-        <Plus className="size-4" />
-        Add Job
-      </button>
+      <div className="flex max-h-[60vh] flex-col gap-[11px] overflow-y-auto px-3 pb-[14px]">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex h-[42px] items-center justify-center gap-1.5 rounded-[13px] bg-[var(--ink)] px-3 text-[15px] font-semibold tracking-[0.01em] text-white shadow-[var(--shadow-ink-cta)] transition-colors hover:bg-[var(--ink-hover)]"
+        >
+          <Plus className="size-4" />
+          Add Job
+        </button>
 
-      <div className="flex max-h-[60vh] flex-col gap-2 overflow-y-auto pr-1">
         {jobs.map((job) => (
           <JobCard
             key={job.id}
@@ -98,9 +109,6 @@ export function AppliedColumn({
             onDragEnd={onDragEnd}
             isDragging={draggedJobId === job.id}
           />
-        ))}
-        {Array.from({ length: ghostCount }).map((_, i) => (
-          <EmptyCard key={`ghost-${i}`} variant="inactive" />
         ))}
       </div>
 

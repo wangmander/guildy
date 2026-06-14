@@ -3,7 +3,7 @@
 import { useRef } from "react"
 import { ChevronLeft, ChevronRight, GripVertical } from "lucide-react"
 
-import { readinessLabel, type JobQuest, type Readiness } from "@/lib/quests/quests"
+import type { JobQuest } from "@/lib/quests/quests"
 import { cn } from "@/lib/utils"
 
 import type { CardVariant } from "@/lib/stages"
@@ -26,29 +26,11 @@ type Props = {
   isDragging?: boolean
 }
 
-const READINESS_CHIP: Record<Readiness, string> = {
-  not_ready: "bg-[var(--surface-sunken)] text-[var(--text-muted)]",
-  getting_there: "bg-[var(--indigo-tint-bg)] text-[var(--indigo)]",
-  ready: "bg-[var(--accent-chip-bg)] text-[var(--accent-deep)]",
-}
-
-function ReadinessChip({ readiness }: { readiness: Readiness }) {
-  return (
-    <span
-      className={cn(
-        "shrink-0 rounded-[var(--radius-7)] px-1.5 py-0.5 text-[11px] font-medium",
-        READINESS_CHIP[readiness]
-      )}
-    >
-      {readinessLabel(readiness)}
-    </span>
-  )
-}
-
+// Job-card next-move treatment (gem-guide section 3): no gem, no hook box.
+// Company + 6px status-cue dot + salary pill + next-move line + one CTA.
 export function JobCard({
   jobId,
   company,
-  role,
   meta,
   variant,
   quest,
@@ -66,11 +48,9 @@ export function JobCard({
   const cardRef = useRef<HTMLDivElement | null>(null)
 
   const isInactive = variant === "inactive"
-  // Phase 4e: cards in Applied (inactive variant) are now draggable so users
-  // can drag any card to any column. Activation modal stays as the canonical
-  // "I have a message to paste" path via the They Responded button.
   const draggable = Boolean(jobId) && Boolean(onDragStart)
-  const showArrows = !isInactive && (onMoveLeft !== undefined || onMoveRight !== undefined)
+  const showArrows =
+    !isInactive && (onMoveLeft !== undefined || onMoveRight !== undefined)
   const clickable = Boolean(jobId && onOpen)
 
   const open = () => {
@@ -79,6 +59,11 @@ export function JobCard({
   }
 
   const stop = (e: React.MouseEvent) => e.stopPropagation()
+
+  const cueColor =
+    quest?.cue?.tone === "offer"
+      ? "var(--cue-offer)"
+      : "var(--cue-scheduled)"
 
   return (
     <div
@@ -94,13 +79,9 @@ export function JobCard({
         onDragStart?.(jobId)
       }}
       onDragEnd={() => {
-        // The browser fires a synthetic click after a drag completes.
-        // Keep the flag true through that tick so the click handler bails.
         setTimeout(() => {
           justDraggedRef.current = false
         }, 0)
-        // Drop focus left on the source card so the focus ring doesn't
-        // linger after a mouse drag-and-release.
         cardRef.current?.blur()
         onDragEnd?.()
       }}
@@ -116,70 +97,79 @@ export function JobCard({
         }
       }}
       className={cn(
-        "group relative rounded-lg border px-3 py-2 outline-none transition-shadow",
+        "group relative rounded-[14px] border border-[var(--border-card)] bg-[var(--surface)] px-4 py-[15px] outline-none transition",
         isInactive
-          ? "border-black/5 bg-white/70 text-gray-500"
-          : "border-black/10 bg-white text-[#1C1E21] shadow-xs",
-        clickable && !draggable && "cursor-pointer",
+          ? "shadow-[var(--shadow-e1)]"
+          : "shadow-[var(--shadow-e2)]",
+        clickable &&
+          "cursor-pointer hover:border-[#C9A6F0] hover:shadow-[0_8px_20px_-8px_rgba(91,33,182,0.16)]",
         draggable && "cursor-grab active:cursor-grabbing",
-        clickable && "hover:shadow-md focus-visible:ring-2 focus-visible:ring-[#482C4C]/40 focus-visible:ring-offset-2",
+        clickable &&
+          "focus-visible:ring-2 focus-visible:ring-[var(--accent)]/30 focus-visible:ring-offset-2",
         isDragging && "opacity-50"
       )}
     >
       <GripVertical
         aria-hidden
-        className={cn(
-          "absolute right-1 top-1.5 size-3.5 opacity-0 transition-opacity group-hover:opacity-40",
-          isInactive ? "text-gray-400" : "text-gray-500"
-        )}
+        className="absolute right-1 top-1.5 size-3.5 text-[var(--text-faint)] opacity-0 transition-opacity group-hover:opacity-40"
       />
-      <div className="min-w-0 pr-4">
-        <div className="truncate text-sm font-medium leading-tight">
+
+      <div className="flex items-start justify-between gap-2 pr-4">
+        <span
+          className={cn(
+            "min-w-0 truncate text-[var(--text-primary)]",
+            isInactive ? "type-applied-company" : "type-job-company"
+          )}
+        >
           {company}
-        </div>
-        <div className="mt-0.5 flex min-w-0 items-center gap-2">
-          <span className="truncate text-xs text-gray-500">{role}</span>
-          {meta && (
+        </span>
+        {quest?.cue && (
+          <span
+            className="flex shrink-0 items-center gap-[5px] text-[11px] font-semibold"
+            style={{ color: cueColor }}
+          >
             <span
-              className={cn(
-                "ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
-                isInactive
-                  ? "bg-gray-100 text-gray-500"
-                  : "bg-[#482C4C]/10 text-[#482C4C]"
-              )}
-            >
-              {meta}
-            </span>
-          )}
-        </div>
+              className="size-1.5 rounded-full"
+              style={{ backgroundColor: cueColor }}
+            />
+            {quest.cue.label}
+          </span>
+        )}
       </div>
-      {quest && (
-        <div className="mt-2 flex flex-col gap-1">
-          <div className="flex items-start justify-between gap-2">
-            <span className="type-card-sublabel text-[var(--text-body)]">
-              {quest.line}
-            </span>
-            <ReadinessChip readiness={quest.readiness} />
-          </div>
-          {quest.secondaryLine && (
-            <span className="type-card-sublabel text-[var(--text-muted)]">
-              {quest.secondaryLine}
-            </span>
-          )}
-          {quest.ctaLabel && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                open()
-              }}
-              className="self-start text-xs font-medium text-[var(--accent-deep)] transition-colors hover:underline"
-            >
-              {quest.ctaLabel}
-            </button>
-          )}
-        </div>
+
+      {meta && (
+        <span className="mt-[9px] inline-block rounded-lg bg-[var(--salary-bg)] px-[9px] py-1 text-[12.5px] font-semibold tabular-nums text-[var(--salary-text)]">
+          {meta}
+        </span>
       )}
+
+      {quest && (
+        <>
+          <p className="mt-3 text-[13px] leading-[1.5] text-[var(--text-body)]">
+            {quest.line}
+          </p>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              if (quest.ctaAction === "compare") {
+                window.dispatchEvent(new CustomEvent("guildy:open-comp"))
+              } else {
+                open()
+              }
+            }}
+            className={cn(
+              "mt-3 w-full rounded-[10px] py-[9px] text-[13px] font-semibold transition",
+              quest.ctaVariant === "primary"
+                ? "bg-[var(--accent)] text-white hover:bg-[var(--accent-deep)]"
+                : "border border-[var(--accent-tint-border)] bg-[var(--accent-tint-bg)] text-[var(--accent-deep)] hover:bg-[#EDE4F9]"
+            )}
+          >
+            {quest.ctaLabel}
+          </button>
+        </>
+      )}
+
       {onActivate && (
         <button
           type="button"
@@ -187,16 +177,14 @@ export function JobCard({
             e.stopPropagation()
             onActivate()
           }}
-          className="mt-2 inline-flex h-7 w-full items-center justify-center rounded-md border border-[#482C4C]/20 bg-white text-xs font-medium text-[#482C4C] transition-colors hover:bg-[#482C4C]/5"
+          className="mt-3 w-full rounded-[10px] border border-[var(--border)] bg-[var(--surface-sunken)] py-[9px] text-[13px] font-semibold text-[#46505F] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--divider)]"
         >
           They Responded
         </button>
       )}
+
       {showArrows && (
-        <div
-          className="mt-2 flex items-center justify-between gap-1"
-          onClick={stop}
-        >
+        <div className="mt-3 flex items-center justify-between gap-1" onClick={stop}>
           <button
             type="button"
             onClick={(e) => {
@@ -205,7 +193,7 @@ export function JobCard({
             }}
             disabled={!canMoveLeft}
             aria-label="Move to previous stage"
-            className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-black/10 text-gray-500 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+            className="inline-flex size-6 items-center justify-center rounded-[7px] border border-[var(--border-card)] bg-[var(--surface-sunken)] text-[var(--text-faint)] transition-colors hover:border-[var(--border-strong)] hover:text-[#4A5566] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:border-[var(--border-card)]"
           >
             <ChevronLeft className="size-3.5" />
           </button>
@@ -217,7 +205,7 @@ export function JobCard({
             }}
             disabled={!canMoveRight}
             aria-label="Move to next stage"
-            className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-black/10 text-gray-500 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+            className="inline-flex size-6 items-center justify-center rounded-[7px] border border-[var(--border-card)] bg-[var(--surface-sunken)] text-[var(--text-faint)] transition-colors hover:border-[var(--border-strong)] hover:text-[#4A5566] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:border-[var(--border-card)]"
           >
             <ChevronRight className="size-3.5" />
           </button>

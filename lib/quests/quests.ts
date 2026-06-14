@@ -6,12 +6,23 @@ import type { StageKey } from "@/lib/stages"
 export type Readiness = "not_ready" | "getting_there" | "ready"
 export type MilestoneKey = "first_screen" | "first_loop" | "first_offer"
 
+// Job-card status cue (gem-guide section 3). Real state only, never a date.
+export type CueTone = "scheduled" | "offer"
+export type JobQuestCue = { label: string; tone: CueTone }
+
+// Card CTA action: "prep" opens the prep overlay, "compare" opens the comp bar.
+export type CtaAction = "prep" | "compare"
+export type CtaVariant = "primary" | "secondary"
+
 export type JobQuest = {
+  // Gem-voice next-move line (gem-guide section 7).
   line: string
-  // Offer carries a second guidance line (negotiate); other stages null.
-  secondaryLine: string | null
-  // null = no card button (Offer points to the comp bar; no off-limits wiring).
-  ctaLabel: string | null
+  ctaLabel: string
+  ctaVariant: CtaVariant
+  ctaAction: CtaAction
+  // Right-aligned status cue, or null (Applied has none).
+  cue: JobQuestCue | null
+  // Kept for quest prioritization; not rendered on the card (chip removed).
   readiness: Readiness
 }
 
@@ -52,40 +63,50 @@ export function deriveQuest(
   switch (stage) {
     case "screen":
       return {
-        line: `Prep your ${company} screen`,
-        secondaryLine: null,
+        line: `Prep your ${company} screen. Screens reward clear thinking out loud.`,
         ctaLabel: "Deep Prep",
+        ctaVariant: "primary",
+        ctaAction: "prep",
+        cue: { label: "Screen", tone: "scheduled" },
         readiness,
       }
     case "hiring_manager":
       return {
-        line: `Read the room before the ${company} HM call`,
-        secondaryLine: null,
+        line: `Read the room before the ${company} HM call.`,
         ctaLabel: "Deep Prep",
+        ctaVariant: "primary",
+        ctaAction: "prep",
+        cue: { label: "Hiring Manager", tone: "scheduled" },
         readiness,
       }
     case "interview_loop":
     case "final":
       return {
-        line: `Prep all ${roundCount} rounds at ${company}`,
-        secondaryLine: null,
+        line: `Prep all ${roundCount} rounds at ${company}.`,
         ctaLabel: "Deep Prep",
+        ctaVariant: "primary",
+        ctaAction: "prep",
+        cue: { label: "Full Loop", tone: "scheduled" },
         readiness,
       }
     case "offer":
       return {
-        line: `See how ${company} stacks up`,
-        secondaryLine: `Walk in ready to negotiate ${company}`,
-        ctaLabel: null,
+        line: `See how ${company} stacks up, then walk in ready to negotiate.`,
+        ctaLabel: "Compare & negotiate",
+        ctaVariant: "primary",
+        ctaAction: "compare",
+        cue: { label: "Offer in", tone: "offer" },
         readiness,
       }
     case "applied":
     case "closed":
     default:
       return {
-        line: `Get a first read on ${company}`,
-        secondaryLine: null,
+        line: `Get a first read on ${company}.`,
         ctaLabel: "Quick Prep",
+        ctaVariant: "secondary",
+        ctaAction: "prep",
+        cue: null,
         readiness,
       }
   }

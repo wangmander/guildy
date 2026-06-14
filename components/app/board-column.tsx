@@ -15,9 +15,20 @@ import {
 
 import { AddJobModal } from "./add-job-modal"
 import type { JobRow } from "./board"
-import { EmptyCard } from "./empty-card"
 import { JobCard } from "./job-card"
 import type { JobQuest } from "@/lib/quests/quests"
+
+// Per-stage ramp (spec 1a). Applied has its own column component.
+type ActiveCol = Exclude<UiColumnKey, "applied">
+const RAMP: Record<
+  ActiveCol,
+  { band: string; text: string; chip: string; addHover: string }
+> = {
+  screen: { band: "#5E97A0", text: "#3E767E", chip: "#E2EFF0", addHover: "hover:bg-[#EAEDF2] hover:text-[#4A5566]" },
+  hiring_manager: { band: "#6680BC", text: "#45598F", chip: "#E6ECF5", addHover: "hover:bg-[#EAEDF2] hover:text-[#4A5566]" },
+  full_loop: { band: "#8A72B6", text: "#6A5398", chip: "#ECE7F3", addHover: "hover:bg-[#EAEDF2] hover:text-[#4A5566]" },
+  offer: { band: "#7C50CE", text: "#6D3DBE", chip: "#EAE2F6", addHover: "hover:bg-[#EAE2F6] hover:text-[#6D3DBE]" },
+}
 
 type Props = {
   columnKey: UiColumnKey
@@ -42,7 +53,6 @@ export function BoardColumn({
   jobs,
   questByJobId,
   variant,
-  hint,
   isSearchActive,
   draggedJobId,
   onJobOpen,
@@ -56,16 +66,13 @@ export function BoardColumn({
   const [addOpen, setAddOpen] = useState(false)
   const isInactive = variant === "inactive"
   const count = jobs.length
-  const ghostCount = count === 0 && !isSearchActive ? 2 : 0
-  const showHint = !!hint && count === 0 && !isSearchActive
   const canAcceptDrop = !isInactive && draggedJobId !== null
   const canMoveLeft = leftOfColumn(columnKey) !== null
   const canMoveRight = rightOfColumn(columnKey) !== null
-  // Phase 4e prompt 2: + Add Job affordance on every BoardColumn except
-  // Offer. Stage pre-fill uses the column's WriteStage so the new job
-  // lands in this column immediately.
   const showPlus = columnKey !== "offer"
   const writeStage = columnToWriteStage(columnKey)
+  const ramp = RAMP[columnKey as ActiveCol]
+  const showEmpty = count === 0 && !isSearchActive
 
   return (
     <div
@@ -76,8 +83,6 @@ export function BoardColumn({
         if (!isOver) setIsOver(true)
       }}
       onDragLeave={(e) => {
-        // Only clear when the cursor actually leaves the column, not when
-        // moving across child elements.
         if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
         if (isOver) setIsOver(false)
       }}
@@ -89,23 +94,25 @@ export function BoardColumn({
         if (jobId) onJobDrop(jobId)
       }}
       className={cn(
-        "flex min-w-[260px] shrink-0 snap-start flex-col rounded-xl border p-3 transition-colors lg:min-w-0 lg:shrink",
-        canAcceptDrop && isOver && "border-[#482C4C]/40 bg-[#482C4C]/5",
-        canAcceptDrop && !isOver && "border-dashed border-[#482C4C]/20"
+        "flex min-w-[208px] shrink-0 snap-start flex-col transition-colors lg:min-w-0 lg:flex-1 lg:shrink",
+        canAcceptDrop && isOver && "bg-[var(--surface-sunken)]"
       )}
     >
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <h3
-          className={cn(
-            "text-sm font-semibold whitespace-nowrap",
-            isInactive ? "text-gray-400" : "text-[#482C4C]"
-          )}
+      <div className="h-[3px] w-full" style={{ background: ramp.band }} />
+
+      <div className="flex items-center justify-between gap-2 px-[14px] pb-[11px] pt-[14px]">
+        <span
+          className="flex items-center gap-1.5 whitespace-nowrap text-[12.5px] font-bold uppercase tracking-[0.05em]"
+          style={{ color: ramp.text }}
         >
           {label}
-          <span className="ml-1.5 text-xs font-normal text-gray-400">
-            · {count}
+          <span
+            className="rounded-[7px] px-[7px] py-px text-[12px] font-bold"
+            style={{ background: ramp.chip, color: ramp.text }}
+          >
+            {count}
           </span>
-        </h3>
+        </span>
         {showPlus ? (
           <button
             type="button"
@@ -115,41 +122,42 @@ export function BoardColumn({
               setAddOpen(true)
             }}
             aria-label={`Add job to ${label}`}
-            className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-[#1C1E21]"
+            className={cn(
+              "inline-flex size-[26px] shrink-0 items-center justify-center rounded-lg text-[var(--text-faint)] transition-colors",
+              ramp.addHover
+            )}
           >
             <Plus className="size-4" />
           </button>
         ) : null}
       </div>
 
-      <div className="flex max-h-[60vh] flex-col gap-2 overflow-y-auto pr-1">
-        {showHint && (
-          <p className="px-1 pb-1 text-[11px] leading-snug text-gray-400">
-            {hint}
-          </p>
+      <div className="flex max-h-[60vh] flex-col gap-[11px] overflow-y-auto px-3 pb-[14px]">
+        {showEmpty ? (
+          <div className="rounded-[14px] border-[1.5px] border-dashed border-[var(--border-strong)] px-[14px] py-[18px] text-center text-[12.5px] leading-[1.5] text-[#A2ACB9]">
+            Cards land here when you move them from earlier stages.
+          </div>
+        ) : (
+          jobs.map((job) => (
+            <JobCard
+              key={job.id}
+              jobId={job.id}
+              company={job.company_name}
+              role={job.role_title}
+              meta={job.tc ?? undefined}
+              variant={variant}
+              quest={questByJobId[job.id]}
+              onOpen={onJobOpen}
+              onMoveLeft={() => onJobMoveLeft(job.id)}
+              onMoveRight={() => onJobMoveRight(job.id)}
+              canMoveLeft={canMoveLeft}
+              canMoveRight={canMoveRight}
+              onDragStart={onDragStart}
+              onDragEnd={onDragEnd}
+              isDragging={draggedJobId === job.id}
+            />
+          ))
         )}
-        {jobs.map((job) => (
-          <JobCard
-            key={job.id}
-            jobId={job.id}
-            company={job.company_name}
-            role={job.role_title}
-            meta={job.tc ?? undefined}
-            variant={variant}
-            quest={questByJobId[job.id]}
-            onOpen={onJobOpen}
-            onMoveLeft={() => onJobMoveLeft(job.id)}
-            onMoveRight={() => onJobMoveRight(job.id)}
-            canMoveLeft={canMoveLeft}
-            canMoveRight={canMoveRight}
-            onDragStart={onDragStart}
-            onDragEnd={onDragEnd}
-            isDragging={draggedJobId === job.id}
-          />
-        ))}
-        {Array.from({ length: ghostCount }).map((_, i) => (
-          <EmptyCard key={`ghost-${i}`} variant={variant} />
-        ))}
       </div>
 
       {showPlus ? (
