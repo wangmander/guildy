@@ -72,7 +72,7 @@ export function SessionTabs({
     <div
       role="tablist"
       aria-label="Full Loop sessions"
-      className={`flex flex-nowrap items-center gap-1.5 whitespace-nowrap border-b border-gray-100 ${
+      className={`flex flex-nowrap items-center gap-1.5 whitespace-nowrap border-b border-[var(--divider)] ${
         disabled ? "cursor-not-allowed opacity-60" : ""
       }`}
     >
@@ -81,10 +81,10 @@ export function SessionTabs({
         const isSelected = role === selectedRole
 
         const variant = isSelected
-          ? "bg-white text-[#1C1E21] font-medium shadow-sm"
+          ? "bg-[var(--surface)] text-[var(--text-primary)] font-semibold shadow-[var(--shadow-e1)]"
           : disabled
-            ? `${state === "empty" ? "text-gray-400" : "text-gray-700"} font-normal`
-            : `${state === "empty" ? "text-gray-400" : "text-gray-700"} hover:bg-gray-50 font-normal`
+            ? `${state === "empty" ? "text-[var(--text-faint)]" : "text-[var(--text-body)]"} font-normal`
+            : `${state === "empty" ? "text-[var(--text-faint)]" : "text-[var(--text-body)]"} hover:bg-[var(--surface-sunken)] font-normal`
 
         return (
           <button
@@ -109,7 +109,7 @@ export function SessionTabs({
             {state === "generating" ? (
               <span
                 aria-hidden="true"
-                className="size-1.5 animate-pulse rounded-full bg-gray-400"
+                className="size-1.5 animate-pulse rounded-full bg-[var(--text-faint)]"
               />
             ) : null}
             {state === "stale" ? (

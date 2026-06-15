@@ -21,16 +21,14 @@ export function UpgradeWidget({ onUpgrade }: Props) {
   return (
     <>
       <div
-        className="rounded-2xl border border-[#4E3BDD]/15 p-4 shadow-sm"
+        className="rounded-[16px] border border-[var(--accent-tint-border)] p-4 shadow-[var(--shadow-e1)]"
         style={{
           background:
-            "linear-gradient(225deg, #E4BCED 0%, #FFFFF1 50%)",
+            "linear-gradient(135deg, var(--accent-tint-bg), var(--milestone-to))",
         }}
       >
-        <h3 className="font-display text-xl font-medium tracking-tight text-[#4E3BDD]">
-          Deep Prep
-        </h3>
-        <p className="mt-1.5 text-xs leading-relaxed text-gray-700">
+        <h3 className="type-comp-h2 text-[var(--accent-deep)]">Deep Prep</h3>
+        <p className="mt-1.5 text-xs leading-relaxed text-[var(--text-body)]">
           Quick Prep gets you ready. Deep Prep gives you the plan.
         </p>
 
@@ -38,9 +36,9 @@ export function UpgradeWidget({ onUpgrade }: Props) {
           {BULLETS.map((b) => (
             <li
               key={b}
-              className="flex items-start gap-2 text-xs leading-snug text-[#1C1E21]"
+              className="flex items-start gap-2 text-xs leading-snug text-[var(--text-primary)]"
             >
-              <Check className="mt-0.5 size-3.5 shrink-0 text-[#4E3BDD]" />
+              <Check className="mt-0.5 size-3.5 shrink-0 text-[var(--accent)]" />
               {b}
             </li>
           ))}
@@ -49,14 +47,14 @@ export function UpgradeWidget({ onUpgrade }: Props) {
         <button
           type="button"
           onClick={onUpgrade}
-          className="mt-4 inline-flex h-9 w-full items-center justify-center rounded-md bg-[#4E3BDD] text-sm font-medium text-white transition-colors hover:bg-[#4332C2]"
+          className="mt-4 inline-flex h-9 w-full items-center justify-center rounded-[10px] bg-[var(--accent)] text-sm font-semibold text-white shadow-[var(--shadow-accent-cta)] transition-colors hover:bg-[var(--accent-deep)]"
         >
-          Upgrade all Prep
+          Upgrade to Deep Prep
         </button>
         <button
           type="button"
           onClick={() => setCompareOpen(true)}
-          className="mt-2 inline-flex h-7 w-full items-center justify-center text-[11px] font-medium text-[#4E3BDD] hover:underline"
+          className="mt-2 inline-flex h-7 w-full items-center justify-center text-[11px] font-semibold text-[var(--accent-deep)] hover:underline"
         >
           Compare Quick vs Deep
         </button>

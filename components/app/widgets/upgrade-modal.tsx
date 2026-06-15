@@ -97,7 +97,7 @@ export function UpgradeModal({
     >
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-display">Unlock Deep Prep</DialogTitle>
+          <DialogTitle className="font-bricolage">Unlock Deep Prep</DialogTitle>
           <DialogDescription>$19.99/mo. Cancel anytime.</DialogDescription>
         </DialogHeader>
 
@@ -105,9 +105,9 @@ export function UpgradeModal({
           {BENEFITS.map((b) => (
             <li
               key={b}
-              className="flex items-start gap-2.5 text-sm text-gray-700"
+              className="flex items-start gap-2.5 text-sm text-[var(--text-body)]"
             >
-              <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[#4E3BDD]" />
+              <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[var(--accent)]" />
               {b}
             </li>
           ))}
@@ -122,7 +122,7 @@ export function UpgradeModal({
             type="button"
             onClick={subscribe}
             disabled={pending}
-            className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-[#4E3BDD] text-sm font-medium text-white transition-colors hover:bg-[#4332C2] disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-[10px] bg-[var(--accent)] text-sm font-semibold text-white shadow-[var(--shadow-accent-cta)] transition-colors hover:bg-[var(--accent-deep)] disabled:cursor-not-allowed disabled:opacity-60 disabled:shadow-none"
           >
             {pending ? <Loader2 className="size-4 animate-spin" /> : null}
             Subscribe

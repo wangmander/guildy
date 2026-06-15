@@ -26,17 +26,15 @@ export function InterviewerWidget({
   const sanitizedLink = sanitizeLink(link)
 
   return (
-    <div className="rounded-2xl border border-black/5 bg-white p-4 shadow-sm">
+    <div className="rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-e1)]">
       <div className="flex items-baseline justify-between">
-        <h3 className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-          Interviewer
-        </h3>
+        <h3 className="type-rail-label text-[var(--text-faint)]">Interviewer</h3>
         {hasAnyField ? (
           <button
             type="button"
             onClick={onEdit}
             aria-label="Edit interviewer"
-            className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium text-gray-400 transition-colors hover:text-[#482C4C]"
+            className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] font-semibold text-[var(--text-faint)] transition-colors hover:text-[var(--accent)]"
           >
             <Pencil className="size-3" />
             Edit
@@ -48,19 +46,27 @@ export function InterviewerWidget({
         <button
           type="button"
           onClick={onEdit}
-          className="mt-2 block w-full rounded-md border border-transparent p-2 text-left transition-colors hover:border-black/5 hover:bg-[#F8F9FA]"
+          className="mt-2 block w-full rounded-[10px] border border-transparent p-2 text-left transition-colors hover:border-[var(--border-card)] hover:bg-[var(--surface-sunken)]"
         >
           {name ? (
-            <p className="text-sm font-medium text-[#1C1E21]">{name}</p>
+            <p className="text-sm font-semibold text-[var(--text-primary)]">
+              {name}
+            </p>
           ) : null}
           {title ? (
-            <p className={name ? "text-xs text-gray-500" : "text-sm font-medium text-[#1C1E21]"}>
+            <p
+              className={
+                name
+                  ? "text-xs text-[var(--text-muted)]"
+                  : "text-sm font-semibold text-[var(--text-primary)]"
+              }
+            >
               {title}
             </p>
           ) : null}
           {sanitizedLink ? (
             <span
-              className="mt-1.5 inline-flex max-w-full items-center gap-1 rounded-md border border-black/10 bg-white px-2 py-0.5 text-[11px] text-gray-600"
+              className="mt-1.5 inline-flex max-w-full items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[11px] text-[var(--text-body)]"
               onClick={(e) => {
                 // Allow link clicks without re-opening the popover.
                 e.stopPropagation()
@@ -71,7 +77,7 @@ export function InterviewerWidget({
                 href={sanitizedLink}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="truncate hover:text-[#482C4C]"
+                className="truncate hover:text-[var(--accent)]"
               >
                 {prettyLink(sanitizedLink)}
               </a>
@@ -82,7 +88,7 @@ export function InterviewerWidget({
         <button
           type="button"
           onClick={onEdit}
-          className="mt-2 inline-flex h-9 w-full items-center gap-2 rounded-md border border-dashed border-black/15 bg-white px-3 text-sm text-gray-500 transition-colors hover:border-[#482C4C]/40 hover:text-[#482C4C]"
+          className="mt-2 inline-flex h-9 w-full items-center gap-2 rounded-[10px] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-3 text-sm text-[var(--text-muted)] transition-colors hover:border-[var(--accent)]/40 hover:text-[var(--accent)]"
         >
           <UserPlus className="size-3.5" />
           Add interviewer
@@ -90,22 +96,22 @@ export function InterviewerWidget({
       )}
 
       {showInsights ? (
-        <div className="mt-3 rounded-lg border border-[#482C4C]/15 bg-gradient-to-b from-[#482C4C]/5 to-white p-3">
-          <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-[#482C4C]">
+        <div className="mt-3 rounded-[10px] border border-[var(--accent-tint-border)] bg-[var(--accent-tint-bg)] p-3">
+          <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-[var(--accent-deep)]">
             <Sparkles className="size-3" />
             Insights
           </div>
-          <p className="mt-1.5 text-xs leading-relaxed text-gray-700">
+          <p className="mt-1.5 text-xs leading-relaxed text-[var(--text-body)]">
             {insights}
           </p>
         </div>
       ) : (
-        <div className="mt-3 rounded-lg border border-dashed border-black/10 bg-gray-50/60 p-3">
-          <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+        <div className="mt-3 rounded-[10px] border border-dashed border-[var(--border)] bg-[var(--surface-sunken)] p-3">
+          <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-[var(--text-faint)]">
             <Lock className="size-3" />
             Insights
           </div>
-          <p className="mt-1.5 text-xs leading-relaxed text-gray-500">
+          <p className="mt-1.5 text-xs leading-relaxed text-[var(--text-muted)]">
             {tier === "deep"
               ? "Generate Deep Prep with an interviewer to see insights here."
               : "Insights appear here when Deep Prep runs."}

@@ -177,19 +177,19 @@ export function InputsWidget({
 
   return (
     <div
-      className={`rounded-2xl border bg-white p-4 shadow-sm transition-colors duration-300 ${
-        pulse ? "border-[#482C4C]/40 ring-2 ring-[#482C4C]/15" : "border-black/5"
+      className={`rounded-[16px] border bg-[var(--surface)] p-4 shadow-[var(--shadow-e1)] transition-colors duration-300 ${
+        pulse
+          ? "border-[var(--accent)]/40 ring-2 ring-[var(--accent)]/15"
+          : "border-[var(--border)]"
       }`}
     >
       <div className="flex items-baseline justify-between">
-        <h3 className="text-[11px] font-medium uppercase tracking-wide text-gray-400">
-          Inputs
-        </h3>
-        <span className="text-xs tabular-nums text-gray-500">
+        <h3 className="type-rail-label text-[var(--text-faint)]">Inputs</h3>
+        <span className="text-xs tabular-nums text-[var(--text-muted)]">
           {filled}/{rows.length}
         </span>
       </div>
-      <p className="mt-0.5 text-[11px] leading-snug text-gray-400">
+      <p className="mt-0.5 text-[11px] leading-snug text-[var(--text-faint)]">
         Deep is sharper with all 5.
       </p>
 
@@ -276,7 +276,7 @@ export function InputsWidget({
         <button
           type="button"
           onClick={() => onExpand("jd")}
-          className="mt-3 inline-flex h-8 items-center gap-1 text-xs font-medium text-[#4E3BDD] hover:underline"
+          className="mt-3 inline-flex h-8 items-center gap-1 text-xs font-semibold text-[var(--accent-deep)] hover:underline"
         >
           <Plus className="size-3.5" />
           Add context
@@ -301,8 +301,8 @@ function RowItem({
         type: "button" as const,
         onClick,
         "aria-expanded": isOpen,
-        className: `flex w-full items-start gap-2 rounded-md p-1 text-left transition-colors hover:bg-[#F8F9FA] ${
-          isOpen ? "bg-[#482C4C]/5" : ""
+        className: `flex w-full items-start gap-2 rounded-[8px] p-1 text-left transition-colors hover:bg-[var(--surface-sunken)] ${
+          isOpen ? "bg-[var(--accent-tint-bg)]" : ""
         }`,
       }
     : { className: "flex items-start gap-2 p-1" }
@@ -312,8 +312,8 @@ function RowItem({
         <span
           className={
             row.present
-              ? "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-[#482C4C]/10 text-[#482C4C]"
-              : "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-400"
+              ? "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--accent-tint-bg)] text-[var(--accent)]"
+              : "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--surface-sunken)] text-[var(--text-faint)]"
           }
         >
           {row.present ? <Check className="size-3" /> : <Minus className="size-3" />}
@@ -323,21 +323,21 @@ function RowItem({
             <span
               className={
                 row.present
-                  ? "text-sm text-[#1C1E21]"
-                  : "text-sm text-gray-500"
+                  ? "text-sm text-[var(--text-primary)]"
+                  : "text-sm text-[var(--text-muted)]"
               }
             >
               {row.label}
             </span>
             {row.hint === "deep" ? (
-              <span className="inline-flex items-center gap-0.5 rounded bg-[#EDE9FE] px-1 py-0.5 text-[9px] font-medium uppercase tracking-wide text-[#4E3BDD]">
+              <span className="inline-flex items-center gap-0.5 rounded bg-[var(--accent-chip-bg)] px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[var(--accent-deep)]">
                 <Sparkles className="size-2.5" />
                 Deep
               </span>
             ) : null}
           </div>
           {row.preview ? (
-            <p className="mt-0.5 truncate text-[11px] leading-snug text-gray-400">
+            <p className="mt-0.5 truncate text-[11px] leading-snug text-[var(--text-faint)]">
               {row.preview}
             </p>
           ) : null}
@@ -346,8 +346,8 @@ function RowItem({
           <ChevronDown
             className={
               isOpen
-                ? "mt-0.5 size-3.5 shrink-0 text-[#482C4C] transition-transform"
-                : "mt-0.5 size-3.5 shrink-0 -rotate-90 text-gray-400 transition-transform"
+                ? "mt-0.5 size-3.5 shrink-0 text-[var(--accent)] transition-transform"
+                : "mt-0.5 size-3.5 shrink-0 -rotate-90 text-[var(--text-faint)] transition-transform"
             }
             aria-hidden
           />
@@ -370,7 +370,7 @@ const Section = forwardRef<HTMLDivElement, SectionProps>(function Section(
   return (
     <div
       ref={ref}
-      className="rounded-md border border-black/5 bg-[#F8F9FA] p-5"
+      className="rounded-[10px] border border-[var(--border-card)] bg-[var(--surface-sunken)] p-5"
     >
       {children}
     </div>
@@ -427,7 +427,7 @@ function BackgroundForm({
         onChange={(e) => setValue(e.target.value)}
         placeholder="Resume text, LinkedIn summary, or any background that frames your work…"
         rows={12}
-        className="w-full resize-y rounded-md border border-black/10 bg-white px-3 py-2.5 text-sm leading-relaxed text-[#1C1E21] placeholder:text-gray-400 focus:border-[#482C4C] focus:outline-none focus:ring-2 focus:ring-[#482C4C]/15"
+        className="w-full resize-y rounded-[10px] border border-[var(--border-card)] bg-[var(--surface)] px-3 py-2.5 text-sm leading-relaxed text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/15"
       />
     </FormShell>
   )
@@ -490,7 +490,7 @@ function JdForm({
         onChange={(e) => setValue(e.target.value)}
         placeholder="Paste the full JD…"
         rows={12}
-        className="w-full resize-y rounded-md border border-black/10 bg-white px-3 py-2.5 text-sm leading-relaxed text-[#1C1E21] placeholder:text-gray-400 focus:border-[#482C4C] focus:outline-none focus:ring-2 focus:ring-[#482C4C]/15"
+        className="w-full resize-y rounded-[10px] border border-[var(--border-card)] bg-[var(--surface)] px-3 py-2.5 text-sm leading-relaxed text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/15"
       />
     </FormShell>
   )
@@ -559,7 +559,7 @@ function LatestMessageForm({
         onChange={(e) => setValue(e.target.value)}
         placeholder="Paste the message…"
         rows={8}
-        className="w-full resize-y rounded-md border border-black/10 bg-white px-3 py-2.5 text-sm leading-relaxed text-[#1C1E21] placeholder:text-gray-400 focus:border-[#482C4C] focus:outline-none focus:ring-2 focus:ring-[#482C4C]/15"
+        className="w-full resize-y rounded-[10px] border border-[var(--border-card)] bg-[var(--surface)] px-3 py-2.5 text-sm leading-relaxed text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/15"
       />
     </FormShell>
   )
@@ -642,21 +642,21 @@ function InterviewerForm({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Name"
-          className="h-9 w-full rounded-md border border-black/10 bg-white px-3 text-sm text-[#1C1E21] placeholder:text-gray-400 focus:border-[#482C4C] focus:outline-none focus:ring-2 focus:ring-[#482C4C]/15"
+          className="h-9 w-full rounded-[10px] border border-[var(--border-card)] bg-[var(--surface)] px-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/15"
         />
         <input
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Title (e.g. Director of Design)"
-          className="h-9 w-full rounded-md border border-black/10 bg-white px-3 text-sm text-[#1C1E21] placeholder:text-gray-400 focus:border-[#482C4C] focus:outline-none focus:ring-2 focus:ring-[#482C4C]/15"
+          className="h-9 w-full rounded-[10px] border border-[var(--border-card)] bg-[var(--surface)] px-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/15"
         />
         <input
           type="text"
           value={link}
           onChange={(e) => setLink(e.target.value)}
           placeholder="LinkedIn or profile URL"
-          className="h-9 w-full rounded-md border border-black/10 bg-white px-3 text-sm text-[#1C1E21] placeholder:text-gray-400 focus:border-[#482C4C] focus:outline-none focus:ring-2 focus:ring-[#482C4C]/15"
+          className="h-9 w-full rounded-[10px] border border-[var(--border-card)] bg-[var(--surface)] px-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/15"
         />
       </div>
     </FormShell>
@@ -722,7 +722,7 @@ function NoteForm({
         onChange={(e) => setValue(e.target.value)}
         placeholder="Personal context, target comp, internal referrals, anything…"
         rows={8}
-        className="w-full resize-y rounded-md border border-black/10 bg-white px-3 py-2.5 text-sm leading-relaxed text-[#1C1E21] placeholder:text-gray-400 focus:border-[#482C4C] focus:outline-none focus:ring-2 focus:ring-[#482C4C]/15"
+        className="w-full resize-y rounded-[10px] border border-[var(--border-card)] bg-[var(--surface)] px-3 py-2.5 text-sm leading-relaxed text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/15"
       />
     </FormShell>
   )
@@ -749,7 +749,7 @@ function FormShell({
 }) {
   return (
     <div>
-      <p className="mb-2 text-xs text-gray-500">{label}</p>
+      <p className="mb-2 text-xs text-[var(--text-muted)]">{label}</p>
       {children}
       {error ? (
         <p className="mt-1.5 text-[11px] text-red-600">{error}</p>
@@ -760,7 +760,7 @@ function FormShell({
             type="button"
             onClick={onClear}
             disabled={pending}
-            className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-gray-500 transition-colors hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-8 items-center gap-1 rounded-[8px] px-2 text-xs font-semibold text-[var(--text-muted)] transition-colors hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Trash2 className="size-3.5" />
             Clear
@@ -773,7 +773,7 @@ function FormShell({
             type="button"
             onClick={onCancel}
             disabled={pending}
-            className="inline-flex h-8 items-center rounded-md px-2.5 text-xs font-medium text-gray-600 transition-colors hover:text-[#1C1E21] disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-8 items-center rounded-[8px] px-2.5 text-xs font-semibold text-[var(--text-body)] transition-colors hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             Cancel
           </button>
@@ -781,7 +781,7 @@ function FormShell({
             type="button"
             onClick={onSave}
             disabled={pending}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#482C4C] px-3 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-8 items-center gap-1.5 rounded-[8px] bg-[var(--accent)] px-3 text-xs font-semibold text-white transition-colors hover:bg-[var(--accent-deep)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {pending ? <Loader2 className="size-3 animate-spin" /> : null}
             Save

@@ -79,15 +79,15 @@ export function ProgressLoader({ tier }: Props) {
     >
       <div className="flex items-center gap-2">
         <TierBadge tier={tier} />
-        <p className="text-xs text-gray-500">{label}</p>
+        <p className="text-xs text-[var(--text-muted)]">{label}</p>
       </div>
 
       <div
-        className="h-1 w-full overflow-hidden rounded-full bg-gray-100"
+        className="h-1 w-full overflow-hidden rounded-full bg-[var(--divider)]"
         aria-hidden
       >
         <div
-          className="h-full rounded-full bg-[#4E3BDD]"
+          className="h-full rounded-full bg-[var(--accent)]"
           style={{
             width: `${width}%`,
             transition: `width ${targetSec}s ease-out`,
@@ -99,12 +99,12 @@ export function ProgressLoader({ tier }: Props) {
         {[0, 1, 2, 3].map((i) => (
           <div
             key={i}
-            className="animate-pulse rounded-xl border border-black/5 bg-white p-5 shadow-sm"
+            className="animate-pulse rounded-[14px] border border-[var(--border-card)] bg-[var(--surface)] p-5 shadow-[var(--shadow-e1)]"
           >
             <div className="space-y-2">
-              <div className="h-2 w-3/4 rounded-full bg-gray-100" />
-              <div className="h-2 w-2/3 rounded-full bg-gray-100" />
-              <div className="h-2 w-1/2 rounded-full bg-gray-100" />
+              <div className="h-2 w-3/4 rounded-full bg-[var(--divider)]" />
+              <div className="h-2 w-2/3 rounded-full bg-[var(--divider)]" />
+              <div className="h-2 w-1/2 rounded-full bg-[var(--divider)]" />
             </div>
           </div>
         ))}
@@ -118,14 +118,14 @@ export function ProgressLoader({ tier }: Props) {
 function TierBadge({ tier }: { tier: PrepTier }) {
   if (tier === "deep") {
     return (
-      <span className="inline-flex items-center gap-1 rounded bg-[#EDE9FE] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#4E3BDD]">
+      <span className="inline-flex items-center gap-1 rounded bg-[var(--accent-chip-bg)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--accent-deep)]">
         <Sparkles className="size-2.5" />
         Sonnet 4.6 · Deep
       </span>
     )
   }
   return (
-    <span className="inline-flex items-center rounded bg-gray-200/70 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-700">
+    <span className="inline-flex items-center rounded bg-[var(--salary-bg)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
       Haiku 4.5 · Quick
     </span>
   )

@@ -12,18 +12,26 @@ type Props = {
 // to attach to (currently: ResumeJdFit only).
 export function LockedPreviewModule({ title, teaser, onUpgrade }: Props) {
   return (
-    <section className="rounded-xl border border-dashed border-[#4E3BDD]/25 bg-gradient-to-b from-[#4E3BDD]/5 to-white p-5 scroll-mt-6">
+    <section
+      className="scroll-mt-6 rounded-[14px] border border-dashed border-[var(--accent-tint-border)] p-5"
+      style={{
+        background:
+          "linear-gradient(135deg, var(--accent-tint-bg), var(--surface))",
+      }}
+    >
       <div className="flex items-start gap-3">
-        <Lock className="mt-0.5 size-4 shrink-0 text-[#4E3BDD]" />
+        <Lock className="mt-0.5 size-4 shrink-0 text-[var(--accent)]" />
         <div className="min-w-0 flex-1">
-          <h2 className="font-display text-sm font-medium text-[#1C1E21]">
+          <h2 className="font-bricolage text-sm font-semibold text-[var(--text-primary)]">
             {title}
           </h2>
-          <p className="mt-1 text-xs leading-relaxed text-gray-600">{teaser}</p>
+          <p className="mt-1 text-xs leading-relaxed text-[var(--text-body)]">
+            {teaser}
+          </p>
           <button
             type="button"
             onClick={onUpgrade}
-            className="mt-3 inline-flex h-7 items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 text-xs font-medium text-[#4E3BDD] transition-colors hover:bg-gray-50"
+            className="mt-3 inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-2.5 text-xs font-semibold text-[var(--accent-deep)] transition-colors hover:bg-[var(--surface-sunken)]"
           >
             <Sparkles className="size-3" />
             Upgrade to Deep Prep
@@ -39,19 +47,19 @@ export function LockedPreviewModule({ title, teaser, onUpgrade }: Props) {
 // extends a Quick-tier section (Positioning, Risks, QuestionsTheyAsk).
 export function LockedPreviewFooter({ title, teaser, onUpgrade }: Props) {
   return (
-    <div className="-mx-5 -mb-5 mt-5 rounded-b-xl border-t border-black/5 bg-[#4E3BDD]/[0.04] px-5 py-4">
+    <div className="-mx-5 -mb-5 mt-5 rounded-b-[14px] border-t border-[var(--border-card)] bg-[var(--accent-tint-bg2)] px-5 py-4">
       <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
-        <Lock className="mt-0.5 size-3.5 shrink-0 text-[#4E3BDD]" />
+        <Lock className="mt-0.5 size-3.5 shrink-0 text-[var(--accent)]" />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-gray-700">{title}</p>
-          <p className="mt-0.5 text-sm leading-relaxed text-gray-600">
+          <p className="text-sm font-semibold text-[var(--text-body)]">{title}</p>
+          <p className="mt-0.5 text-sm leading-relaxed text-[var(--text-body)]">
             {teaser}
           </p>
         </div>
         <button
           type="button"
           onClick={onUpgrade}
-          className="ml-auto inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 text-xs font-medium text-[#4E3BDD] transition-colors hover:bg-gray-50"
+          className="ml-auto inline-flex h-7 shrink-0 items-center gap-1.5 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-2.5 text-xs font-semibold text-[var(--accent-deep)] transition-colors hover:bg-[var(--surface-sunken)]"
         >
           <Sparkles className="size-3" />
           Upgrade

@@ -62,13 +62,13 @@ export function CompareTiersDrawer({ open, onClose }: Props) {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="overflow-hidden rounded-lg border border-black/5">
+        <div className="overflow-hidden rounded-[10px] border border-[var(--border)]">
           <table className="w-full text-left text-sm">
-            <thead className="bg-[#F8F9FA] text-[11px] font-medium uppercase tracking-wide text-gray-500">
+            <thead className="bg-[var(--surface-sunken)] text-[11px] font-bold uppercase tracking-wide text-[var(--text-muted)]">
               <tr>
                 <th className="w-[20%] px-3 py-2.5">Area</th>
                 <th className="w-[35%] px-3 py-2.5">Quick Prep</th>
-                <th className="w-[45%] px-3 py-2.5 text-[#482C4C]">
+                <th className="w-[45%] px-3 py-2.5 text-[var(--accent-deep)]">
                   Deep Prep
                 </th>
               </tr>
@@ -79,17 +79,17 @@ export function CompareTiersDrawer({ open, onClose }: Props) {
                   key={r.area}
                   className={
                     i % 2 === 0
-                      ? "border-t border-black/5"
-                      : "border-t border-black/5 bg-[#F8F9FA]/40"
+                      ? "border-t border-[var(--border-card)]"
+                      : "border-t border-[var(--border-card)] bg-[var(--surface-sunken)]/40"
                   }
                 >
-                  <td className="px-3 py-2.5 text-xs font-medium text-[#1C1E21]">
+                  <td className="px-3 py-2.5 text-xs font-semibold text-[var(--text-primary)]">
                     {r.area}
                   </td>
-                  <td className="px-3 py-2.5 text-xs text-gray-600">
+                  <td className="px-3 py-2.5 text-xs text-[var(--text-body)]">
                     {r.quick}
                   </td>
-                  <td className="px-3 py-2.5 text-xs text-[#1C1E21]">
+                  <td className="px-3 py-2.5 text-xs text-[var(--text-primary)]">
                     {r.deep}
                   </td>
                 </tr>

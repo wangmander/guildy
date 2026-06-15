@@ -493,7 +493,7 @@ export function PrepOverlay({
       <div
         aria-hidden="true"
         onClick={onClose}
-        className="absolute inset-0 bg-[#1C1E21]/40 backdrop-blur-md"
+        className="absolute inset-0 bg-[var(--overlay-bg)]/80 backdrop-blur-sm"
       />
 
       <button
@@ -503,7 +503,7 @@ export function PrepOverlay({
           onClose()
         }}
         aria-label="Close"
-        className="absolute right-4 top-4 z-20 inline-flex size-10 items-center justify-center rounded-full bg-white/90 text-gray-600 shadow-md backdrop-blur transition-colors hover:bg-white hover:text-[#1C1E21] md:right-6 md:top-6"
+        className="absolute right-4 top-4 z-20 inline-flex size-10 items-center justify-center rounded-full bg-[var(--surface)] text-[var(--text-body)] shadow-[var(--shadow-e2)] transition-colors hover:text-[var(--text-primary)] md:right-6 md:top-6"
       >
         <X className="size-5" />
       </button>
@@ -563,7 +563,7 @@ export function PrepOverlay({
 
               <main className="pointer-events-none md:max-h-[calc(100dvh-3rem)] md:overflow-y-auto">
                 <div
-                  className="pointer-events-auto rounded-2xl border border-black/5 bg-[#F8F9FA] shadow-sm"
+                  className="pointer-events-auto rounded-[18px] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-e3)]"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <PrepCanvas
@@ -623,18 +623,18 @@ function ErrorCard({ onClose }: { onClose: () => void }) {
   return (
     <div
       onClick={(e) => e.stopPropagation()}
-      className="pointer-events-auto col-span-full mx-auto mt-12 max-w-md rounded-2xl border border-black/5 bg-white p-6 text-center shadow-sm"
+      className="pointer-events-auto col-span-full mx-auto mt-12 max-w-md rounded-[18px] border border-[var(--border)] bg-[var(--surface)] p-6 text-center shadow-[var(--shadow-e3)]"
     >
-      <h2 className="text-base font-semibold text-[#1C1E21]">
+      <h2 className="font-bricolage text-base font-semibold text-[var(--text-primary)]">
         That job couldn&rsquo;t be found
       </h2>
-      <p className="mt-2 text-sm text-gray-600">
+      <p className="mt-2 text-sm text-[var(--text-muted)]">
         It may have been deleted, or the link is invalid.
       </p>
       <button
         type="button"
         onClick={onClose}
-        className="mt-4 inline-flex h-9 items-center justify-center rounded-md bg-[#482C4C] px-4 text-sm font-medium text-white transition-opacity hover:opacity-90"
+        className="mt-4 inline-flex h-9 items-center justify-center rounded-[10px] bg-[var(--accent)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-deep)]"
       >
         Close
       </button>

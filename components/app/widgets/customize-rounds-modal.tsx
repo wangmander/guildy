@@ -108,7 +108,7 @@ export function CustomizeRoundsModal({
     >
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle className="font-display">
+          <DialogTitle className="font-bricolage">
             Customize Full Loop Rounds
           </DialogTitle>
           <DialogDescription>
@@ -123,7 +123,7 @@ export function CustomizeRoundsModal({
             return (
               <div
                 key={role}
-                className="flex items-center gap-3 rounded-lg border border-black/5 bg-white p-3"
+                className="flex items-center gap-3 rounded-[10px] border border-[var(--border-card)] bg-[var(--surface)] p-3"
               >
                 <Toggle
                   checked={entry.enabled}
@@ -138,7 +138,9 @@ export function CustomizeRoundsModal({
                   placeholder="Round label"
                   disabled={pending}
                   className={
-                    entry.enabled ? "" : "text-gray-400 placeholder:text-gray-300"
+                    entry.enabled
+                      ? ""
+                      : "text-[var(--text-faint)] placeholder:text-[var(--text-fainter)]"
                   }
                 />
               </div>
@@ -155,12 +157,12 @@ export function CustomizeRoundsModal({
             type="button"
             onClick={onAutoDetect}
             disabled={pending}
-            className="inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 text-xs font-medium text-[#1C1E21] transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-9 items-center gap-1.5 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-sunken)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {autoDetectPending ? (
               <Loader2 className="size-3.5 animate-spin" />
             ) : (
-              <Sparkles className="size-3.5 text-[#482C4C]" />
+              <Sparkles className="size-3.5 text-[var(--accent)]" />
             )}
             Auto-detect from message
           </button>
@@ -169,7 +171,7 @@ export function CustomizeRoundsModal({
               type="button"
               onClick={onClose}
               disabled={pending}
-              className="inline-flex h-9 items-center rounded-md px-3 text-xs font-medium text-gray-600 transition-colors hover:text-[#1C1E21] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-9 items-center rounded-[10px] px-3 text-xs font-semibold text-[var(--text-body)] transition-colors hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               Cancel
             </button>
@@ -177,7 +179,7 @@ export function CustomizeRoundsModal({
               type="button"
               onClick={onSave}
               disabled={pending}
-              className="inline-flex h-9 items-center gap-1.5 rounded-md bg-[#4E3BDD] px-3.5 text-xs font-medium text-white transition-colors hover:bg-[#4332C2] disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-9 items-center gap-1.5 rounded-[10px] bg-[var(--accent)] px-3.5 text-xs font-semibold text-white transition-colors hover:bg-[var(--accent-deep)] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {savePending ? <Loader2 className="size-3.5 animate-spin" /> : null}
               Save
@@ -206,7 +208,7 @@ function Toggle({
       aria-label={ariaLabel}
       onClick={() => onChange(!checked)}
       className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-        checked ? "bg-[#482C4C]" : "bg-gray-200"
+        checked ? "bg-[var(--accent)]" : "bg-[var(--border-strong)]"
       }`}
     >
       <span

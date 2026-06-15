@@ -12,6 +12,7 @@ import {
   type PrepTier,
 } from "@/lib/ai/prep-types"
 import type { StageKey } from "@/lib/stages"
+import { cn } from "@/lib/utils"
 
 import { CustomizeRoundsModal } from "./customize-rounds-modal"
 import { UpgradeModal } from "./upgrade-modal"
@@ -29,6 +30,11 @@ import {
 
 const SINGLE_GENERATING_KEY = "_single"
 const QUICK_POSITIONING_VISIBLE_FRAMES = 2
+
+// Shared section-card chrome (spec: white --surface card, radius 14,
+// --border-card, shadow E1) used by every prep module.
+const SECTION_CARD =
+  "rounded-[14px] border border-[var(--border-card)] bg-[var(--surface)] p-5 shadow-[var(--shadow-e1)] scroll-mt-6"
 
 type Props = {
   jobId: string
@@ -128,11 +134,6 @@ export function PrepCanvas({
   const currentEntry: PrepStateEntry | undefined = statesMap?.[currentKey]
   const currentOutput = currentEntry?.output ?? null
 
-  // Prompt 17b: PrepOverlay's latestRoundsResolved drives the skeleton
-  // gate directly. The 500ms mountSettled timer from Prompt 16 is gone:
-  // skeleton renders while either statesMap is still loading or the
-  // round picker is still in-flight, and clears once both settle.
-
   // Heading: prefer the session-specific title (Full Loop sessions populate
   // it via the prompt); fall back to the stage heading otherwise.
   const sessionTitle = currentOutput?.session_title?.trim()
@@ -174,9 +175,7 @@ export function PrepCanvas({
   return (
     <div className="px-4 pb-12 pt-6 md:px-7">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-display text-2xl font-semibold tracking-tight text-[#1C1E21] md:text-[1.625rem]">
-          {heading}
-        </h1>
+        <h1 className="type-prep-h1 text-[var(--text-primary)]">{heading}</h1>
         <div className="flex items-center gap-2">
           <TierSelector
             tier={tier}
@@ -192,7 +191,7 @@ export function PrepCanvas({
               disabled={isAnyGenerating}
               aria-label="Regenerate prep"
               title="Regenerate prep"
-              className="inline-flex size-8 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-[#1C1E21] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex size-8 items-center justify-center rounded-[8px] text-[var(--text-faint)] transition-colors hover:bg-[var(--surface-sunken)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <RefreshCw className="size-4" />
             </button>
@@ -201,14 +200,14 @@ export function PrepCanvas({
       </div>
 
       {noneEnabled ? (
-        <div className="mt-6 rounded-xl border border-dashed border-black/10 bg-white p-6 text-center">
-          <p className="text-sm text-gray-500">
+        <div className="mt-6 rounded-[14px] border border-dashed border-[var(--border-strong)] bg-[var(--surface-sunken)] p-6 text-center">
+          <p className="text-sm text-[var(--text-muted)]">
             No rounds configured. Customize rounds to set up your loop.
           </p>
           <button
             type="button"
             onClick={() => setCustomizeOpen(true)}
-            className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 text-xs font-medium text-[#1C1E21] transition-colors hover:bg-gray-50"
+            className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-sunken)]"
           >
             <Pencil className="size-3.5" />
             Customize rounds
@@ -228,7 +227,7 @@ export function PrepCanvas({
               <button
                 type="button"
                 onClick={() => setCustomizeOpen(true)}
-                className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium text-gray-500 transition-colors hover:bg-gray-50 hover:text-[#1C1E21]"
+                className="inline-flex h-7 items-center gap-1 rounded-[8px] px-2 text-xs font-semibold text-[var(--text-faint)] transition-colors hover:bg-[var(--surface-sunken)] hover:text-[var(--text-primary)]"
               >
                 <Pencil className="size-3" />
                 Customize
@@ -288,20 +287,16 @@ function TierSelector({
   hideQuick?: boolean
 }) {
   const compartmentBase =
-    "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-colors"
-  const compartmentSelected =
-    "bg-white text-[#1C1E21] shadow-sm"
+    "inline-flex items-center gap-1.5 rounded-[9px] px-2.5 py-1 text-xs transition-colors"
   const compartmentUnselected =
-    "text-gray-500 hover:text-[#1C1E21]"
-  const lockedSuffix = disabled
-    ? " cursor-not-allowed opacity-60"
-    : ""
+    "text-[var(--text-faint)] hover:text-[var(--text-primary)]"
+  const lockedSuffix = disabled ? " cursor-not-allowed opacity-60" : ""
 
   return (
     <div
       role="tablist"
       aria-label="Prep tier"
-      className="inline-flex flex-nowrap items-center gap-0.5 rounded-full border border-black/10 bg-gray-50 p-0.5 whitespace-nowrap"
+      className="inline-flex flex-nowrap items-center gap-0.5 whitespace-nowrap rounded-[11px] border border-[var(--border)] bg-[var(--tab-track)] p-0.5"
     >
       {hideQuick ? null : (
         <button
@@ -317,14 +312,16 @@ function TierSelector({
           className={
             compartmentBase +
             " " +
-            (tier === "quick" ? compartmentSelected : compartmentUnselected) +
+            (tier === "quick"
+              ? "bg-[var(--surface)] text-[var(--text-primary)] shadow-[var(--shadow-e1)]"
+              : compartmentUnselected) +
             lockedSuffix
           }
         >
-          <span className="inline-flex items-center rounded bg-gray-200/70 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-gray-700">
+          <span className="inline-flex items-center rounded bg-[var(--salary-bg)] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
             Haiku 4.5
           </span>
-          <span className="font-medium">Quick Prep</span>
+          <span className="font-semibold">Quick Prep</span>
         </button>
       )}
 
@@ -350,8 +347,10 @@ function TierSelector({
         }}
         className={
           compartmentBase +
-          " focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4E3BDD]/40 " +
-          (tier === "deep" ? compartmentSelected : compartmentUnselected) +
+          " focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40 " +
+          (tier === "deep"
+            ? "bg-[image:var(--accent-grad)] text-white shadow-[var(--shadow-e1)]"
+            : compartmentUnselected) +
           (disabled ? " cursor-not-allowed opacity-60" : " cursor-pointer")
         }
       >
@@ -367,18 +366,18 @@ function TierSelector({
               onTierChange("deep")
               onUpgrade()
             }}
-            className="inline-flex items-center rounded bg-[#EDE9FE] px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-[#4E3BDD] transition-colors hover:bg-[#E0DAF8] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4E3BDD]/40"
+            className="inline-flex items-center rounded bg-[var(--accent-chip-bg)] px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-[var(--accent-deep)] transition-colors hover:bg-[var(--accent-chip-bg2)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
           >
-            <span className="font-medium">Sonnet 4.6</span>
+            <span className="font-semibold">Sonnet 4.6</span>
             <span aria-hidden="true" className="px-1 opacity-60">·</span>
-            <span className="font-semibold">Upgrade</span>
+            <span className="font-bold">Upgrade</span>
           </button>
         ) : (
-          <span className="inline-flex items-center rounded bg-[#EDE9FE] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-[#4E3BDD]">
+          <span className="inline-flex items-center rounded bg-white/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
             Sonnet 4.6
           </span>
         )}
-        <span className="font-medium">Deep Prep</span>
+        <span className="font-semibold">Deep Prep</span>
       </div>
     </div>
   )
@@ -456,7 +455,7 @@ function StaleBanner({
   onRegenerate: () => void
 }) {
   return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+    <div className="rounded-[14px] border border-amber-200 bg-amber-50 p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm leading-relaxed text-amber-900">
           Inputs changed since this prep was generated.
@@ -464,11 +463,7 @@ function StaleBanner({
         <button
           type="button"
           onClick={onRegenerate}
-          className={
-            tier === "deep"
-              ? "inline-flex h-8 items-center rounded-md bg-[#4E3BDD] px-3 text-xs font-medium text-white transition-colors hover:bg-[#4332C2]"
-              : "inline-flex h-8 items-center rounded-md bg-[#482C4C] px-3 text-xs font-medium text-white transition-opacity hover:opacity-90"
-          }
+          className="inline-flex h-8 items-center rounded-[10px] bg-[var(--accent)] px-3 text-xs font-semibold text-white transition-colors hover:bg-[var(--accent-deep)]"
         >
           Regenerate {tier === "deep" ? "Deep" : "Quick"}
         </button>
@@ -502,12 +497,12 @@ function EmptyState({
       {showJdWarning ? (
         <JdMissingWarning onAddJd={onAddJd} onGenerateAnyway={onGenerate} />
       ) : null}
-      <div className="rounded-xl border border-dashed border-black/10 bg-white p-8 text-center">
-        <Sparkles className="mx-auto size-6 text-[#482C4C]" />
-        <h2 className="mt-3 text-lg font-semibold text-[#1C1E21]">
+      <div className="rounded-[14px] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-8 text-center">
+        <Sparkles className="mx-auto size-6 text-[var(--accent)]" />
+        <h2 className="mt-3 font-bricolage text-lg font-semibold text-[var(--text-primary)]">
           Generate {tierLabel}
         </h2>
-        <p className="mx-auto mt-2 max-w-sm text-sm text-gray-500">
+        <p className="mx-auto mt-2 max-w-sm text-sm text-[var(--text-muted)]">
           {!hasResume
             ? "Add your resume in onboarding before running prep."
             : subhead}
@@ -521,11 +516,7 @@ function EmptyState({
               ? "Add your resume in onboarding before running prep."
               : undefined
           }
-          className={
-            tier === "deep"
-              ? "mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#4E3BDD] px-5 text-sm font-medium text-white transition-colors hover:bg-[#4332C2] disabled:cursor-not-allowed disabled:opacity-50"
-              : "mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#482C4C] px-5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-          }
+          className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-[11px] bg-[var(--accent)] px-5 text-sm font-semibold text-white shadow-[var(--shadow-accent-cta)] transition-colors hover:bg-[var(--accent-deep)] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
         >
           <Sparkles className="size-4" />
           Generate {tierLabel}
@@ -543,7 +534,7 @@ function JdMissingWarning({
   onGenerateAnyway: () => void
 }) {
   return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+    <div className="rounded-[14px] border border-amber-200 bg-amber-50 p-4">
       <p className="text-sm leading-relaxed text-amber-900">
         Deep Prep is much sharper with the job description. Add it for a
         stronger result, or generate anyway.
@@ -552,14 +543,14 @@ function JdMissingWarning({
         <button
           type="button"
           onClick={onAddJd}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#4E3BDD] px-3 text-xs font-medium text-white transition-colors hover:bg-[#4332C2]"
+          className="inline-flex h-8 items-center gap-1.5 rounded-[10px] bg-[var(--accent)] px-3 text-xs font-semibold text-white transition-colors hover:bg-[var(--accent-deep)]"
         >
           Add JD
         </button>
         <button
           type="button"
           onClick={onGenerateAnyway}
-          className="inline-flex h-8 items-center rounded-md border border-amber-300 bg-white px-3 text-xs font-medium text-amber-900 transition-colors hover:border-amber-400 hover:bg-amber-50"
+          className="inline-flex h-8 items-center rounded-[10px] border border-amber-300 bg-white px-3 text-xs font-semibold text-amber-900 transition-colors hover:border-amber-400 hover:bg-amber-50"
         >
           Generate anyway
         </button>
@@ -576,15 +567,15 @@ function ErrorState({
   onRetry: () => void
 }) {
   return (
-    <div className="mt-8 rounded-xl border border-red-200 bg-red-50 p-6 text-center">
-      <h2 className="text-base font-semibold text-red-900">
+    <div className="mt-8 rounded-[14px] border border-red-200 bg-red-50 p-6 text-center">
+      <h2 className="font-bricolage text-base font-semibold text-red-900">
         Couldn&rsquo;t load prep
       </h2>
       <p className="mt-2 text-sm text-red-700">{message}</p>
       <button
         type="button"
         onClick={onRetry}
-        className="mt-4 inline-flex h-9 items-center justify-center gap-2 rounded-md bg-red-900 px-4 text-sm font-medium text-white transition-opacity hover:opacity-90"
+        className="mt-4 inline-flex h-9 items-center justify-center gap-2 rounded-[10px] bg-red-900 px-4 text-sm font-semibold text-white transition-opacity hover:opacity-90"
       >
         <RefreshCw className="size-3.5" />
         Try again
@@ -597,19 +588,21 @@ function LoadingSkeleton({ hint }: { hint?: string }) {
   return (
     <div className="mt-8 space-y-6" aria-busy="true" aria-live="polite">
       {hint ? (
-        <p className="text-xs uppercase tracking-wide text-gray-400">{hint}</p>
+        <p className="text-xs uppercase tracking-wide text-[var(--text-faint)]">
+          {hint}
+        </p>
       ) : (
         <span className="sr-only">Loading prep…</span>
       )}
       {[0, 1, 2, 3].map((i) => (
         <div
           key={i}
-          className="animate-pulse rounded-xl border border-black/5 bg-white p-5 shadow-sm"
+          className={cn(SECTION_CARD, "animate-pulse")}
         >
           <div className="space-y-2">
-            <div className="h-2 w-3/4 rounded-full bg-gray-100" />
-            <div className="h-2 w-2/3 rounded-full bg-gray-100" />
-            <div className="h-2 w-1/2 rounded-full bg-gray-100" />
+            <div className="h-2 w-3/4 rounded-full bg-[var(--divider)]" />
+            <div className="h-2 w-2/3 rounded-full bg-[var(--divider)]" />
+            <div className="h-2 w-1/2 rounded-full bg-[var(--divider)]" />
           </div>
         </div>
       ))}
@@ -709,16 +702,11 @@ function SectionShell({
   children: React.ReactNode
 }) {
   return (
-    <section
-      id={id}
-      className="rounded-xl border border-black/5 bg-white p-5 shadow-sm scroll-mt-6"
-    >
+    <section id={id} className={SECTION_CARD}>
       <div className="flex items-baseline justify-between gap-3">
         <div>
-          <h2 className="font-display text-lg font-medium text-[#1C1E21]">
-            {title}
-          </h2>
-          <p className="mt-0.5 text-sm text-gray-500">{subtitle}</p>
+          <h2 className="type-section-h2 text-[var(--text-primary)]">{title}</h2>
+          <p className="mt-0.5 text-sm text-[var(--text-muted)]">{subtitle}</p>
         </div>
       </div>
       <div className="mt-4">{children}</div>
@@ -730,21 +718,27 @@ function SectionShell({
 function PurposeSection({ purpose }: { purpose: PrepOutput["purpose"] }) {
   return (
     <SectionShell id="purpose" title="Purpose" subtitle={purpose.headline}>
-      <p className="text-sm leading-relaxed text-gray-700">{purpose.summary}</p>
+      <p className="type-prep-body text-[var(--text-body)]">{purpose.summary}</p>
       <ul className="mt-5 space-y-3">
         {purpose.criteria.map((c) => (
           <li key={c.name}>
             <div className="flex items-center justify-between text-sm">
-              <span className="font-medium text-[#1C1E21]">{c.name}</span>
-              <span className="text-xs text-gray-500">{c.weight}%</span>
+              <span className="font-semibold text-[var(--text-primary)]">
+                {c.name}
+              </span>
+              <span className="text-xs tabular-nums text-[var(--text-muted)]">
+                {c.weight}%
+              </span>
             </div>
-            <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+            <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[var(--divider)]">
               <div
-                className="h-full rounded-full bg-[#482C4C]"
+                className="h-full rounded-full bg-[var(--accent)]"
                 style={{ width: `${Math.min(100, Math.max(0, c.weight))}%` }}
               />
             </div>
-            <p className="mt-1.5 text-xs text-gray-500">{c.description}</p>
+            <p className="mt-1.5 text-xs text-[var(--text-muted)]">
+              {c.description}
+            </p>
           </li>
         ))}
       </ul>
@@ -771,18 +765,20 @@ function PositioningSection({
       subtitle={positioning.headline}
       footer={footer}
     >
-      <p className="text-sm leading-relaxed text-gray-700">
+      <p className="type-prep-body text-[var(--text-body)]">
         {positioning.summary}
       </p>
       <ol className="mt-5 space-y-4">
         {frames.map((f, i) => (
           <li key={f.title} className="flex gap-3">
-            <span className="mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-[#482C4C]/10 text-xs font-semibold text-[#482C4C]">
+            <span className="mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-[var(--accent-tint-bg)] text-xs font-bold text-[var(--accent-deep)]">
               {i + 1}
             </span>
             <div>
-              <h3 className="text-sm font-semibold text-[#1C1E21]">{f.title}</h3>
-              <p className="mt-0.5 text-sm leading-relaxed text-gray-600">
+              <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+                {f.title}
+              </h3>
+              <p className="mt-0.5 text-sm leading-relaxed text-[var(--text-body)]">
                 {f.description}
               </p>
             </div>
@@ -809,20 +805,22 @@ function RisksSection({
       subtitle={risks.headline}
       footer={footer}
     >
-      <p className="text-sm leading-relaxed text-gray-700">{risks.summary}</p>
+      <p className="type-prep-body text-[var(--text-body)]">{risks.summary}</p>
       <ul className="mt-5 space-y-3">
         {risks.items.map((item) => (
           <li
             key={item.risk}
-            className="rounded-lg border border-black/5 bg-[#F8F9FA] p-4"
+            className="rounded-[10px] border border-[var(--border-card)] bg-[var(--surface-sunken)] p-4"
           >
-            <p className="text-sm font-medium text-[#1C1E21]">{item.risk}</p>
+            <p className="text-sm font-semibold text-[var(--text-primary)]">
+              {item.risk}
+            </p>
             {item.counter ? (
-              <p className="mt-2 text-sm leading-relaxed text-gray-600">
+              <p className="mt-2 text-sm leading-relaxed text-[var(--text-body)]">
                 {item.counter}
               </p>
             ) : tier === "deep" ? (
-              <p className="mt-2 text-xs italic text-gray-400">
+              <p className="mt-2 text-xs italic text-[var(--text-faint)]">
                 No prepared counter for this risk.
               </p>
             ) : null}
@@ -847,8 +845,8 @@ function ChecklistSection({
       <ul className="space-y-2">
         {checklist.map((c) => (
           <li key={c.item} className="flex items-start gap-2.5">
-            <span className="mt-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded border border-gray-300 bg-white" />
-            <span className="text-sm text-gray-700">{c.item}</span>
+            <span className="mt-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded border border-[var(--border-strong)] bg-[var(--surface)]" />
+            <span className="text-sm text-[var(--text-body)]">{c.item}</span>
           </li>
         ))}
       </ul>

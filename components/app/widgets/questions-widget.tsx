@@ -26,20 +26,20 @@ export function QuestionsTheyAsk({ items, tier, footer }: TheyAskProps) {
   return (
     <section
       id="questions-they-ask"
-      className="rounded-xl border border-black/5 bg-white p-5 shadow-sm scroll-mt-6"
+      className="scroll-mt-6 rounded-[14px] border border-[var(--border-card)] bg-[var(--surface)] p-5 shadow-[var(--shadow-e1)]"
     >
       <div className="flex items-baseline justify-between">
         <div>
-          <h2 className="font-display text-lg font-medium text-[#1C1E21]">
+          <h2 className="type-section-h2 text-[var(--text-primary)]">
             Questions they&rsquo;ll ask you
           </h2>
-          <p className="mt-0.5 text-sm text-gray-500">
+          <p className="mt-0.5 text-sm text-[var(--text-muted)]">
             {tier === "deep"
               ? "Plausible questions for the round, grouped by category."
               : "A handful of likely questions for the round."}
           </p>
         </div>
-        <span className="text-xs tabular-nums text-gray-400">
+        <span className="text-xs tabular-nums text-[var(--text-faint)]">
           {items.length}
         </span>
       </div>
@@ -49,7 +49,7 @@ export function QuestionsTheyAsk({ items, tier, footer }: TheyAskProps) {
           ? grouped.map(([category, group]) => (
               <li key={category ?? "_uncategorized"}>
                 {category ? (
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-[#482C4C]">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--accent-deep)]">
                     {category}
                   </p>
                 ) : null}
@@ -80,18 +80,18 @@ export function QuestionsYouAsk({ items }: YouAskProps) {
   return (
     <section
       id="questions-you-ask"
-      className="rounded-xl border border-black/5 bg-white p-5 shadow-sm scroll-mt-6"
+      className="scroll-mt-6 rounded-[14px] border border-[var(--border-card)] bg-[var(--surface)] p-5 shadow-[var(--shadow-e1)]"
     >
       <div className="flex items-baseline justify-between">
         <div>
-          <h2 className="font-display text-lg font-medium text-[#1C1E21]">
+          <h2 className="type-section-h2 text-[var(--text-primary)]">
             Questions to ask them
           </h2>
-          <p className="mt-0.5 text-sm text-gray-500">
+          <p className="mt-0.5 text-sm text-[var(--text-muted)]">
             Sharper questions surface fit and seriousness.
           </p>
         </div>
-        <span className="text-xs tabular-nums text-gray-400">
+        <span className="text-xs tabular-nums text-[var(--text-faint)]">
           {items.length}
         </span>
       </div>
@@ -99,7 +99,7 @@ export function QuestionsYouAsk({ items }: YouAskProps) {
         {grouped.map(([category, group]) => (
           <li key={category ?? "_uncategorized"}>
             {category ? (
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-[#482C4C]">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--accent-deep)]">
                 {category}
               </p>
             ) : null}
@@ -107,7 +107,7 @@ export function QuestionsYouAsk({ items }: YouAskProps) {
               {group.map((q) => (
                 <li
                   key={q.question}
-                  className="text-sm leading-relaxed text-gray-700"
+                  className="text-sm leading-relaxed text-[var(--text-body)]"
                 >
                   {q.question}
                 </li>
@@ -132,7 +132,7 @@ function TheyAskItem({
 
   if (!hasPlan) {
     return (
-      <span className="block text-sm leading-relaxed text-gray-700">
+      <span className="block text-sm leading-relaxed text-[var(--text-body)]">
         {q.question}
       </span>
     )
@@ -144,20 +144,20 @@ function TheyAskItem({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="group flex w-full items-start gap-1.5 text-left text-sm leading-relaxed text-gray-700 transition-colors hover:text-[#1C1E21]"
+        className="group flex w-full items-start gap-1.5 text-left text-sm leading-relaxed text-[var(--text-body)] transition-colors hover:text-[var(--text-primary)]"
       >
         <ChevronDown
           className={
             open
-              ? "mt-1 size-3.5 shrink-0 text-[#482C4C] transition-transform"
-              : "mt-1 size-3.5 shrink-0 -rotate-90 text-gray-400 transition-transform group-hover:text-[#482C4C]"
+              ? "mt-1 size-3.5 shrink-0 text-[var(--accent)] transition-transform"
+              : "mt-1 size-3.5 shrink-0 -rotate-90 text-[var(--text-faint)] transition-transform group-hover:text-[var(--accent)]"
           }
           aria-hidden
         />
         <span>{q.question}</span>
       </button>
       {open ? (
-        <p className="ml-5 mt-2 rounded-md bg-[#F8F9FA] p-3 text-xs leading-relaxed text-gray-600">
+        <p className="ml-5 mt-2 rounded-[10px] bg-[var(--surface-sunken)] p-3 text-xs leading-relaxed text-[var(--text-body)]">
           {q.answer_plan}
         </p>
       ) : null}
