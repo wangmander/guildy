@@ -18,7 +18,7 @@ import {
 } from "@/lib/compMatrix/dimensions"
 
 const inputClass =
-  "w-16 rounded-md border border-gray-200 bg-white px-2 py-1 text-sm text-[#1C1E21] outline-none focus:border-[#4E3BDD]"
+  "w-16 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/15"
 
 function SettingsForm({
   compPriorities,
@@ -75,7 +75,7 @@ function SettingsForm({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
-        <span className="text-xs font-medium text-[#1C1E21]">
+        <span className="text-xs font-semibold text-[var(--text-primary)]">
           Soft dimensions to compare
         </span>
         <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
@@ -85,24 +85,25 @@ function SettingsForm({
                 type="checkbox"
                 checked={enabled.includes(d.key)}
                 onChange={() => toggle(d.key)}
+                className="accent-[var(--accent)]"
               />
-              <span className="text-[#1C1E21]">{d.label}</span>
+              <span className="text-[var(--text-primary)]">{d.label}</span>
             </label>
           ))}
         </div>
       </div>
 
       <div className="flex flex-col gap-2">
-        <span className="text-xs font-medium text-[#1C1E21]">
+        <span className="text-xs font-semibold text-[var(--text-primary)]">
           Weights (how much each counts toward the overall)
         </span>
-        <div className="flex flex-col divide-y divide-gray-100">
+        <div className="flex flex-col divide-y divide-[var(--divider)]">
           {weightedDims.map((d) => (
             <div
               key={d.key}
               className="flex items-center justify-between gap-2 py-1.5"
             >
-              <span className="text-sm text-[#1C1E21]">{d.label}</span>
+              <span className="text-sm text-[var(--text-primary)]">{d.label}</span>
               <input
                 type="number"
                 min={0}
@@ -125,7 +126,7 @@ function SettingsForm({
         <button
           type="button"
           onClick={onCancel}
-          className="inline-flex h-9 items-center justify-center rounded-md border border-gray-200 px-3 text-sm font-medium text-[#1C1E21] transition-colors hover:bg-gray-50"
+          className="inline-flex h-9 items-center justify-center rounded-[10px] border border-[var(--border)] px-3 text-sm font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-sunken)]"
         >
           Cancel
         </button>
@@ -133,7 +134,7 @@ function SettingsForm({
           type="button"
           onClick={save}
           disabled={pending}
-          className="inline-flex h-9 items-center justify-center rounded-md bg-[#482C4C] px-3 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+          className="inline-flex h-9 items-center justify-center rounded-[10px] bg-[var(--accent)] px-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-deep)] disabled:opacity-60"
         >
           {pending ? "Saving..." : "Save"}
         </button>
@@ -157,7 +158,7 @@ export function ComparisonSettingsModal({
         {open ? (
           <>
             <DialogHeader>
-              <DialogTitle className="font-display">
+              <DialogTitle className="font-bricolage">
                 Comparison priorities
               </DialogTitle>
               <DialogDescription>

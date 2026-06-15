@@ -27,7 +27,7 @@ export type CompEditJob = {
 }
 
 const inputClass =
-  "w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 text-sm text-[#1C1E21] outline-none focus:border-[#4E3BDD]"
+  "w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/15"
 
 // Lenient parse for money fields (allows 0). Strips $, commas, k/K.
 function parseMoney(s: string): number | null {
@@ -56,7 +56,7 @@ function Field({
 }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-xs text-gray-500">{label}</span>
+      <span className="text-xs text-[var(--text-muted)]">{label}</span>
       {children}
     </label>
   )
@@ -225,7 +225,7 @@ function CompForm({
 
       {enabledSoftDims.length > 0 ? (
         <div className="flex flex-col gap-2">
-          <span className="text-xs font-medium text-[#1C1E21]">
+          <span className="text-xs font-semibold text-[var(--text-primary)]">
             Your ratings (1-10)
           </span>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -257,7 +257,7 @@ function CompForm({
         <button
           type="button"
           onClick={onCancel}
-          className="inline-flex h-9 items-center justify-center rounded-md border border-gray-200 px-3 text-sm font-medium text-[#1C1E21] transition-colors hover:bg-gray-50"
+          className="inline-flex h-9 items-center justify-center rounded-[10px] border border-[var(--border)] px-3 text-sm font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-sunken)]"
         >
           Cancel
         </button>
@@ -265,7 +265,7 @@ function CompForm({
           type="button"
           onClick={save}
           disabled={pending}
-          className="inline-flex h-9 items-center justify-center rounded-md bg-[#482C4C] px-3 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+          className="inline-flex h-9 items-center justify-center rounded-[10px] bg-[var(--accent)] px-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-deep)] disabled:opacity-60"
         >
           {pending ? "Saving..." : "Save"}
         </button>
@@ -291,7 +291,7 @@ export function CompEditModal({
         {job ? (
           <>
             <DialogHeader>
-              <DialogTitle className="font-display">Compensation</DialogTitle>
+              <DialogTitle className="font-bricolage">Compensation</DialogTitle>
               <DialogDescription>
                 {job.company} · {job.role}
               </DialogDescription>

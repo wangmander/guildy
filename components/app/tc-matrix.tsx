@@ -65,47 +65,66 @@ function hasAnyComp(comp: JobCompensation | null): boolean {
   )
 }
 
-const LABEL_COL = "sticky left-0 z-10 w-[210px] whitespace-nowrap bg-white"
-const VALUE_COL = "w-[220px] border-x border-gray-200"
-const HEADLINE_BG = "bg-[#EDE9FE]"
+const LABEL_COL = "sticky left-0 z-10 w-[210px] whitespace-nowrap bg-[var(--surface)]"
+const VALUE_COL = "w-[220px]"
+// BEST-column wash tints (comp-sheet-only, literal per spec).
+const BEST_CELL_BG = "bg-[#FAF8FE]"
 
-const Dash = () => <span className="text-gray-300">-</span>
+const Dash = () => <span className="text-[var(--text-fainter)]">-</span>
 
 // A value row. scoredCount === 0 (no offer has this dimension) grays the whole
 // row, excluded from the overall (the scoring math already excludes it). When
 // at least one offer has it, the row is active: offers missing the value get a
-// needs-input amber cell that opens that offer's comp modal.
+// needs-input warn cell that opens that offer's comp modal.
 function MatrixRow({
   label,
   columns,
+  winIdx,
   present,
   renderValue,
   onAdd,
+  topBorder = false,
+  labelClassName,
 }: {
   label: string
   columns: TcColumn[]
+  winIdx: number
   present: (c: TcColumn) => boolean
   renderValue: (c: TcColumn) => React.ReactNode
   onAdd: (c: TcColumn) => void
+  topBorder?: boolean
+  labelClassName?: string
 }) {
   const gray = columns.filter(present).length === 0
+  // Year-1 anchor gets a heavier top rule; the BEST cell uses a tinted one.
+  const topBase = topBorder ? "border-t-[1.5px] border-t-[var(--border)]" : ""
+  const topBest = topBorder ? "border-t-[1.5px] border-t-[#E4D3F8]" : ""
   return (
-    <tr className="border-b border-gray-50">
+    <tr className="border-b border-[var(--divider-faint)]">
       <td
         className={cn(
           LABEL_COL,
-          "py-2 pr-3 text-left text-xs",
-          gray ? "text-gray-300" : "text-gray-500"
+          "py-[13px] pr-4 text-left text-[13.5px]",
+          topBase,
+          gray ? "text-[var(--text-fainter)]" : "text-[var(--text-body)]",
+          labelClassName
         )}
       >
         {label}
       </td>
-      {columns.map((c) => {
+      {columns.map((c, i) => {
+        const isBest = i === winIdx
+        const cellTop = isBest ? topBest : topBase
         if (gray) {
           return (
             <td
               key={c.jobId}
-              className={cn(VALUE_COL, "px-3 py-2 text-right")}
+              className={cn(
+                VALUE_COL,
+                "px-[18px] py-[13px] text-right",
+                cellTop,
+                isBest && BEST_CELL_BG
+              )}
             >
               <Dash />
             </td>
@@ -115,7 +134,12 @@ function MatrixRow({
           return (
             <td
               key={c.jobId}
-              className={cn(VALUE_COL, "px-3 py-2 text-right text-[#1C1E21]")}
+              className={cn(
+                VALUE_COL,
+                "px-[18px] py-[13px] text-right",
+                cellTop,
+                isBest && BEST_CELL_BG
+              )}
             >
               {renderValue(c)}
             </td>
@@ -126,13 +150,14 @@ function MatrixRow({
             key={c.jobId}
             className={cn(
               VALUE_COL,
-              "border-amber-200 bg-amber-50 px-3 py-2 text-right"
+              "border border-[var(--warn-border)] bg-[var(--warn-bg)] px-[18px] py-[13px] text-right",
+              cellTop
             )}
           >
             <button
               type="button"
               onClick={() => onAdd(c)}
-              className="text-xs font-medium text-amber-700 hover:underline"
+              className="text-xs font-semibold text-[var(--warn-text)] hover:underline"
             >
               Add
             </button>
@@ -165,6 +190,7 @@ export function TcMatrix({
   if (columns.length === 0) return null
 
   const multi = columns.length >= 2
+  const lastIdx = columns.length - 1
   const { enabledSoft, weights } = resolveCompPriorities(compPriorities)
   const enabledSoftDims = SOFT_DIMS.filter((d) => enabledSoft.includes(d.key))
 
@@ -177,86 +203,94 @@ export function TcMatrix({
 
   return (
     <section>
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] leading-snug text-gray-400">
-          Comp rates relative to these offers, soft scores are yours. The overall
-          is a weighted decision aid, not exact science.
-        </p>
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setSettingsOpen(true)}
-            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-gray-200 px-2.5 text-sm font-medium text-[#1C1E21] transition-colors hover:bg-gray-50"
-          >
-            <SlidersHorizontal className="size-4" />
-            Priorities
-          </button>
-          <button
-            type="button"
-            onClick={() => setAddOpen(true)}
-            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-gray-200 px-2.5 text-sm font-medium text-[#1C1E21] transition-colors hover:bg-gray-50"
-          >
-            <Plus className="size-4" />
-            Add offer
-          </button>
-        </div>
+      <div className="flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => setSettingsOpen(true)}
+          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[10px] border border-[var(--border)] px-[13px] text-[13px] font-semibold text-[#46505F] transition-colors hover:bg-[var(--surface-sunken)]"
+        >
+          <SlidersHorizontal className="size-4" />
+          Priorities
+        </button>
+        <button
+          type="button"
+          onClick={() => setAddOpen(true)}
+          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[10px] bg-[var(--ink)] px-[13px] text-[13px] font-semibold text-white transition-colors hover:bg-[var(--ink-hover)]"
+        >
+          <Plus className="size-4" />
+          Add offer
+        </button>
       </div>
 
       <div className="mt-3 overflow-x-auto">
         <table className="w-auto border-collapse text-sm">
           <thead>
-            <tr className="border-b border-gray-200">
-              <th className={cn(LABEL_COL, "py-2 pr-3 text-left")} />
-              {columns.map((c) => (
-                <th
-                  key={c.jobId}
-                  className={cn(
-                    VALUE_COL,
-                    "border-b border-gray-200 bg-[#F8F9FA] px-3 py-2 text-right align-top"
-                  )}
-                >
-                  <span className="block truncate font-medium text-[#1C1E21]">
-                    {c.company}
-                  </span>
-                  <span className="block truncate text-xs font-normal text-gray-500">
-                    {c.role}
-                  </span>
-                  {hasAnyComp(c.comp) ? (
-                    <button
-                      type="button"
-                      onClick={() => setEditingJob(c)}
-                      className="mt-1 text-xs font-normal text-gray-500 transition-colors hover:text-[#4E3BDD]"
-                    >
-                      Edit comp
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setEditingJob(c)}
-                      className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-[#4E3BDD] hover:underline"
-                    >
-                      <Plus className="size-3" />
-                      Add compensation
-                    </button>
-                  )}
-                  <div className="mt-1">
-                    <button
-                      type="button"
-                      onClick={() => onNegotiate(c)}
-                      disabled={!hasAnyComp(c.comp)}
-                      title={
-                        !hasAnyComp(c.comp)
-                          ? "Add the offer's compensation first"
-                          : undefined
-                      }
-                      className="inline-flex items-center gap-1 text-xs font-medium text-[#4E3BDD] transition-opacity hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-40"
-                    >
-                      <Handshake className="size-3 shrink-0" />
-                      Negotiate
-                    </button>
-                  </div>
-                </th>
-              ))}
+            <tr>
+              <th className={cn(LABEL_COL, "py-2 pr-4 text-left align-bottom")} />
+              {columns.map((c, i) => {
+                const isBest = multi && i === winIdx
+                return (
+                  <th
+                    key={c.jobId}
+                    className={cn(
+                      VALUE_COL,
+                      "px-[18px] py-[15px] text-left align-bottom",
+                      i === 0 && "rounded-tl-[14px]",
+                      i === lastIdx && "rounded-tr-[14px]",
+                      isBest
+                        ? "border-t-2 border-t-[var(--accent)] bg-[#F3EFFB]"
+                        : "bg-[#F7F8FB]"
+                    )}
+                  >
+                    {isBest ? (
+                      <span className="mb-1 inline-flex items-center rounded-[6px] bg-[var(--accent-chip-bg2)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.05em] text-[var(--accent-deep)]">
+                        BEST
+                      </span>
+                    ) : null}
+                    <span className="block truncate font-bricolage text-[18px] font-semibold text-[var(--text-primary)]">
+                      {c.company}
+                    </span>
+                    <span className="block truncate text-[12px] font-medium text-[var(--text-faint)]">
+                      {c.role}
+                    </span>
+                    <div className="mt-1.5 flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setEditingJob(c)}
+                        className={cn(
+                          "text-[12px] transition-colors hover:text-[var(--accent)]",
+                          hasAnyComp(c.comp)
+                            ? "text-[var(--text-faint)]"
+                            : "inline-flex items-center gap-1 font-medium text-[var(--accent-deep)] hover:underline"
+                        )}
+                      >
+                        {hasAnyComp(c.comp) ? (
+                          "Edit comp"
+                        ) : (
+                          <>
+                            <Plus className="size-3" />
+                            Add compensation
+                          </>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onNegotiate(c)}
+                        disabled={!hasAnyComp(c.comp)}
+                        title={
+                          !hasAnyComp(c.comp)
+                            ? "Add the offer's compensation first"
+                            : undefined
+                        }
+                        className="inline-flex items-center gap-1 text-[12px] font-medium text-[var(--accent-deep)] transition-opacity hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-40"
+                      >
+                        <Handshake className="size-3 shrink-0" />
+                        Negotiate
+                      </button>
+                    </div>
+                  </th>
+                )
+              })}
             </tr>
           </thead>
           <tbody>
@@ -268,16 +302,17 @@ export function TcMatrix({
                 key={d.key}
                 label={d.label}
                 columns={columns}
+                winIdx={winIdx}
                 present={(c) => hasAnyComp(c.comp)}
                 renderValue={(c) => {
                   const rating = autoRating(d.key, c.comp, compMax[d.key] ?? 0)
                   return (
-                    <span className="inline-flex items-baseline gap-1.5">
-                      <span className="tabular-nums">
+                    <span className="inline-flex items-baseline gap-2">
+                      <span className="font-bricolage text-[14.5px] font-semibold tracking-[-0.01em] tabular-nums text-[var(--ink)]">
                         {usd(dimValue(d.key, c.comp))}
                       </span>
                       {multi && rating !== null ? (
-                        <span className="rounded bg-gray-100 px-1 text-xs font-medium text-gray-600">
+                        <span className="rounded-[6px] bg-[var(--salary-bg)] px-1.5 py-px text-[11px] font-semibold tabular-nums text-[var(--text-body)]">
                           {rating}/10
                         </span>
                       ) : null}
@@ -288,14 +323,16 @@ export function TcMatrix({
               />
             ))}
 
-            {/* Anchor: year-1 total, dollar only, no rating. Same has-comp-row
-                presence rule as the comp dims. */}
+            {/* Anchor: year-1 total, dollar only, no rating. Heavier top rule. */}
             <MatrixRow
               label="Year-1 total"
               columns={columns}
+              winIdx={winIdx}
+              topBorder
+              labelClassName="font-semibold text-[var(--text-secondary)]"
               present={(c) => hasAnyComp(c.comp)}
               renderValue={(c) => (
-                <span className="tabular-nums">
+                <span className="font-bricolage text-[16px] font-semibold tabular-nums text-[var(--ink)]">
                   {usd(dimValue("year1_total", c.comp))}
                 </span>
               )}
@@ -308,55 +345,74 @@ export function TcMatrix({
                 key={d.key}
                 label={d.label}
                 columns={columns}
+                winIdx={winIdx}
                 present={(c) => softRating(d.key, c.comp) !== null}
                 renderValue={(c) => (
-                  <span className="tabular-nums">{softRating(d.key, c.comp)}/10</span>
+                  <span className="text-[13.5px] font-semibold tabular-nums text-[var(--text-secondary)]">
+                    {softRating(d.key, c.comp)}/10
+                  </span>
                 )}
                 onAdd={setEditingJob}
               />
             ))}
 
-            {/* Overall: multi-offer only, winner highlighted. */}
+            {/* Overall: multi-offer only, winner highlighted with the full
+                BEST wash + badge. */}
             {multi ? (
-              <tr className="border-t border-gray-200">
+              <tr>
                 <td
                   className={cn(
                     LABEL_COL,
-                    HEADLINE_BG,
-                    "py-2.5 pr-3 text-left text-xs font-semibold text-[#1C1E21]"
+                    "rounded-bl-[14px] bg-[#F4F0FC] py-[13px] pr-4 text-left text-[14px] font-bold text-[var(--ink)]"
                   )}
                 >
                   Overall
                 </td>
-                {columns.map((c, i) => (
-                  <td
-                    key={c.jobId}
-                    className={cn(
-                      VALUE_COL,
-                      HEADLINE_BG,
-                      "px-3 py-2.5 text-right tabular-nums text-[#1C1E21]",
-                      i === winIdx && "font-semibold"
-                    )}
-                  >
-                    {overalls[i] !== null ? (
-                      <span className="inline-flex items-baseline gap-1.5">
-                        <span>{overalls[i]!.toFixed(1)}</span>
-                        {i === winIdx ? (
-                          <span className="rounded bg-[#4E3BDD] px-1 text-xs font-medium text-white">
-                            Best
+                {columns.map((c, i) => {
+                  const isBest = i === winIdx
+                  return (
+                    <td
+                      key={c.jobId}
+                      className={cn(
+                        VALUE_COL,
+                        "px-[18px] py-[13px] text-right",
+                        i === lastIdx && "rounded-br-[14px]",
+                        isBest ? "bg-[#ECE3FB]" : "bg-[#F4F0FC]"
+                      )}
+                    >
+                      {overalls[i] !== null ? (
+                        <span className="inline-flex items-baseline gap-2">
+                          {isBest ? (
+                            <span className="rounded-[6px] bg-[var(--accent)] px-[7px] py-0.5 text-[10px] font-bold uppercase tracking-[0.05em] text-white">
+                              BEST
+                            </span>
+                          ) : null}
+                          <span
+                            className={cn(
+                              "font-bricolage tabular-nums",
+                              isBest
+                                ? "text-[19px] font-bold text-[var(--accent-deep)]"
+                                : "text-[17px] font-semibold text-[var(--text-secondary)]"
+                            )}
+                          >
+                            {overalls[i]!.toFixed(1)}
                           </span>
-                        ) : null}
-                      </span>
-                    ) : (
-                      <Dash />
-                    )}
-                  </td>
-                ))}
+                        </span>
+                      ) : (
+                        <Dash />
+                      )}
+                    </td>
+                  )
+                })}
               </tr>
             ) : null}
           </tbody>
         </table>
       </div>
+
+      <p className="ml-1 mt-4 max-w-[620px] text-[12px] leading-[1.5] text-[var(--text-fainter)]">
+        Weighted by your priorities. Adjust priorities to see the overall shift.
+      </p>
 
       <CompEditModal
         job={editingJob}

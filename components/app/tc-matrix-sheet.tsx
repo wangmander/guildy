@@ -120,26 +120,34 @@ export function TcMatrixSheet(props: Props) {
       {open && !locked ? (
         <div className="fixed inset-0 z-40">
           <div
-            className="absolute inset-0 bg-black/30"
+            className="absolute inset-0 bg-[rgba(18,26,38,0.44)] animate-[guildyFade_0.22s_ease-out]"
             onClick={() => setOpen(false)}
             aria-hidden="true"
           />
-          <div className="absolute inset-x-0 bottom-0 z-10 max-h-[85vh] overflow-y-auto rounded-t-xl border-t border-gray-200 bg-white shadow-xl">
-            <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-gray-100 bg-white px-4 py-3 lg:px-8">
-              <span className="font-display text-sm font-medium text-[#1C1E21]">
-                Compensation comparison
-              </span>
+          <div className="absolute inset-x-0 bottom-0 z-10 flex max-h-[88vh] flex-col overflow-hidden rounded-t-[20px] border-t border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-e6)] animate-[guildyUp_0.3s_ease-out]">
+            <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[var(--divider-kanban)] bg-[var(--surface)] px-[26px] py-[22px]">
+              <div className="min-w-0">
+                <h2 className="type-comp-h2 text-[var(--text-primary)]">
+                  Compensation comparison
+                </h2>
+                <p className="mt-1 max-w-[580px] text-[12.5px] leading-[1.45] text-[var(--text-faint)]">
+                  Comp is rated relative to these offers; the soft scores are
+                  yours. Overall is a weighted decision aid, not exact science.
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Close"
-                className="inline-flex size-7 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-gray-100 hover:text-[#1C1E21]"
+                className="inline-flex size-9 shrink-0 items-center justify-center rounded-[10px] border border-[var(--border)] text-[#7A8696] transition-colors hover:bg-[var(--surface-sunken)] hover:text-[var(--text-primary)]"
               >
                 <X className="size-4" />
               </button>
             </div>
-            <div className="mx-auto max-w-[1440px] px-4 py-4 lg:px-8">
-              <TcMatrix {...props} />
+            <div className="flex-1 overflow-y-auto px-[26px] pb-[26px] pt-[14px]">
+              <div className="mx-auto max-w-[1040px]">
+                <TcMatrix {...props} />
+              </div>
             </div>
           </div>
         </div>
