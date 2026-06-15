@@ -26,9 +26,12 @@ export type JobQuest = {
   readiness: Readiness
 }
 
+// Milestone card copy (gem-guide section 5): Bricolage title + body line.
+// Encouragement only, no loss state.
 export type Milestone = {
   key: MilestoneKey
-  text: string
+  title: string
+  body: string
 }
 
 const READINESS_LABEL: Record<Readiness, string> = {
@@ -119,16 +122,22 @@ export function highestMilestone(stages: StageKey[]): Milestone | null {
   if (set.has("offer")) {
     return {
       key: "first_offer",
-      text: "First offer in hand. Time to compare and negotiate.",
+      title: "First offer.",
+      body: "Time to compare and negotiate. I'll line it up.",
     }
   }
   if (set.has("interview_loop") || set.has("final")) {
-    return { key: "first_loop", text: "First full loop. You're in the final stretch." }
+    return {
+      key: "first_loop",
+      title: "Full loop.",
+      body: "You're in the final stretch.",
+    }
   }
   if (set.has("screen") || set.has("hiring_manager")) {
     return {
       key: "first_screen",
-      text: "First screen reached. The pipeline is moving.",
+      title: "First screen.",
+      body: "The pipeline is moving.",
     }
   }
   return null

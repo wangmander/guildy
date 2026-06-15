@@ -255,6 +255,15 @@
   --cue-scheduled: var(--accent-deep);
   --cue-offer: #1B7F57;
 
+  /* Gem-guide guidance chrome + milestone surface (gem material is baked into
+     the SVG files in public/gem, not here) */
+  --gem-label: #A89BCB;
+  --gem-kicker: #9B8DBE;
+  --milestone-from: #F3ECFC;
+  --milestone-to: #FBF6F0;
+  --milestone-border: #E7DBF8;
+  --dismiss: #B6A8C8;
+
   /* 1c. Border radius (px tokens; circles use 50%) */
   --radius-5: 5px;
   --radius-7: 7px;
@@ -512,4 +521,23 @@
   to {
     opacity: 1;
   }
+}
+/* Gem-guide idle bob, used on the milestone gem only (a brief celebratory
+   life at a real moment; the persistent rail gems stay static). */
+@keyframes gFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gem-float {
+    animation: none !important;
+  }
+}
+.gem-float {
+  animation: gFloat 4s ease-in-out infinite;
 }

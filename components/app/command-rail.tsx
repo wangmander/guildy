@@ -2,15 +2,7 @@
 
 import { Fragment, useEffect, useState } from "react"
 import Link from "next/link"
-import {
-  ArrowRight,
-  ChevronDown,
-  Compass,
-  ExternalLink,
-  Lightbulb,
-  Plus,
-  X,
-} from "lucide-react"
+import { ChevronDown, Compass, Lightbulb, X } from "lucide-react"
 
 import { getJobSourceAdvisorAction } from "@/app/app/actions"
 import {
@@ -22,8 +14,7 @@ import type { ApplyProjection } from "@/lib/jobSourceAdvisor/applyProjections"
 import { type Milestone } from "@/lib/quests/quests"
 import { cn } from "@/lib/utils"
 
-import { AddJobModal } from "./add-job-modal"
-import { GuideGem, type GuidePose } from "./widgets/guide-gem"
+import { Gem } from "./widgets/guide-gem"
 
 // Today panel items, server-built in app/app/page.tsx and passed in as a
 // typed array. Discriminated on `kind`. The renderer below maps each kind to
@@ -34,20 +25,28 @@ export type TodayItem =
   | { kind: "quick_prep_gap"; jobId: string; company: string }
   | { kind: "source_nudge"; board: string; role: string; score: number }
 
-// Apply-goal hero data. Null when the user has no non-closed jobs (the Today
-// empty state shows instead). loggedThisWeek counts jobs created in the last
-// rolling 7 days; projection is the estimate-labeled, range-based outlook
-// derived from the researched base rates.
+// Apply-goal hero data. Null when the user has no non-closed jobs (the
+// onboarding card carries the rail instead). loggedThisWeek counts jobs created
+// in the last rolling 7 days; projection is the estimate-labeled, range-based
+// outlook derived from the researched base rates.
 export type ApplyGoal = {
   loggedThisWeek: number
   projection: ApplyProjection
 }
+
+// Just-in-time onboarding moment (gem-guide section 6). Server-derived from job
+// count + prep state. "New stage reached" is deferred (needs a stage-event
+// signal we do not yet have); faking it with a proxy would nag, so it is out.
+export type OnboardingMoment =
+  | { kind: "empty" }
+  | { kind: "first_job"; company: string }
 
 type Props = {
   advisor: Advisor
   today: TodayItem[]
   applyGoal: ApplyGoal | null
   milestone: Milestone | null
+  onboarding: OnboardingMoment | null
 }
 
 const APPLY_TARGET = 15
@@ -83,22 +82,86 @@ function boardUrl(board: string, role: string): string | null {
   return base ? base : null
 }
 
-// Quest-voice line for a Today item. Shared by the Today rows and the hero's
-// "Next quest" so they always agree.
-function todayCoachLine(item: TodayItem): string {
+// Gem-voice move for a Today item (gem-guide sections 4 + 7). The lead clause
+// is bolded; `supporting` is the optional coaching sentence (only stages that
+// have one in section 7 carry it, so nothing is fabricated). `verb` is the
+// button label; href + external resolve the action.
+type GemMove = {
+  lead: string
+  supporting: string | null
+  verb: string
+  href: string | null
+  external: boolean
+}
+
+function gemMove(item: TodayItem): GemMove {
   switch (item.kind) {
-    case "prep_due":
-      if (item.stageLabel === "Screen") return `Prep your ${item.company} screen`
-      if (item.stageLabel === "Hiring Manager")
-        return `Read the room before the ${item.company} HM call`
-      if (item.stageLabel === "Full Loop")
-        return `Prep all rounds at ${item.company}`
-      return `Prep your ${item.company} ${item.stageLabel} round`
+    case "prep_due": {
+      const href = `/app?job=${item.jobId}`
+      if (item.stageLabel === "Screen") {
+        return {
+          lead: `Prep your ${item.company} screen.`,
+          supporting: "Screens reward clear thinking out loud.",
+          verb: "Run Deep Prep",
+          href,
+          external: false,
+        }
+      }
+      if (item.stageLabel === "Hiring Manager") {
+        return {
+          lead: `Read the room before the ${item.company} HM call.`,
+          supporting: null,
+          verb: "Run Deep Prep",
+          href,
+          external: false,
+        }
+      }
+      if (item.stageLabel === "Full Loop") {
+        return {
+          lead: `Prep all your rounds at ${item.company}.`,
+          supporting: null,
+          verb: "Run Deep Prep",
+          href,
+          external: false,
+        }
+      }
+      return {
+        lead: `Prep your ${item.company} ${item.stageLabel} round.`,
+        supporting: null,
+        verb: "Run Deep Prep",
+        href,
+        external: false,
+      }
+    }
     case "quick_prep_gap":
-      return `Get a first read on ${item.company}`
+      return {
+        lead: `Get a first read on ${item.company}.`,
+        supporting: null,
+        verb: "Run Quick Prep",
+        href: `/app?job=${item.jobId}`,
+        external: false,
+      }
     case "source_nudge":
-      return `Check ${item.board} for ${item.role} roles, your strongest source (${item.score}/10)`
+      return {
+        lead: `Check ${item.board} for ${item.role} roles.`,
+        supporting: `Your strongest source, ${item.score}/10.`,
+        verb: "See where to look",
+        href: boardUrl(item.board, item.role),
+        external: true,
+      }
   }
+}
+
+// Gem-voice line: bold lead clause + optional supporting sentence.
+function GemLine({ move, className }: { move: GemMove; className?: string }) {
+  return (
+    <p className={className}>
+      <strong className="font-semibold text-[var(--text-primary)]">
+        {move.lead}
+      </strong>
+      {move.supporting ? ` ${move.supporting}` : null}
+    </p>
+  )
 }
 
 // Rail card base (spec: bg surface, border --border, radius 16, shadow E0,
@@ -122,17 +185,142 @@ function Panel({
   )
 }
 
-// Apply-goal hero (spec: radius 20, padding 24/24/22, shadow E4, decorative
-// radial blob, eyebrow, big numeral row, 15-segment pace meter, copy). The
-// estimate projections moved to the Insights card. "Next quest" is preserved
-// as the Phase 2A quest-framing line beneath the meter.
-function ApplyGoalHero({
-  goal,
-  nextQuest,
+// Milestone card (gem-guide section 5): dismissible gradient card, 72px
+// celebrating gem (idle bob), Bricolage title + body. Encouragement only, no
+// streaks, no loss state. Replaces the Phase 2A milestone chip.
+function MilestoneCard({
+  milestone,
+  onDismiss,
 }: {
-  goal: ApplyGoal
-  nextQuest: string | null
+  milestone: Milestone
+  onDismiss: () => void
 }) {
+  return (
+    <div
+      className="relative flex items-center gap-4 rounded-[16px] border px-5 py-[18px] shadow-[0_10px_30px_-14px_rgba(91,33,182,0.30)]"
+      style={{
+        background:
+          "linear-gradient(135deg, var(--milestone-from), var(--milestone-to))",
+        borderColor: "var(--milestone-border)",
+      }}
+    >
+      <Gem pose="celebrating" size={72} float className="shrink-0" />
+      <div className="min-w-0 pr-4">
+        <h2 className="font-bricolage text-[18px] font-semibold leading-[1.2] tracking-[-0.01em] text-[var(--text-primary)]">
+          {milestone.title}
+        </h2>
+        <p className="mt-[5px] text-[13.5px] leading-[1.5] text-[var(--text-body)]">
+          {milestone.body}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Dismiss"
+        className="absolute right-3 top-3 inline-flex size-6 items-center justify-center rounded-md text-[var(--dismiss)] transition-colors hover:text-[var(--text-body)]"
+      >
+        <X className="size-[13px]" strokeWidth={2.2} />
+      </button>
+    </div>
+  )
+}
+
+// "Your next move" card (gem-guide section 2): the primary gem surface. 76px
+// gem, offering when a move is live, resting when idle. One accent button with
+// the move verb; resting state shows a calm line and no button.
+function NextMoveCard({ move }: { move: GemMove | null }) {
+  return (
+    <div className="rounded-[18px] border border-[var(--border)] bg-[var(--surface)] px-5 pb-5 pt-[22px] shadow-[var(--shadow-e1)]">
+      <div className="mb-0.5 flex justify-center">
+        <Gem pose={move ? "offering" : "resting"} size={76} />
+      </div>
+      <p className="mb-[9px] text-center text-[10.5px] font-bold uppercase leading-none tracking-[0.13em] text-[var(--gem-label)]">
+        Your next move
+      </p>
+      {move ? (
+        <>
+          <GemLine
+            move={move}
+            className="mb-4 text-center text-[14.5px] leading-[1.5] text-[var(--text-secondary)]"
+          />
+          {move.href ? (
+            <MoveButton href={move.href} external={move.external}>
+              {move.verb}
+            </MoveButton>
+          ) : null}
+        </>
+      ) : (
+        <p className="text-center text-[14.5px] leading-[1.5] text-[var(--text-secondary)]">
+          You&apos;re caught up. Move a card forward or add a job when
+          you&apos;re ready.
+        </p>
+      )}
+    </div>
+  )
+}
+
+// Full-width accent move button (gem-guide section 2). Internal targets use
+// next/link; external board links open in a new tab.
+function MoveButton({
+  href,
+  external,
+  children,
+}: {
+  href: string
+  external: boolean
+  children: React.ReactNode
+}) {
+  const className =
+    "flex w-full items-center justify-center gap-2 rounded-[11px] bg-[var(--accent)] px-3 py-3 font-hanken text-[14px] font-semibold text-white shadow-[0_6px_16px_-4px_rgba(91,33,182,0.40)] transition-colors hover:bg-[var(--accent-deep)]"
+  if (external) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={className}
+      >
+        {children}
+      </a>
+    )
+  }
+  return (
+    <Link href={href} className={className}>
+      {children}
+    </Link>
+  )
+}
+
+// Onboarding card (gem-guide section 6): just-in-time, no forced tour. Moment
+// eyebrow + 46px gem + one gem-voice sentence. No button (the Add Job CTA
+// lives in the Applied column); this card is the gem's voice only.
+function OnboardingCard({ moment }: { moment: OnboardingMoment }) {
+  const eyebrow = moment.kind === "empty" ? "Empty board" : "After the first job"
+  const pose = moment.kind === "empty" ? "resting" : "offering"
+  const line =
+    moment.kind === "empty"
+      ? "Add your first job and I'll line up your first move."
+      : `Got it. Run a Quick Prep on ${moment.company} to see what I can do.`
+  return (
+    <Panel className="px-[22px] py-[22px]">
+      <p className="mb-3.5 text-[10.5px] font-bold uppercase tracking-[0.10em] text-[var(--gem-label)]">
+        {eyebrow}
+      </p>
+      <div className="flex items-start gap-[13px]">
+        <Gem pose={pose} size={46} className="shrink-0" />
+        <p className="pt-1 text-[14px] leading-[1.55] text-[var(--text-secondary)]">
+          {line}
+        </p>
+      </div>
+    </Panel>
+  )
+}
+
+// Apply-goal hero (gem-guide / dashboard "Image 2": radius 20, padding
+// 24/24/22, shadow E4, radial blob, "Apply goal" eyebrow, big numeral row,
+// 15-segment pace meter, sweet-spot sub-line). The gem next-move card owns the
+// next move now, so the hero carries no quest framing.
+function ApplyGoalHero({ goal }: { goal: ApplyGoal }) {
   const logged = Math.min(goal.loggedThisWeek, APPLY_TARGET)
   const met = goal.loggedThisWeek >= APPLY_TARGET
   const copy = met
@@ -182,12 +370,6 @@ function ApplyGoalHero({
       <p className="mt-3.5 text-[13.5px] leading-[1.5] text-[var(--text-body)]">
         {copy}
       </p>
-      {nextQuest ? (
-        <p className="mt-3.5 border-t border-[var(--divider-kanban)] pt-3.5 text-[13px] leading-[1.45] text-[var(--text-body)]">
-          <span className="text-[var(--text-muted)]">Next quest: </span>
-          {nextQuest}
-        </p>
-      ) : null}
     </div>
   )
 }
@@ -348,105 +530,57 @@ function AdvisorPanel({ advisor }: { advisor: Advisor }) {
   )
 }
 
-// A single internal deep-link row (prep-due, quick-prep gap). Opens the
-// job's prep overlay via the Board's ?job= search param.
-function ActionRow({ href, label }: { href: string; label: string }) {
+// Today row (gem-guide section 4): 30px gem (offering on the active first row,
+// resting after), bold-lead gem line, one sub-button wired to the row's target.
+function TodayRow({ item, active }: { item: TodayItem; active: boolean }) {
+  const move = gemMove(item)
+  const subBtn =
+    "mt-2 inline-flex rounded-[8px] border border-[var(--accent-tint-border)] bg-[var(--surface)] px-3 py-1.5 font-hanken text-[12px] font-semibold text-[var(--accent-deep)] transition-colors hover:bg-[var(--accent-tint-bg)]"
   return (
-    <li className="[&:not(:first-child)]:border-t [&:not(:first-child)]:border-[var(--divider-kanban)]">
-      <Link
-        href={href}
-        className="flex items-start justify-between gap-3 py-[11px] transition-opacity hover:opacity-70"
-      >
-        <span className="text-[13.5px] leading-[1.45] text-[#3A4453]">
-          {label}
-        </span>
-        <ArrowRight className="mt-0.5 size-3.5 shrink-0 text-[#AEB7C2]" />
-      </Link>
+    <li className="flex items-start gap-3 py-[13px] [&:not(:first-child)]:border-t [&:not(:first-child)]:border-[var(--divider)]">
+      <Gem pose={active ? "offering" : "resting"} size={30} className="shrink-0" />
+      <div className="min-w-0 flex-1">
+        <GemLine
+          move={move}
+          className="text-[13.5px] leading-[1.45] text-[var(--text-secondary)]"
+        />
+        {move.href ? (
+          move.external ? (
+            <a
+              href={move.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={subBtn}
+            >
+              {move.verb}
+            </a>
+          ) : (
+            <Link href={move.href} className={subBtn}>
+              {move.verb}
+            </Link>
+          )
+        ) : null}
+      </div>
     </li>
   )
 }
 
-function TodayItemRow({ item }: { item: TodayItem }) {
-  switch (item.kind) {
-    case "prep_due":
-      return (
-        <ActionRow href={`/app?job=${item.jobId}`} label={todayCoachLine(item)} />
-      )
-    case "quick_prep_gap":
-      return (
-        <ActionRow href={`/app?job=${item.jobId}`} label={todayCoachLine(item)} />
-      )
-    case "source_nudge": {
-      const url = boardUrl(item.board, item.role)
-      const label = todayCoachLine(item)
-      if (!url) {
-        return (
-          <li className="py-[11px] text-[13.5px] leading-[1.45] text-[#3A4453] [&:not(:first-child)]:border-t [&:not(:first-child)]:border-[var(--divider-kanban)]">
-            {label}
-          </li>
-        )
-      }
-      return (
-        <li className="[&:not(:first-child)]:border-t [&:not(:first-child)]:border-[var(--divider-kanban)]">
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-start justify-between gap-3 py-[11px] transition-opacity hover:opacity-70"
-          >
-            <span className="text-[13.5px] leading-[1.45] text-[#3A4453]">
-              {label}
-            </span>
-            <ExternalLink className="mt-0.5 size-3.5 shrink-0 text-[#AEB7C2]" />
-          </a>
-        </li>
-      )
-    }
-  }
-}
-
-// Today panel: prioritized "what to move next" items (capped server-side at
-// 3). Empty state (no non-closed jobs) shows a single aspirational line plus
-// the Add Job CTA, never a list of zeros. When there are jobs but nothing
-// actionable, the panel hides (the apply-goal hero carries the rail).
-function TodayPanel({
-  items,
-  hasJobs,
-  onAddJob,
-}: {
-  items: TodayItem[]
-  hasJobs: boolean
-  onAddJob: () => void
-}) {
-  if (!hasJobs) {
-    return (
-      <Panel className="px-[18px] pb-[18px] pt-[18px]">
-        <h2 className="type-today-heading text-[var(--text-primary)]">Today</h2>
-        <p className="mt-2.5 text-[13.5px] leading-[1.45] text-[var(--text-muted)]">
-          Add your first job and Today shows you exactly what to move next.
-        </p>
-        <button
-          type="button"
-          onClick={onAddJob}
-          className="mt-3 inline-flex h-[42px] w-full items-center justify-center gap-1.5 rounded-[13px] bg-[var(--ink)] px-3 text-[15px] font-semibold tracking-[0.01em] text-white shadow-[var(--shadow-ink-cta)] transition-colors hover:bg-[var(--ink-hover)]"
-        >
-          <Plus className="size-4" />
-          Add your first job
-        </button>
-      </Panel>
-    )
-  }
-
+// Today panel (gem-guide section 4): 26px resting gem in the header, the gem's
+// short list (max 3). Hidden when there are jobs but nothing actionable, and
+// when there are no jobs (the onboarding card carries the empty rail).
+function TodayPanel({ items }: { items: TodayItem[] }) {
   if (items.length === 0) return null
-
   return (
-    <Panel className="px-[18px] pb-2 pt-[18px]">
-      <h2 className="type-today-heading mb-2.5 text-[var(--text-primary)]">
-        Today
-      </h2>
+    <Panel className="px-5 pb-2 pt-5">
+      <div className="mb-2 flex items-center gap-2.5">
+        <Gem pose="resting" size={26} className="shrink-0" />
+        <h2 className="text-[15px] font-bold text-[var(--text-primary)]">
+          Today
+        </h2>
+      </div>
       <ul className="flex flex-col">
         {items.map((item, i) => (
-          <TodayItemRow key={i} item={item} />
+          <TodayRow key={i} item={item} active={i === 0} />
         ))}
       </ul>
     </Panel>
@@ -458,8 +592,8 @@ export function CommandRail({
   today,
   applyGoal,
   milestone,
+  onboarding,
 }: Props) {
-  const [addOpen, setAddOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [dismissed, setDismissed] = useState(false)
 
@@ -489,54 +623,29 @@ export function CommandRail({
     setDismissed(true)
   }
 
-  const nextQuest =
-    applyGoal === null
-      ? "Add a job to start the quest line"
-      : today.length > 0
-        ? todayCoachLine(today[0])
-        : null
+  const topMove = today.length > 0 ? gemMove(today[0]) : null
 
-  // Guide gem pose by present context: a live milestone celebrates, a live top
-  // quest or tip offers, otherwise it rests.
-  const pose: GuidePose = milestoneVisible
-    ? "celebrating"
-    : nextQuest
-      ? "offering"
-      : "resting"
+  // Primary gem surface: the onboarding card during early moments, otherwise
+  // the "Your next move" card (once the user has jobs). Order per spec:
+  // milestone -> hero -> next-move/onboarding -> insights -> where -> Today.
+  const primary = onboarding ? (
+    <OnboardingCard moment={onboarding} />
+  ) : applyGoal ? (
+    <NextMoveCard move={topMove} />
+  ) : null
 
   return (
     <aside className="w-full shrink-0 px-4 lg:w-[300px] lg:px-8 lg:pr-0">
       <div className="flex flex-col gap-[18px]">
-        <GuideGem pose={pose} />
         {milestoneVisible && milestone ? (
-          <div className="flex items-start gap-2 rounded-[var(--radius-12)] border border-[var(--accent-tint-border)] bg-[var(--accent-tint-bg)] px-3 py-2.5">
-            <p className="type-card-sublabel flex-1 text-[var(--accent-deep)]">
-              {milestone.text}
-            </p>
-            <button
-              type="button"
-              onClick={dismissMilestone}
-              aria-label="Dismiss"
-              className="shrink-0 text-[var(--accent-deep)]/60 transition-colors hover:text-[var(--accent-deep)]"
-            >
-              <X className="size-3.5" />
-            </button>
-          </div>
+          <MilestoneCard milestone={milestone} onDismiss={dismissMilestone} />
         ) : null}
-        {applyGoal ? (
-          <>
-            <ApplyGoalHero goal={applyGoal} nextQuest={nextQuest} />
-            <InsightsCard rows={applyGoal.projection.rows} />
-          </>
-        ) : null}
+        {applyGoal ? <ApplyGoalHero goal={applyGoal} /> : null}
+        {primary}
+        {applyGoal ? <InsightsCard rows={applyGoal.projection.rows} /> : null}
         <AdvisorPanel advisor={advisor} />
-        <TodayPanel
-          items={today}
-          hasJobs={applyGoal !== null}
-          onAddJob={() => setAddOpen(true)}
-        />
+        <TodayPanel items={today} />
       </div>
-      <AddJobModal open={addOpen} onOpenChange={setAddOpen} />
     </aside>
   )
 }

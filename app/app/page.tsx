@@ -4,6 +4,7 @@ import { Board, type JobRow, type InterviewerInfo } from "@/components/app/board
 import {
   CommandRail,
   type ApplyGoal,
+  type OnboardingMoment,
   type TodayItem,
 } from "@/components/app/command-rail"
 import { TcMatrixSheet } from "@/components/app/tc-matrix-sheet"
@@ -249,6 +250,19 @@ export default async function AppPage({
   }
   const milestone = highestMilestone(nonClosed.map((j) => j.stage))
 
+  // Just-in-time onboarding moment (gem-guide section 6). Empty active board ->
+  // the passive prompt; a single freshly-added, unprepped Applied job -> the
+  // "after the first job" nudge. "New stage reached" is deferred (no stage-event
+  // signal yet). Both are derived from data already in hand.
+  const onboarding: OnboardingMoment | null =
+    nonClosed.length === 0
+      ? { kind: "empty" }
+      : nonClosed.length === 1 &&
+          nonClosed[0].stage === "applied" &&
+          !preppedJobIds.has(nonClosed[0].id)
+        ? { kind: "first_job", company: nonClosed[0].company_name }
+        : null
+
   return (
     <div className="min-h-screen bg-[#F8F9FA]">
       <TopNav
@@ -265,6 +279,7 @@ export default async function AppPage({
             today={today}
             applyGoal={applyGoal}
             milestone={milestone}
+            onboarding={onboarding}
           />
           <div className="min-w-0 flex-1">
             <Board

@@ -1,78 +1,47 @@
-import type React from "react"
+import { cn } from "@/lib/utils"
 
-// Phase 2A guide gem: a calm 3-pose guide on the rail. The pose is driven by
-// present context in command-rail (milestone -> celebrating, live top quest or
-// tip -> offering, else resting). No furthest-stage logic.
+// The amethyst gem guide. One asset per pose (resting / offering / celebrating),
+// rendered via <img srcSet> so the same pose can appear multiple times on a page
+// with no duplicate-ID collisions and stays crisp at any size. The material is
+// baked into the SVG files in public/gem; the only per-pose differences are
+// brightness, glow size, and sparkle count (gem-guide section 1).
 //
-// GEM_ASSETS is the single swap point: replace each placeholder amethyst SVG
-// (same keys) with the Claude Design gem stills, no logic change elsewhere.
+// Pose driver (set by command-rail): a live milestone -> celebrating, a live top
+// move -> offering, otherwise resting. Unchanged from Phase 2A.
 export type GuidePose = "resting" | "offering" | "celebrating"
 
-function GemMark({
-  sparkle = false,
-  glow = false,
+const SRC: Record<GuidePose, { x1: string; x2: string }> = {
+  resting: { x1: "/gem/gem-resting.svg", x2: "/gem/gem-resting-2x.svg" },
+  offering: { x1: "/gem/gem-offering.svg", x2: "/gem/gem-offering-2x.svg" },
+  celebrating: {
+    x1: "/gem/gem-celebrating.svg",
+    x2: "/gem/gem-celebrating-2x.svg",
+  },
+}
+
+export function Gem({
+  pose,
+  size,
+  float = false,
+  className,
 }: {
-  sparkle?: boolean
-  glow?: boolean
+  pose: GuidePose
+  size: number
+  float?: boolean
+  className?: string
 }) {
+  const src = SRC[pose]
   return (
-    <svg width="48" height="48" viewBox="0 0 48 48" aria-hidden="true">
-      {glow ? (
-        <circle cx="24" cy="24" r="22" fill="var(--accent)" opacity="0.16" />
-      ) : null}
-      <polygon
-        points="24,5 39,18 24,43 9,18"
-        fill="var(--accent)"
-        opacity={glow ? 1 : sparkle ? 0.92 : 0.78}
-      />
-      <polygon points="24,5 39,18 9,18" fill="var(--accent-deep)" opacity="0.85" />
-      <line
-        x1="24"
-        y1="5"
-        x2="24"
-        y2="43"
-        stroke="var(--surface)"
-        strokeWidth="1"
-        opacity="0.45"
-      />
-      <line
-        x1="9"
-        y1="18"
-        x2="39"
-        y2="18"
-        stroke="var(--surface)"
-        strokeWidth="1"
-        opacity="0.45"
-      />
-      {sparkle ? (
-        <circle cx="37" cy="9" r="2.5" fill="var(--accent-dot-light)" />
-      ) : null}
-    </svg>
-  )
-}
-
-const GEM_ASSETS: Record<GuidePose, React.ReactNode> = {
-  resting: <GemMark />,
-  offering: <GemMark sparkle />,
-  celebrating: <GemMark glow sparkle />,
-}
-
-const GEM_LABEL: Record<GuidePose, string> = {
-  resting: "Your guide",
-  offering: "Next move ready",
-  celebrating: "Nice work",
-}
-
-export function GuideGem({ pose }: { pose: GuidePose }) {
-  return (
-    <div className="flex items-center gap-3 rounded-[var(--radius-16)] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-e0)]">
-      <div className="shrink-0">{GEM_ASSETS[pose]}</div>
-      <div className="min-w-0">
-        <p className="type-rail-label text-[var(--text-rail-label)]">Guide</p>
-        <p className="type-card-sublabel text-[var(--text-body)]">
-          {GEM_LABEL[pose]}
-        </p>
-      </div>
-    </div>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src.x1}
+      srcSet={`${src.x1} 1x, ${src.x2} 2x`}
+      width={size}
+      height={size}
+      alt=""
+      aria-hidden="true"
+      draggable={false}
+      className={cn("block select-none", float && "gem-float", className)}
+    />
   )
 }
