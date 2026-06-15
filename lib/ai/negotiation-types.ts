@@ -5,12 +5,16 @@ import { z } from "zod"
 // UI shows come from lib/compMatrix/normalize.ts via the action, snapshotted
 // into the row, never from the model.
 
-// Normalized offer figures snapshotted at generation time. Mirrors the subset
-// of NormalizedComp the UI renders in the walk-away module.
+// Normalized offer figures snapshotted at generation time. Year-1 total is the
+// single anchor (COL-adjusted and steady-state are killed product-wide); the
+// components are year-1 parts only, never COL or steady-state. All from
+// lib/compMatrix/normalize.ts, never the model.
 export type NegotiationOfferNormalized = {
   year1_total: number
-  steady_state_total: number
-  col_adjusted_steady: number
+  base: number
+  signing_bonus: number
+  bonus_amount: number
+  annualized_equity: number
 }
 
 // Input handed to generateNegotiation(). companyContext is the Haiku grounding

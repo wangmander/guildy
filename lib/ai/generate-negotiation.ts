@@ -16,7 +16,7 @@ import {
 // action runs upstream and passes in as input.companyContext.
 
 // Bump when the prompt or output contract changes so cached rows re-generate.
-export const NEGOTIATION_PROMPT_VERSION = "neg-v1"
+export const NEGOTIATION_PROMPT_VERSION = "neg-v2"
 
 const NEGOTIATION_MAX_TOKENS = 8192
 // Opus AbortController budget. Haiku grounding (60s) plus this stays under the
@@ -33,7 +33,7 @@ const NEGOTIATION_CONTEXT_SYSTEM = `You are a compensation research assistant. G
 const SYSTEM_PROMPT = `You are a senior compensation negotiation advisor. You produce a tight, actionable negotiation playbook for one job offer. Use the submit_negotiation tool for your entire response.
 
 HARD RULES:
-1. Numbers. Use ONLY the normalized figures provided in [OFFER FIGURES] when referencing the offer's value, and refer to them in words ("your steady-state figure", "the COL-adjusted figure shown") rather than restating dollar amounts. Never invent any dollar amount. The candidate's [TARGET] is free text: reference their stated goal in their own words, but do NOT derive any precise number from it, no floor, no gap, no recommended counter amount. Walk-away and ask guidance stay qualitative, anchored to the provided figures and the stated target.
+1. Numbers. Use ONLY the normalized figure provided in [OFFER FIGURES] when referencing the offer's value, and refer to it in words ("your year-1 total figure shown") rather than restating dollar amounts. Never invent any dollar amount. Never reference steady-state or cost-of-living-adjusted figures; year-1 total is the only anchor. The candidate's [TARGET] is free text: reference their stated goal in their own words, but do NOT derive any precise number from it, no floor, no gap, no recommended counter amount. Walk-away and ask guidance stay qualitative, anchored to the provided figure and the stated target.
 2. Company specificity. When [COMPANY CONTEXT] is present, ground company_patterns in it. When it is absent, give honest general negotiation guidance and never fabricate company-specific claims (do not invent flex percentages or company policies).
 3. Output. company_patterns, leverage_analysis, and walk_away_guidance are non-empty prose. scripts has at least 2 entries, each a named scenario plus word-for-word language the candidate can say.
 
@@ -72,13 +72,12 @@ function buildUserPrompt(input: NegotiationInput, retryHint: string): string {
   const { offer_normalized: o } = input
   const lines: string[] = []
   lines.push(`[COMPANY]\n${input.company}\nRole: ${input.role}`)
-  // Figures are provided for reasoning only. The UI renders the snapshot
+  // Figure provided for reasoning only. The UI renders the snapshot
   // separately; the model must not restate exact dollar amounts (rule 1).
+  // Year-1 total is the only anchor; steady-state and COL are killed.
   lines.push(
     `[OFFER FIGURES] (normalized, for your reasoning only, do not restate exact dollars)\n` +
-      `Year-1 total: ${Math.round(o.year1_total)}\n` +
-      `Steady-state total: ${Math.round(o.steady_state_total)}\n` +
-      `COL-adjusted steady-state: ${Math.round(o.col_adjusted_steady)}`
+      `Year-1 total: ${Math.round(o.year1_total)}`
   )
   lines.push(`[TARGET]\n${input.target}`)
   if (input.leverage && input.leverage.trim().length > 0) {

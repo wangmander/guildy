@@ -53,22 +53,63 @@ function liveNormalized(comp: JobCompensation | null) {
 }
 
 const inputClass =
-  "w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-[#1C1E21] outline-none focus:border-[#4E3BDD]"
+  "w-full rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--accent)]/15"
+
+// Year-1 anchor + its components. No COL, no steady-state (F4 guardrail).
+// Structural subset of NormalizedComp, so both the live normalize output and
+// the snapshotted offer_normalized satisfy it.
+type Year1Figures = {
+  year1_total: number
+  base: number
+  signing_bonus: number
+  bonus_amount: number
+  annualized_equity: number
+}
 
 function FigureRow({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex items-baseline justify-between gap-2 py-1">
-      <span className="text-xs text-gray-500">{label}</span>
-      <span className="tabular-nums text-sm font-medium text-[#1C1E21]">
+    <div className="flex items-baseline justify-between gap-2">
+      <span className="text-xs text-[var(--text-muted)]">{label}</span>
+      <span className="tabular-nums text-[13px] text-[var(--text-body)]">
         {usd(value)}
       </span>
     </div>
   )
 }
 
+// Year-1 total headline + compact component breakdown, all from normalize.ts.
+// Components are coerced with ?? 0 so a legacy-shaped snapshot (pre neg-v2,
+// dev-only) renders cleanly instead of $NaN; a regenerate refreshes it.
+function OfferFigures({ f }: { f: Year1Figures }) {
+  const base = f.base ?? 0
+  const signing = f.signing_bonus ?? 0
+  const bonus = f.bonus_amount ?? 0
+  const equity = f.annualized_equity ?? 0
+  return (
+    <div className="mt-1.5">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-xs font-medium text-[var(--text-muted)]">
+          Year-1 total
+        </span>
+        <span className="font-bricolage text-[16px] font-semibold tabular-nums text-[var(--ink)]">
+          {usd(f.year1_total ?? 0)}
+        </span>
+      </div>
+      <div className="mt-1.5 flex flex-col gap-1 border-t border-[var(--divider)] pt-1.5">
+        <FigureRow label="Base" value={base} />
+        {signing > 0 ? (
+          <FigureRow label="Signing bonus" value={signing} />
+        ) : null}
+        <FigureRow label="Annual bonus" value={bonus} />
+        <FigureRow label="Annualized equity" value={equity} />
+      </div>
+    </div>
+  )
+}
+
 function ModuleHeading({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="font-display text-sm font-medium text-[#1C1E21]">
+    <h3 className="font-bricolage text-sm font-semibold text-[var(--text-primary)]">
       {children}
     </h3>
   )
@@ -83,9 +124,11 @@ function ScriptBlock({
 }) {
   const [copied, setCopied] = useState(false)
   return (
-    <div className="rounded-md border border-gray-200 p-3">
+    <div className="rounded-[10px] border border-[var(--border-card)] p-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-medium text-[#1C1E21]">{scenario}</span>
+        <span className="text-xs font-semibold text-[var(--text-primary)]">
+          {scenario}
+        </span>
         <button
           type="button"
           onClick={() => {
@@ -93,7 +136,7 @@ function ScriptBlock({
             setCopied(true)
             setTimeout(() => setCopied(false), 1500)
           }}
-          className="inline-flex items-center gap-1 text-xs text-gray-500 transition-colors hover:text-[#4E3BDD]"
+          className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"
         >
           {copied ? (
             <>
@@ -108,7 +151,7 @@ function ScriptBlock({
           )}
         </button>
       </div>
-      <p className="mt-1.5 whitespace-pre-wrap text-sm leading-snug text-gray-700">
+      <p className="mt-1.5 whitespace-pre-wrap text-sm leading-snug text-[var(--text-body)]">
         {script}
       </p>
     </div>
@@ -130,14 +173,20 @@ function Modules({
         <ModuleHeading>
           {o.grounded ? `Patterns for ${company}` : "General negotiation patterns"}
         </ModuleHeading>
-        <p className="whitespace-pre-wrap text-sm leading-snug text-gray-700">
+        {o.grounded ? null : (
+          <p className="text-xs text-[var(--text-faint)]">
+            Couldn&rsquo;t find {company}-specific signals, this is general
+            guidance.
+          </p>
+        )}
+        <p className="whitespace-pre-wrap text-sm leading-snug text-[var(--text-body)]">
           {o.company_patterns}
         </p>
       </section>
 
       <section className="flex flex-col gap-1.5">
         <ModuleHeading>Your leverage</ModuleHeading>
-        <p className="whitespace-pre-wrap text-sm leading-snug text-gray-700">
+        <p className="whitespace-pre-wrap text-sm leading-snug text-[var(--text-body)]">
           {o.leverage_analysis}
         </p>
       </section>
@@ -151,15 +200,10 @@ function Modules({
 
       <section className="flex flex-col gap-1.5">
         <ModuleHeading>Walk-away</ModuleHeading>
-        <div className="rounded-md border border-gray-200 p-3">
-          <FigureRow label="Year-1 total" value={snap.year1_total} />
-          <FigureRow label="Steady-state total" value={snap.steady_state_total} />
-          <FigureRow
-            label="COL-adjusted steady-state"
-            value={snap.col_adjusted_steady}
-          />
+        <div className="rounded-[10px] border border-[var(--border-card)] p-3">
+          <OfferFigures f={snap} />
         </div>
-        <p className="whitespace-pre-wrap text-sm leading-snug text-gray-700">
+        <p className="whitespace-pre-wrap text-sm leading-snug text-[var(--text-body)]">
           {o.walk_away_guidance}
         </p>
       </section>
@@ -234,47 +278,39 @@ export function NegotiationPanel({ job, onOpenChange }: Props) {
         {job ? (
           <>
             <DialogHeader>
-              <DialogTitle className="font-display">Negotiation Prep</DialogTitle>
+              <DialogTitle className="font-bricolage">
+                Negotiation Prep
+              </DialogTitle>
               <DialogDescription>
                 {job.company} · {job.role}
               </DialogDescription>
             </DialogHeader>
 
-            <div className="rounded-lg border border-gray-200 p-3">
+            <div className="rounded-[10px] border border-[var(--border)] p-3">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-medium text-[#1C1E21]">
+                <span className="text-xs font-semibold text-[var(--text-primary)]">
                   Offer summary
                 </span>
                 <button
                   type="button"
                   onClick={() => setEditComp(true)}
-                  className="inline-flex items-center gap-1 text-xs text-gray-500 transition-colors hover:text-[#4E3BDD]"
+                  className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] transition-colors hover:text-[var(--accent)]"
                 >
                   <Pencil className="size-3.5" />
                   Edit offer
                 </button>
               </div>
               {normalized ? (
-                <div className="mt-1.5">
-                  <FigureRow label="Year-1 total" value={normalized.year1_total} />
-                  <FigureRow
-                    label="Steady-state total"
-                    value={normalized.steady_state_total}
-                  />
-                  <FigureRow
-                    label="COL-adjusted steady-state"
-                    value={normalized.col_adjusted_steady}
-                  />
-                </div>
+                <OfferFigures f={normalized} />
               ) : (
-                <p className="mt-1.5 text-xs text-gray-500">
+                <p className="mt-1.5 text-xs text-[var(--text-muted)]">
                   Add the offer&rsquo;s compensation to anchor your prep.
                 </p>
               )}
             </div>
 
             {stale ? (
-              <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              <p className="mt-2 rounded-[8px] bg-[var(--warn-bg)] px-3 py-2 text-xs text-[var(--warn-text)]">
                 Your compensation changed since this was generated. Regenerate
                 for an updated playbook.
               </p>
@@ -282,7 +318,7 @@ export function NegotiationPanel({ job, onOpenChange }: Props) {
 
             <div className="mt-4 flex flex-col gap-3">
               <label className="flex flex-col gap-1">
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-[var(--text-muted)]">
                   Target (what you want, in your words)
                 </span>
                 <textarea
@@ -294,7 +330,7 @@ export function NegotiationPanel({ job, onOpenChange }: Props) {
                 />
               </label>
               <label className="flex flex-col gap-1">
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-[var(--text-muted)]">
                   Leverage (optional: competing offers, scarce skills, timing)
                 </span>
                 <textarea
@@ -310,12 +346,14 @@ export function NegotiationPanel({ job, onOpenChange }: Props) {
                   type="button"
                   onClick={generate}
                   disabled={generating || target.trim().length === 0}
-                  className="inline-flex h-9 items-center justify-center rounded-md bg-[#4E3BDD] px-3 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+                  className="inline-flex h-9 items-center justify-center rounded-[10px] bg-[var(--accent)] px-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-deep)] disabled:opacity-60"
                 >
                   {row ? "Regenerate" : "Generate negotiation prep"}
                 </button>
                 {loadingCache ? (
-                  <span className="text-xs text-gray-400">Loading...</span>
+                  <span className="text-xs text-[var(--text-faint)]">
+                    Loading...
+                  </span>
                 ) : null}
               </div>
               {error ? (

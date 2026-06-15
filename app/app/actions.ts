@@ -1778,10 +1778,14 @@ function snapshotNormalized(comp: CompRow): NegotiationOfferNormalized {
     vesting_years: comp.vesting_years,
     location: comp.location,
   })
+  // Year-1 anchor + its components only. Steady-state and COL are killed
+  // product-wide and never snapshotted (F4 integrity guardrail).
   return {
     year1_total: n.year1_total,
-    steady_state_total: n.steady_state_total,
-    col_adjusted_steady: n.col_adjusted_steady,
+    base: n.base,
+    signing_bonus: n.signing_bonus,
+    bonus_amount: n.bonus_amount,
+    annualized_equity: n.annualized_equity,
   }
 }
 
