@@ -26,7 +26,7 @@ export function QuestionsTheyAsk({ items, tier, footer }: TheyAskProps) {
   return (
     <section
       id="questions-they-ask"
-      className="scroll-mt-6 rounded-[14px] border border-[var(--border-card)] bg-[var(--surface)] p-5 shadow-[var(--shadow-e1)]"
+      className="scroll-mt-6 border-b border-[var(--divider)] px-6 py-6 md:px-7"
     >
       <div className="flex items-baseline justify-between">
         <div>
@@ -80,7 +80,7 @@ export function QuestionsYouAsk({ items }: YouAskProps) {
   return (
     <section
       id="questions-you-ask"
-      className="scroll-mt-6 rounded-[14px] border border-[var(--border-card)] bg-[var(--surface)] p-5 shadow-[var(--shadow-e1)]"
+      className="scroll-mt-6 border-b border-[var(--divider)] px-6 py-6 md:px-7"
     >
       <div className="flex items-baseline justify-between">
         <div>

@@ -173,8 +173,10 @@ export function PrepCanvas({
   const showRegenerate = currentEntry?.state === "cached"
 
   return (
-    <div className="px-4 pb-12 pt-6 md:px-7">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    // Flat module (item 7): no inner horizontal padding on the root; every
+    // band carries px-6 md:px-7 so the border-b dividers run edge-to-edge.
+    <div className="pb-12">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-6 pb-5 pt-6 md:px-7">
         <h1 className="type-prep-h1 text-[var(--text-primary)]">{heading}</h1>
         <div className="flex items-center gap-2">
           <TierSelector
@@ -198,41 +200,47 @@ export function PrepCanvas({
           ) : null}
         </div>
       </div>
+      <div className="border-b border-[var(--divider)]" />
 
       {noneEnabled ? (
-        <div className="mt-6 rounded-[14px] border border-dashed border-[var(--border-strong)] bg-[var(--surface-sunken)] p-6 text-center">
-          <p className="text-sm text-[var(--text-muted)]">
-            No rounds configured. Customize rounds to set up your loop.
-          </p>
-          <button
-            type="button"
-            onClick={() => setCustomizeOpen(true)}
-            className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-sunken)]"
-          >
-            <Pencil className="size-3.5" />
-            Customize rounds
-          </button>
+        <div className="px-6 py-6 md:px-7">
+          <div className="rounded-[14px] border border-dashed border-[var(--border-strong)] bg-[var(--surface-sunken)] p-6 text-center">
+            <p className="text-sm text-[var(--text-muted)]">
+              No rounds configured. Customize rounds to set up your loop.
+            </p>
+            <button
+              type="button"
+              onClick={() => setCustomizeOpen(true)}
+              className="mt-3 inline-flex h-9 items-center gap-1.5 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-sunken)]"
+            >
+              <Pencil className="size-3.5" />
+              Customize rounds
+            </button>
+          </div>
         </div>
       ) : (
         <>
           {fullLoop ? (
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-              <SessionTabs
-                sessions={sessions}
-                sessionConfig={sessionConfig}
-                selectedRole={selectedRole}
-                onSelect={onSelectRole}
-                disabled={isAnyGenerating}
-              />
-              <button
-                type="button"
-                onClick={() => setCustomizeOpen(true)}
-                className="inline-flex h-7 items-center gap-1 rounded-[8px] px-2 text-xs font-semibold text-[var(--text-faint)] transition-colors hover:bg-[var(--surface-sunken)] hover:text-[var(--text-primary)]"
-              >
-                <Pencil className="size-3" />
-                Customize
-              </button>
-            </div>
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-2 px-6 py-3 md:px-7">
+                <SessionTabs
+                  sessions={sessions}
+                  sessionConfig={sessionConfig}
+                  selectedRole={selectedRole}
+                  onSelect={onSelectRole}
+                  disabled={isAnyGenerating}
+                />
+                <button
+                  type="button"
+                  onClick={() => setCustomizeOpen(true)}
+                  className="inline-flex h-7 items-center gap-1 rounded-[8px] px-2 text-xs font-semibold text-[var(--text-faint)] transition-colors hover:bg-[var(--surface-sunken)] hover:text-[var(--text-primary)]"
+                >
+                  <Pencil className="size-3" />
+                  Customize
+                </button>
+              </div>
+              <div className="border-b border-[var(--divider)]" />
+            </>
           ) : null}
 
           <CanvasBody
@@ -286,17 +294,19 @@ function TierSelector({
   // Prompt 15: paid users see only the Deep compartment.
   hideQuick?: boolean
 }) {
-  const compartmentBase =
-    "inline-flex items-center gap-1.5 rounded-[9px] px-2.5 py-1 text-xs transition-colors"
-  const compartmentUnselected =
-    "text-[var(--text-faint)] hover:text-[var(--text-primary)]"
+  // Tuning pass 2 (item 3): short top-right pill. Quick = white when selected
+  // with a HAIKU 4.5 badge; Deep = always purple-filled, with an UPGRADE tag
+  // for unpaid users (hideQuick === paid). Click flips tier; on the unpaid
+  // view it also fires onUpgrade (paywall), exactly as before.
+  const pillBase =
+    "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] transition-colors"
   const lockedSuffix = disabled ? " cursor-not-allowed opacity-60" : ""
 
   return (
     <div
       role="tablist"
       aria-label="Prep tier"
-      className="inline-flex flex-nowrap items-center gap-0.5 whitespace-nowrap rounded-[11px] border border-[var(--border)] bg-[var(--tab-track)] p-0.5"
+      className="inline-flex flex-nowrap items-center gap-1 whitespace-nowrap rounded-full border border-[var(--border)] bg-[var(--tab-track)] p-0.5"
     >
       {hideQuick ? null : (
         <button
@@ -310,11 +320,11 @@ function TierSelector({
             onTierChange("quick")
           }}
           className={
-            compartmentBase +
+            pillBase +
             " " +
             (tier === "quick"
               ? "bg-[var(--surface)] text-[var(--text-primary)] shadow-[var(--shadow-e1)]"
-              : compartmentUnselected) +
+              : "text-[var(--text-faint)] hover:text-[var(--text-primary)]") +
             lockedSuffix
           }
         >
@@ -325,11 +335,8 @@ function TierSelector({
         </button>
       )}
 
-      {/* Deep compartment: div with role=tab so a real <button> Upgrade chip
-          can nest inside without invalid button-in-button HTML. Enter/Space
-          mirrors native button behavior for tier toggle. The chip's onClick
-          stops propagation so chip clicks don't double as compartment clicks. */}
-      <div
+      <button
+        type="button"
         role="tab"
         aria-selected={tier === "deep"}
         aria-disabled={disabled}
@@ -337,48 +344,22 @@ function TierSelector({
         onClick={() => {
           if (disabled) return
           onTierChange("deep")
-        }}
-        onKeyDown={(e) => {
-          if (disabled) return
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault()
-            onTierChange("deep")
-          }
+          // Unpaid view: flipping to Deep also fires the upgrade/paywall.
+          if (!hideQuick) onUpgrade()
         }}
         className={
-          compartmentBase +
-          " focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40 " +
-          (tier === "deep"
-            ? "bg-[image:var(--accent-grad)] text-white shadow-[var(--shadow-e1)]"
-            : compartmentUnselected) +
-          (disabled ? " cursor-not-allowed opacity-60" : " cursor-pointer")
+          pillBase +
+          " bg-[image:var(--accent-grad)] font-semibold text-white shadow-[var(--shadow-e1)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40" +
+          lockedSuffix
         }
       >
-        {tier === "quick" ? (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              // Patch 5.3: chip flips tier to deep alongside the existing
-              // onUpgrade analytics call. Pre-paywall the chip would
-              // otherwise be a dead button. When Phase 6b ships the paywall,
-              // onUpgrade becomes the gate; for now both fire.
-              onTierChange("deep")
-              onUpgrade()
-            }}
-            className="inline-flex items-center rounded bg-[var(--accent-chip-bg)] px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-[var(--accent-deep)] transition-colors hover:bg-[var(--accent-chip-bg2)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/40"
-          >
-            <span className="font-semibold">Sonnet 4.6</span>
-            <span aria-hidden="true" className="px-1 opacity-60">·</span>
-            <span className="font-bold">Upgrade</span>
-          </button>
-        ) : (
-          <span className="inline-flex items-center rounded bg-white/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
-            Sonnet 4.6
+        <span>Deep Prep</span>
+        {hideQuick ? null : (
+          <span className="inline-flex items-center rounded bg-white/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+            Upgrade
           </span>
         )}
-        <span className="font-semibold">Deep Prep</span>
-      </div>
+      </button>
     </div>
   )
 }
@@ -416,24 +397,41 @@ function CanvasBody({
   onUpgrade: () => void
   onAddJd: () => void
 }) {
+  // Alternate states keep their own padded box (item 7 leaves them as-is); the
+  // flat module has no root padding, so they get a px wrapper. PrepView renders
+  // full-bleed divided sections directly.
   if (error) {
-    return <ErrorState message={error} onRetry={onGenerate} />
+    return (
+      <div className="px-6 md:px-7">
+        <ErrorState message={error} onRetry={onGenerate} />
+      </div>
+    )
   }
   if (isGenerating) {
-    return <ProgressLoader tier={tier} />
+    return (
+      <div className="px-6 md:px-7">
+        <ProgressLoader tier={tier} />
+      </div>
+    )
   }
   if (statesMap === null || !latestRoundsResolved) {
-    return <LoadingSkeleton />
+    return (
+      <div className="px-6 md:px-7">
+        <LoadingSkeleton />
+      </div>
+    )
   }
   if (!currentEntry || currentEntry.state === "empty" || !currentOutput) {
     return (
-      <EmptyState
-        hasResume={hasResume}
-        hasJd={hasJd}
-        tier={tier}
-        onGenerate={onGenerate}
-        onAddJd={onAddJd}
-      />
+      <div className="px-6 md:px-7">
+        <EmptyState
+          hasResume={hasResume}
+          hasJd={hasJd}
+          tier={tier}
+          onGenerate={onGenerate}
+          onAddJd={onAddJd}
+        />
+      </div>
     )
   }
   return (
@@ -644,7 +642,9 @@ function PrepView({
     if (stale) setToastDismissed(false)
   }, [stale])
   return (
-    <div className="mt-6 space-y-5">
+    // Flat divided sections (item 7): no container padding/spacing; each
+    // section is a full-bleed band with its own px + border-b divider.
+    <div>
       {stale && onRegenerate && !toastDismissed ? (
         <StaleToast
           tier={tier}
@@ -692,8 +692,6 @@ function PrepView({
         />
       ) : null}
 
-      <ChecklistSection checklist={prep.prep_checklist} />
-
       <RisksSection
         risks={prep.risks}
         tier={tier}
@@ -707,10 +705,14 @@ function PrepView({
           ) : null
         }
       />
+
+      <ChecklistSection checklist={prep.prep_checklist} />
     </div>
   )
 }
 
+// Flat prep section band (item 7): full-bleed, own horizontal padding, a
+// bottom divider; no card border/box/radius/shadow.
 function SectionShell({
   id,
   title,
@@ -725,7 +727,10 @@ function SectionShell({
   children: React.ReactNode
 }) {
   return (
-    <section id={id} className={SECTION_CARD}>
+    <section
+      id={id}
+      className="scroll-mt-6 border-b border-[var(--divider)] px-6 py-6 md:px-7"
+    >
       <div className="flex items-baseline justify-between gap-3">
         <div>
           <h2 className="type-section-h2 text-[var(--text-primary)]">{title}</h2>

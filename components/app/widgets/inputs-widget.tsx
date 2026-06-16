@@ -13,7 +13,6 @@ import {
   Check,
   ChevronDown,
   Loader2,
-  Minus,
   Plus,
   Sparkles,
   Trash2,
@@ -183,7 +182,7 @@ export function InputsWidget({
     >
       <div className="flex items-baseline justify-between">
         <h3 className="type-rail-label text-[var(--text-faint)]">Inputs</h3>
-        <span className="text-xs tabular-nums text-[var(--text-muted)]">
+        <span className="rounded-full bg-[var(--salary-bg)] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--text-muted)]">
           {filled}/{rows.length}
         </span>
       </div>
@@ -310,11 +309,11 @@ function RowItem({
         <span
           className={
             row.present
-              ? "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--accent-tint-bg)] text-[var(--accent)]"
-              : "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--surface-sunken)] text-[var(--text-faint)]"
+              ? "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-[var(--ink)] text-white"
+              : "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border border-[var(--border-strong)]"
           }
         >
-          {row.present ? <Check className="size-3" /> : <Minus className="size-3" />}
+          {row.present ? <Check className="size-3" /> : null}
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">

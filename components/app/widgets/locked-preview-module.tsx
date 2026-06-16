@@ -8,17 +8,11 @@ type Props = {
   onUpgrade: () => void
 }
 
-// Standalone card. Used when a locked preview has no Quick parent module
-// to attach to (currently: ResumeJdFit only).
+// Edge-to-edge lavender band (item 7). Used when a locked preview has no
+// Quick parent section to attach to (currently: ResumeJdFit only).
 export function LockedPreviewModule({ title, teaser, onUpgrade }: Props) {
   return (
-    <section
-      className="scroll-mt-6 rounded-[14px] border border-dashed border-[var(--accent-tint-border)] p-5"
-      style={{
-        background:
-          "linear-gradient(135deg, var(--accent-tint-bg), var(--surface))",
-      }}
-    >
+    <section className="scroll-mt-6 border-b border-[var(--divider)] bg-[var(--accent-tint-bg)] px-6 py-6 md:px-7">
       <div className="flex items-start gap-3">
         <Lock className="mt-0.5 size-4 shrink-0 text-[var(--accent)]" />
         <div className="min-w-0 flex-1">
@@ -42,12 +36,12 @@ export function LockedPreviewModule({ title, teaser, onUpgrade }: Props) {
   )
 }
 
-// Inline footer pattern. Sits inside a parent module's card, separated by a
-// subtle divider and very light blurple wash. Used when a locked preview
-// extends a Quick-tier section (Positioning, Risks, QuestionsTheyAsk).
+// Edge-to-edge lavender band at the bottom of a flat prep section (item 7).
+// Negative margins bleed it to the module edges (sections use px-6 md:px-7
+// py-6); -mb-6 pulls it flush to the section's bottom divider.
 export function LockedPreviewFooter({ title, teaser, onUpgrade }: Props) {
   return (
-    <div className="-mx-5 -mb-5 mt-5 rounded-b-[14px] border-t border-[var(--border-card)] bg-[var(--accent-tint-bg2)] px-5 py-4">
+    <div className="-mx-6 -mb-6 mt-6 border-t border-[var(--border-card)] bg-[var(--accent-tint-bg2)] px-6 py-4 md:-mx-7 md:px-7">
       <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
         <Lock className="mt-0.5 size-3.5 shrink-0 text-[var(--accent)]" />
         <div className="min-w-0 flex-1">

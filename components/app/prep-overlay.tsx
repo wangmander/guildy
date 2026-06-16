@@ -493,7 +493,7 @@ export function PrepOverlay({
       <div
         aria-hidden="true"
         onClick={onClose}
-        className="absolute inset-0 bg-[var(--overlay-bg)]/80 backdrop-blur-sm"
+        className="absolute inset-0 bg-[var(--overlay-bg)]"
       />
 
       <button
@@ -516,7 +516,7 @@ export function PrepOverlay({
           every breakpoint. The side rails are NOT sticky; they scroll away
           with the center (B2). */}
       <div className="pointer-events-none absolute inset-0 z-10 overflow-y-auto">
-        <div className="pointer-events-none mx-auto flex min-h-full w-full max-w-[1440px] flex-col gap-4 px-4 py-16 md:grid md:grid-cols-[280px_minmax(0,1fr)_360px] md:items-start md:gap-6 md:px-6 md:py-6 lg:gap-8 lg:px-8">
+        <div className="pointer-events-none mx-auto flex min-h-full w-full max-w-[1440px] flex-col gap-4 px-4 py-16 md:grid md:grid-cols-[280px_minmax(0,1fr)_360px] md:items-start md:gap-12 md:px-6 md:py-6 lg:px-8">
           {!job ? (
             <ErrorCard onClose={onClose} />
           ) : (

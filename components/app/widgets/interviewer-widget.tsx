@@ -88,7 +88,7 @@ export function InterviewerWidget({
         <button
           type="button"
           onClick={onEdit}
-          className="mt-2 inline-flex h-9 w-full items-center gap-2 rounded-[10px] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-3 text-sm text-[var(--text-muted)] transition-colors hover:border-[var(--accent)]/40 hover:text-[var(--accent)]"
+          className="mt-2 inline-flex h-9 w-full items-center justify-center gap-2 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-semibold text-[var(--text-body)] shadow-[var(--shadow-e1)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
         >
           <UserPlus className="size-3.5" />
           Add interviewer
