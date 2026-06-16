@@ -10,7 +10,7 @@ type Props = {
 
 export function JobContextWidget({ company, role, tc, sourceUrl, jdSnippet }: Props) {
   return (
-    <div className="rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-e1)]">
+    <div>
       <h3 className="type-rail-label text-[var(--text-faint)]">Role</h3>
       <div className="mt-2">
         <div className="font-bricolage text-base font-semibold leading-tight text-[var(--text-primary)]">

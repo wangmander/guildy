@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { Pencil, RefreshCw, Sparkles } from "lucide-react"
+import { useEffect, useState } from "react"
+import { Pencil, RefreshCw, Sparkles, X } from "lucide-react"
 
 import type { PrepStatesMap, PrepStateEntry } from "@/app/app/actions"
 import {
@@ -447,27 +447,40 @@ function CanvasBody({
   )
 }
 
-function StaleBanner({
+// Inputs-changed indicator (B3): a floating bottom-center toast over the
+// overlay, not a top banner. Fixed-positioned so it sits at the viewport
+// bottom regardless of scroll; pointer-events-auto on the toast only, and it
+// lives inside the center module's stopPropagation subtree so toast clicks
+// never close the overlay (B4 preserved).
+function StaleToast({
   tier,
   onRegenerate,
+  onDismiss,
 }: {
   tier: PrepTier
   onRegenerate: () => void
+  onDismiss: () => void
 }) {
   return (
-    <div className="rounded-[14px] border border-amber-200 bg-amber-50 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm leading-relaxed text-amber-900">
-          Inputs changed since this prep was generated.
-        </p>
-        <button
-          type="button"
-          onClick={onRegenerate}
-          className="inline-flex h-8 items-center rounded-[10px] bg-[var(--accent)] px-3 text-xs font-semibold text-white transition-colors hover:bg-[var(--accent-deep)]"
-        >
-          Regenerate {tier === "deep" ? "Deep" : "Quick"}
-        </button>
-      </div>
+    <div className="pointer-events-auto fixed bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-[12px] border border-[var(--warn-border)] bg-[var(--warn-bg)] px-4 py-2.5 shadow-[var(--shadow-e4)]">
+      <p className="text-sm leading-snug text-[var(--warn-text)]">
+        Inputs changed since this prep was generated.
+      </p>
+      <button
+        type="button"
+        onClick={onRegenerate}
+        className="inline-flex h-8 shrink-0 items-center rounded-[10px] bg-[var(--accent)] px-3 text-xs font-semibold text-white transition-colors hover:bg-[var(--accent-deep)]"
+      >
+        Regenerate {tier === "deep" ? "Deep" : "Quick"}
+      </button>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Dismiss"
+        className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-[var(--warn-text-soft)] transition-colors hover:bg-black/5"
+      >
+        <X className="size-4" />
+      </button>
     </div>
   )
 }
@@ -624,10 +637,20 @@ function PrepView({
   onRegenerate?: () => void
 }) {
   const isQuick = tier === "quick"
+  // Toast dismissal resets whenever staleness re-arms so a later edit toasts
+  // again after a prior dismiss.
+  const [toastDismissed, setToastDismissed] = useState(false)
+  useEffect(() => {
+    if (stale) setToastDismissed(false)
+  }, [stale])
   return (
     <div className="mt-6 space-y-5">
-      {stale && onRegenerate ? (
-        <StaleBanner tier={tier} onRegenerate={onRegenerate} />
+      {stale && onRegenerate && !toastDismissed ? (
+        <StaleToast
+          tier={tier}
+          onRegenerate={onRegenerate}
+          onDismiss={() => setToastDismissed(true)}
+        />
       ) : null}
       <PurposeSection purpose={prep.purpose} />
 

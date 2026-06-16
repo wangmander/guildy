@@ -26,7 +26,7 @@ export function InterviewerWidget({
   const sanitizedLink = sanitizeLink(link)
 
   return (
-    <div className="rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow-e1)]">
+    <div>
       <div className="flex items-baseline justify-between">
         <h3 className="type-rail-label text-[var(--text-faint)]">Interviewer</h3>
         {hasAnyField ? (

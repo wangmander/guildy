@@ -512,20 +512,24 @@ export function PrepOverlay({
           gaps and outer overflow area pass clicks through to the backdrop.
           Each column is pointer-events-auto + stopPropagation so widget
           clicks stay inside the overlay. */}
-      <div className="pointer-events-none absolute inset-0 z-10 overflow-y-auto md:overflow-hidden">
-        <div className="pointer-events-none mx-auto flex min-h-full w-full max-w-[1440px] flex-col gap-4 px-4 py-16 md:grid md:grid-cols-[280px_minmax(0,1fr)_360px] md:gap-6 md:px-6 md:py-6 lg:gap-8 lg:px-8">
+      {/* Unified vertical scroll: the whole overlay scrolls as one unit at
+          every breakpoint. The side rails are NOT sticky; they scroll away
+          with the center (B2). */}
+      <div className="pointer-events-none absolute inset-0 z-10 overflow-y-auto">
+        <div className="pointer-events-none mx-auto flex min-h-full w-full max-w-[1440px] flex-col gap-4 px-4 py-16 md:grid md:grid-cols-[280px_minmax(0,1fr)_360px] md:items-start md:gap-6 md:px-6 md:py-6 lg:gap-8 lg:px-8">
           {!job ? (
             <ErrorCard onClose={onClose} />
           ) : (
             <>
-              {/* Phase 4e p1.7: pointer-events-auto + stopPropagation moved
-                  from the aside/main wrappers down to per-widget shells.
-                  Aside is now pointer-events-none (purely structural for
-                  the flex layout), so its empty space below the last
-                  widget passes clicks through to the backdrop. */}
-              <aside className="pointer-events-none flex flex-col gap-4 md:sticky md:top-6 md:max-h-[calc(100dvh-3rem)] md:overflow-y-auto md:pr-1">
+              {/* Left rail: one muted --surface-rail box with de-carded
+                  sections inside (B1). The Deep Prep upsell stays its own
+                  lavender card below the gray box. Asides are
+                  pointer-events-none; the rail box + upsell are
+                  pointer-events-auto + stopPropagation so gaps still close
+                  the overlay (B4). */}
+              <aside className="pointer-events-none flex flex-col gap-4">
                 <div
-                  className="pointer-events-auto"
+                  className="pointer-events-auto flex flex-col rounded-[16px] bg-[var(--surface-rail)] p-3"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <JobContextWidget
@@ -535,11 +539,7 @@ export function PrepOverlay({
                     sourceUrl={job.source_url}
                     jdSnippet={job.jd_text}
                   />
-                </div>
-                <div
-                  className="pointer-events-auto"
-                  onClick={(e) => e.stopPropagation()}
-                >
+                  <div className="my-3 h-px bg-[var(--border)]" />
                   <InterviewerWidget
                     name={interviewerName}
                     title={interviewerTitle}
@@ -561,7 +561,7 @@ export function PrepOverlay({
                 ) : null}
               </aside>
 
-              <main className="pointer-events-none md:max-h-[calc(100dvh-3rem)] md:overflow-y-auto">
+              <main className="pointer-events-none">
                 <div
                   className="pointer-events-auto rounded-[18px] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-e3)]"
                   onClick={(e) => e.stopPropagation()}
@@ -589,9 +589,9 @@ export function PrepOverlay({
                 </div>
               </main>
 
-              <aside className="pointer-events-none flex flex-col gap-4 md:sticky md:top-6 md:max-h-[calc(100dvh-3rem)] md:overflow-y-auto md:pr-1">
+              <aside className="pointer-events-none flex flex-col gap-4">
                 <div
-                  className="pointer-events-auto"
+                  className="pointer-events-auto rounded-[16px] bg-[var(--surface-rail)] p-3"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <InputsWidget

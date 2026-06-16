@@ -177,10 +177,8 @@ export function InputsWidget({
 
   return (
     <div
-      className={`rounded-[16px] border bg-[var(--surface)] p-4 shadow-[var(--shadow-e1)] transition-colors duration-300 ${
-        pulse
-          ? "border-[var(--accent)]/40 ring-2 ring-[var(--accent)]/15"
-          : "border-[var(--border)]"
+      className={`rounded-[12px] transition-shadow duration-300 ${
+        pulse ? "ring-2 ring-[var(--accent)]/25" : ""
       }`}
     >
       <div className="flex items-baseline justify-between">
