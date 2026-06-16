@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef } from "react"
-import { ChevronLeft, ChevronRight, GripVertical } from "lucide-react"
+import { ChevronLeft, ChevronRight, GripVertical, Plus } from "lucide-react"
 
 import type { JobQuest } from "@/lib/quests/quests"
 import { cn } from "@/lib/utils"
@@ -64,6 +64,22 @@ export function JobCard({
     quest?.cue?.tone === "offer"
       ? "var(--cue-offer)"
       : "var(--cue-scheduled)"
+
+  // Gem-guide hook row (gem-guide section 3 / dashboard hook). Label + sub
+  // mapped locally off existing quest fields, no quest-derivation change.
+  const isCompare = quest?.ctaAction === "compare"
+  const hookLabel = isCompare ? "Negotiation Prep" : quest?.ctaLabel
+  const hookSub = !quest
+    ? ""
+    : isCompare
+      ? "Map your counter and walk in ready"
+      : quest.cue?.label === "Hiring Manager"
+        ? "Read the room before the manager call"
+        : quest.cue?.label === "Full Loop"
+          ? "Prep every round"
+          : quest.cue?.label === "Screen"
+            ? "Sharpen your answers for this round"
+            : "Get a first read on this role"
 
   return (
     <div
@@ -143,31 +159,32 @@ export function JobCard({
         </span>
       )}
 
-      {quest && (
-        <>
-          <p className="mt-3 text-[13px] leading-[1.5] text-[var(--text-body)]">
-            {quest.line}
-          </p>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              if (quest.ctaAction === "compare") {
-                window.dispatchEvent(new CustomEvent("guildy:open-comp"))
-              } else {
-                open()
-              }
-            }}
-            className={cn(
-              "mt-3 w-full rounded-[10px] py-[9px] text-[13px] font-semibold transition",
-              quest.ctaVariant === "primary"
-                ? "bg-[var(--accent)] text-white hover:bg-[var(--accent-deep)]"
-                : "border border-[var(--accent-tint-border)] bg-[var(--accent-tint-bg)] text-[var(--accent-deep)] hover:bg-[#EDE4F9]"
-            )}
-          >
-            {quest.ctaLabel}
-          </button>
-        </>
+      {quest && !isInactive && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            if (isCompare) {
+              window.dispatchEvent(new CustomEvent("guildy:open-comp"))
+            } else {
+              open()
+            }
+          }}
+          className="mt-3 flex w-full items-center gap-2.5 rounded-[11px] border border-[var(--accent-tint-border)] bg-[var(--accent-tint-bg)] px-3 py-2.5 text-left transition-colors hover:bg-[#EDE4F9]"
+        >
+          <span className="flex size-[18px] shrink-0 items-center justify-center text-[var(--accent-deep)]">
+            <Plus className="size-[15px]" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-bricolage text-[14px] font-medium leading-tight text-[var(--accent-deep)]">
+              {hookLabel}
+            </span>
+            <span className="mt-0.5 block truncate text-[11px] leading-tight text-[var(--text-faint)]">
+              {hookSub}
+            </span>
+          </span>
+          <ChevronRight className="size-3.5 shrink-0 text-[var(--text-faint)]" />
+        </button>
       )}
 
       {onActivate && (

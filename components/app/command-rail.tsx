@@ -225,72 +225,6 @@ function MilestoneCard({
   )
 }
 
-// "Your next move" card (gem-guide section 2): the primary gem surface. 76px
-// gem, offering when a move is live, resting when idle. One accent button with
-// the move verb; resting state shows a calm line and no button.
-function NextMoveCard({ move }: { move: GemMove | null }) {
-  return (
-    <div className="rounded-[18px] border border-[var(--border)] bg-[var(--surface)] px-5 pb-5 pt-[22px] shadow-[var(--shadow-e1)]">
-      <div className="mb-0.5 flex justify-center">
-        <Gem pose={move ? "offering" : "resting"} size={76} />
-      </div>
-      <p className="mb-[9px] text-center text-[10.5px] font-bold uppercase leading-none tracking-[0.13em] text-[var(--gem-label)]">
-        Your next move
-      </p>
-      {move ? (
-        <>
-          <GemLine
-            move={move}
-            className="mb-4 text-center text-[14.5px] leading-[1.5] text-[var(--text-secondary)]"
-          />
-          {move.href ? (
-            <MoveButton href={move.href} external={move.external}>
-              {move.verb}
-            </MoveButton>
-          ) : null}
-        </>
-      ) : (
-        <p className="text-center text-[14.5px] leading-[1.5] text-[var(--text-secondary)]">
-          You&apos;re caught up. Move a card forward or add a job when
-          you&apos;re ready.
-        </p>
-      )}
-    </div>
-  )
-}
-
-// Full-width accent move button (gem-guide section 2). Internal targets use
-// next/link; external board links open in a new tab.
-function MoveButton({
-  href,
-  external,
-  children,
-}: {
-  href: string
-  external: boolean
-  children: React.ReactNode
-}) {
-  const className =
-    "flex w-full items-center justify-center gap-2 rounded-[11px] bg-[var(--accent)] px-3 py-3 font-hanken text-[14px] font-semibold text-white shadow-[0_6px_16px_-4px_rgba(91,33,182,0.40)] transition-colors hover:bg-[var(--accent-deep)]"
-  if (external) {
-    return (
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={className}
-      >
-        {children}
-      </a>
-    )
-  }
-  return (
-    <Link href={href} className={className}>
-      {children}
-    </Link>
-  )
-}
-
 // Onboarding card (gem-guide section 6): just-in-time, no forced tour. Moment
 // eyebrow + 46px gem + one gem-voice sentence. No button (the Add Job CTA
 // lives in the Applied column); this card is the gem's voice only.
@@ -623,16 +557,11 @@ export function CommandRail({
     setDismissed(true)
   }
 
-  const topMove = today.length > 0 ? gemMove(today[0]) : null
-
-  // Primary gem surface: the onboarding card during early moments, otherwise
-  // the "Your next move" card (once the user has jobs). Order per spec:
-  // milestone -> hero -> next-move/onboarding -> insights -> where -> Today.
-  const primary = onboarding ? (
-    <OnboardingCard moment={onboarding} />
-  ) : applyGoal ? (
-    <NextMoveCard move={topMove} />
-  ) : null
+  // Primary gem surface: the onboarding card during early moments only. The
+  // steady-state "Your next move" card was removed (it duplicated the Today
+  // panel and was a purple source); hero + Today carry the rail. Order:
+  // milestone -> hero -> onboarding (early) -> insights -> where -> Today.
+  const primary = onboarding ? <OnboardingCard moment={onboarding} /> : null
 
   return (
     <aside className="w-full shrink-0 px-4 lg:w-[300px] lg:px-8 lg:pr-0">

@@ -432,7 +432,7 @@ export function Board({
       ) : null}
       <section aria-label="Pipeline" className="w-full">
         <div className="px-4 lg:px-8">
-          <div className="flex snap-x snap-mandatory overflow-x-auto rounded-[18px] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-e1b)] lg:snap-none">
+          <div className="flex snap-x snap-mandatory overflow-x-auto lg:snap-none">
             {UI_COLUMNS.map((col, i) => (
               <Fragment key={col.key}>
                 {i > 0 && (

@@ -264,7 +264,7 @@ export default async function AppPage({
         : null
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA]">
+    <div className="min-h-screen bg-[var(--page-bg)]">
       <TopNav
         email={user.email ?? ""}
         subscriptionStatus={
