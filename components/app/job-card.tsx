@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef } from "react"
-import { ChevronLeft, ChevronRight, GripVertical, Plus } from "lucide-react"
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react"
 
 import type { JobQuest } from "@/lib/quests/quests"
 import { cn } from "@/lib/utils"
@@ -59,11 +59,6 @@ export function JobCard({
   }
 
   const stop = (e: React.MouseEvent) => e.stopPropagation()
-
-  const cueColor =
-    quest?.cue?.tone === "offer"
-      ? "var(--cue-offer)"
-      : "var(--cue-scheduled)"
 
   // Gem-guide hook row (gem-guide section 3 / dashboard hook). Label + sub
   // mapped locally off existing quest fields, no quest-derivation change.
@@ -125,12 +120,7 @@ export function JobCard({
         isDragging && "opacity-50"
       )}
     >
-      <GripVertical
-        aria-hidden
-        className="absolute right-1 top-1.5 size-3.5 text-[var(--text-faint)] opacity-0 transition-opacity group-hover:opacity-40"
-      />
-
-      <div className="flex items-start justify-between gap-2 pr-4">
+      <div className="flex items-start justify-between gap-2">
         <span
           className={cn(
             "min-w-0 truncate text-[var(--text-primary)]",
@@ -139,17 +129,33 @@ export function JobCard({
         >
           {company}
         </span>
-        {quest?.cue && (
-          <span
-            className="flex shrink-0 items-center gap-[5px] text-[11px] font-semibold"
-            style={{ color: cueColor }}
-          >
-            <span
-              className="size-1.5 rounded-full"
-              style={{ backgroundColor: cueColor }}
-            />
-            {quest.cue.label}
-          </span>
+        {showArrows && (
+          <div className="-mt-0.5 -mr-1 flex shrink-0 items-center gap-0.5" onClick={stop}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onMoveLeft?.()
+              }}
+              disabled={!canMoveLeft}
+              aria-label="Move to previous stage"
+              className="inline-flex size-6 items-center justify-center rounded-[7px] text-[var(--text-faint)] transition-colors hover:bg-[var(--surface-sunken)] hover:text-[#4A5566] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+            >
+              <ChevronLeft className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onMoveRight?.()
+              }}
+              disabled={!canMoveRight}
+              aria-label="Move to next stage"
+              className="inline-flex size-6 items-center justify-center rounded-[7px] text-[var(--text-faint)] transition-colors hover:bg-[var(--surface-sunken)] hover:text-[#4A5566] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+            >
+              <ChevronRight className="size-3.5" />
+            </button>
+          </div>
         )}
       </div>
 
@@ -200,34 +206,6 @@ export function JobCard({
         </button>
       )}
 
-      {showArrows && (
-        <div className="mt-3 flex items-center justify-between gap-1" onClick={stop}>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              onMoveLeft?.()
-            }}
-            disabled={!canMoveLeft}
-            aria-label="Move to previous stage"
-            className="inline-flex size-6 items-center justify-center rounded-[7px] border border-[var(--border-card)] bg-[var(--surface-sunken)] text-[var(--text-faint)] transition-colors hover:border-[var(--border-strong)] hover:text-[#4A5566] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:border-[var(--border-card)]"
-          >
-            <ChevronLeft className="size-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              onMoveRight?.()
-            }}
-            disabled={!canMoveRight}
-            aria-label="Move to next stage"
-            className="inline-flex size-6 items-center justify-center rounded-[7px] border border-[var(--border-card)] bg-[var(--surface-sunken)] text-[var(--text-faint)] transition-colors hover:border-[var(--border-strong)] hover:text-[#4A5566] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:border-[var(--border-card)]"
-          >
-            <ChevronRight className="size-3.5" />
-          </button>
-        </div>
-      )}
     </div>
   )
 }

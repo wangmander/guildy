@@ -2,7 +2,14 @@
 
 import { Fragment, useEffect, useState } from "react"
 import Link from "next/link"
-import { ChevronDown, Compass, Lightbulb, X } from "lucide-react"
+import {
+  ArrowRight,
+  ChevronDown,
+  Compass,
+  ExternalLink,
+  Lightbulb,
+  X,
+} from "lucide-react"
 
 import { getJobSourceAdvisorAction } from "@/app/app/actions"
 import {
@@ -464,57 +471,58 @@ function AdvisorPanel({ advisor }: { advisor: Advisor }) {
   )
 }
 
-// Today row (gem-guide section 4): 30px gem (offering on the active first row,
-// resting after), bold-lead gem line, one sub-button wired to the row's target.
-function TodayRow({ item, active }: { item: TodayItem; active: boolean }) {
+// Today row (tuning pass 2): plain text line with a trailing nav arrow
+// (ArrowRight internal / ExternalLink source nudge). No gem, no sub-button.
+function TodayRow({ item }: { item: TodayItem }) {
   const move = gemMove(item)
-  const subBtn =
-    "mt-2 inline-flex rounded-[8px] border border-[var(--accent-tint-border)] bg-[var(--surface)] px-3 py-1.5 font-hanken text-[12px] font-semibold text-[var(--accent-deep)] transition-colors hover:bg-[var(--accent-tint-bg)]"
+  const inner =
+    "flex items-start justify-between gap-3 py-[11px] transition-opacity hover:opacity-70"
+  const line = (
+    <GemLine
+      move={move}
+      className="min-w-0 flex-1 text-[13.5px] leading-[1.45] text-[var(--text-secondary)]"
+    />
+  )
   return (
-    <li className="flex items-start gap-3 py-[13px] [&:not(:first-child)]:border-t [&:not(:first-child)]:border-[var(--divider)]">
-      <Gem pose={active ? "offering" : "resting"} size={30} className="shrink-0" />
-      <div className="min-w-0 flex-1">
-        <GemLine
-          move={move}
-          className="text-[13.5px] leading-[1.45] text-[var(--text-secondary)]"
-        />
-        {move.href ? (
-          move.external ? (
-            <a
-              href={move.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={subBtn}
-            >
-              {move.verb}
-            </a>
-          ) : (
-            <Link href={move.href} className={subBtn}>
-              {move.verb}
-            </Link>
-          )
-        ) : null}
-      </div>
+    <li className="[&:not(:first-child)]:border-t [&:not(:first-child)]:border-[var(--divider)]">
+      {move.href ? (
+        move.external ? (
+          <a
+            href={move.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={inner}
+          >
+            {line}
+            <ExternalLink className="mt-0.5 size-3.5 shrink-0 text-[var(--text-faint)]" />
+          </a>
+        ) : (
+          <Link href={move.href} className={inner}>
+            {line}
+            <ArrowRight className="mt-0.5 size-3.5 shrink-0 text-[var(--text-faint)]" />
+          </Link>
+        )
+      ) : (
+        <div className={inner}>{line}</div>
+      )}
     </li>
   )
 }
 
-// Today panel (gem-guide section 4): 26px resting gem in the header, the gem's
-// short list (max 3). Hidden when there are jobs but nothing actionable, and
-// when there are no jobs (the onboarding card carries the empty rail).
+// Today panel (tuning pass 2): plain "Today" text header (no gem, no count),
+// the gem's short list (max 3) as plain rows. Hidden when there are jobs but
+// nothing actionable, and when there are no jobs (onboarding carries the
+// empty rail).
 function TodayPanel({ items }: { items: TodayItem[] }) {
   if (items.length === 0) return null
   return (
     <Panel className="px-5 pb-2 pt-5">
-      <div className="mb-2 flex items-center gap-2.5">
-        <Gem pose="resting" size={26} className="shrink-0" />
-        <h2 className="text-[15px] font-bold text-[var(--text-primary)]">
-          Today
-        </h2>
-      </div>
+      <h2 className="mb-1 text-[15px] font-bold text-[var(--text-primary)]">
+        Today
+      </h2>
       <ul className="flex flex-col">
         {items.map((item, i) => (
-          <TodayRow key={i} item={item} active={i === 0} />
+          <TodayRow key={i} item={item} />
         ))}
       </ul>
     </Panel>

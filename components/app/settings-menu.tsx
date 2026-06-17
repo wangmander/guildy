@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu"
-import { Loader2, Settings } from "lucide-react"
+import { Loader2, SlidersHorizontal } from "lucide-react"
 
 import { signOutAction } from "@/app/app/actions"
 
@@ -57,7 +57,7 @@ export function SettingsMenu({
           aria-label="Settings"
           className="inline-flex size-9 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-black/5 hover:text-[#1C1E21] focus:outline-none focus:ring-2 focus:ring-[#482C4C]/30"
         >
-          <Settings size={18} />
+          <SlidersHorizontal size={18} />
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>

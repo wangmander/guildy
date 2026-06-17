@@ -88,7 +88,7 @@ export function AppliedColumn({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[10px] bg-[var(--ink)] px-3 text-[13px] font-semibold text-white transition-colors hover:bg-[var(--ink-hover)]"
+          className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-[10px] bg-[var(--ink)] px-3 text-[13px] font-semibold text-white transition-colors hover:bg-[var(--ink-hover)]"
         >
           <Plus className="size-3.5" />
           Add Job
