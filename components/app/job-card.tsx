@@ -60,21 +60,31 @@ export function JobCard({
 
   const stop = (e: React.MouseEvent) => e.stopPropagation()
 
-  // Gem-guide hook row (gem-guide section 3 / dashboard hook). Label + sub
-  // mapped locally off existing quest fields, no quest-derivation change.
+  // Gem-guide hook row (gem-guide section 3 / dashboard hook). One line:
+  // + icon, label, chevron. Label + per-stage tint mapped locally off existing
+  // quest fields, no quest-derivation change. Tints are the spec's per-stage
+  // hook bg/border/text (ramp lines 75-79 / hook section); Offer keeps purple,
+  // Full Loop derived from its ramp band #8A72B6.
   const isCompare = quest?.ctaAction === "compare"
   const hookLabel = isCompare ? "Negotiation Prep" : quest?.ctaLabel
-  const hookSub = !quest
-    ? ""
-    : isCompare
-      ? "Map your counter and walk in ready"
-      : quest.cue?.label === "Hiring Manager"
-        ? "Read the room before the manager call"
-        : quest.cue?.label === "Full Loop"
-          ? "Prep every round"
-          : quest.cue?.label === "Screen"
-            ? "Sharpen your answers for this round"
-            : "Get a first read on this role"
+  const tintKey = isCompare
+    ? "offer"
+    : quest?.cue?.label === "Hiring Manager"
+      ? "hm"
+      : quest?.cue?.label === "Full Loop"
+        ? "loop"
+        : quest?.cue?.label === "Screen"
+          ? "screen"
+          : "neutral"
+  const HOOK_TINT: Record<string, string> = {
+    screen: "border-[#DAEAEA] bg-[#EFF6F6] text-[#3E767E] hover:bg-[#E6F1F1]",
+    hm: "border-[#DCE5F1] bg-[#EFF3F9] text-[#45598F] hover:bg-[#E5ECF6]",
+    loop: "border-[#E4DEF0] bg-[#F2EFF8] text-[#6A5398] hover:bg-[#EBE5F4]",
+    offer:
+      "border-[var(--accent-tint-border)] bg-[var(--accent-tint-bg)] text-[var(--accent-deep)] hover:bg-[#EDE4F9]",
+    neutral:
+      "border-[var(--border)] bg-[var(--surface-sunken)] text-[var(--text-secondary)] hover:bg-[var(--divider)]",
+  }
 
   return (
     <div
@@ -176,20 +186,16 @@ export function JobCard({
               open()
             }
           }}
-          className="mt-3 flex w-full items-center gap-2.5 rounded-[11px] border border-[var(--accent-tint-border)] bg-[var(--accent-tint-bg)] px-3 py-2.5 text-left transition-colors hover:bg-[#EDE4F9]"
+          className={cn(
+            "mt-3 flex w-full items-center gap-2.5 rounded-[11px] border px-3 py-2.5 text-left transition-colors",
+            HOOK_TINT[tintKey]
+          )}
         >
-          <span className="flex size-[18px] shrink-0 items-center justify-center text-[var(--accent-deep)]">
-            <Plus className="size-[15px]" />
+          <Plus className="size-[15px] shrink-0" />
+          <span className="min-w-0 flex-1 truncate font-bricolage text-[14px] font-medium leading-tight">
+            {hookLabel}
           </span>
-          <span className="min-w-0 flex-1">
-            <span className="block font-bricolage text-[14px] font-medium leading-tight text-[var(--accent-deep)]">
-              {hookLabel}
-            </span>
-            <span className="mt-0.5 block truncate text-[11px] leading-tight text-[var(--text-faint)]">
-              {hookSub}
-            </span>
-          </span>
-          <ChevronRight className="size-3.5 shrink-0 text-[var(--text-faint)]" />
+          <ChevronRight className="size-3.5 shrink-0 opacity-70" />
         </button>
       )}
 

@@ -179,7 +179,7 @@ export function AddJobModal({ open, onOpenChange, defaultStage }: Props) {
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="flex max-h-[85vh] max-w-2xl flex-col overflow-hidden">
         <DialogHeader>
-          <DialogTitle>Add a job</DialogTitle>
+          <DialogTitle className="font-bricolage">Add a job</DialogTitle>
           <DialogDescription>
             Paste a JD to auto-fill, or fill in fields manually.
           </DialogDescription>
@@ -198,7 +198,7 @@ export function AddJobModal({ open, onOpenChange, defaultStage }: Props) {
 
               <TabsContent value="jd" className="space-y-1.5">
                 {jdCollapsed ? (
-                  <div className="flex items-center justify-between gap-2 rounded-md border border-black/10 bg-gray-50 px-3 py-2 text-xs text-gray-700">
+                  <div className="flex items-center justify-between gap-2 rounded-[8px] border border-[var(--border)] bg-[var(--surface-sunken)] px-3 py-2 text-xs text-[var(--text-body)]">
                     <span>
                       JD saved ({jdText.length.toLocaleString()} chars). Fields below are
                       pre-filled.
@@ -206,7 +206,7 @@ export function AddJobModal({ open, onOpenChange, defaultStage }: Props) {
                     <button
                       type="button"
                       onClick={handleRepasteJd}
-                      className="shrink-0 text-[#482C4C] underline underline-offset-2 hover:opacity-80"
+                      className="shrink-0 text-[var(--accent-deep)] underline underline-offset-2 hover:opacity-80"
                     >
                       Re-paste JD
                     </button>
@@ -228,7 +228,7 @@ export function AddJobModal({ open, onOpenChange, defaultStage }: Props) {
                       disabled={extracting !== null}
                       className="max-h-[300px] min-h-[160px] resize-none overflow-y-auto"
                     />
-                    <p className="flex items-center gap-2 text-xs text-gray-500">
+                    <p className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
                       {extracting === "jd" ? (
                         <>
                           <Spinner />
@@ -243,13 +243,13 @@ export function AddJobModal({ open, onOpenChange, defaultStage }: Props) {
               </TabsContent>
 
               <TabsContent value="manual">
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-[var(--text-muted)]">
                   Fill these in directly, or use Paste JD to auto-fill.
                 </p>
               </TabsContent>
             </Tabs>
 
-            <div className="space-y-3 border-t border-black/5 pt-4">
+            <div className="space-y-3 border-t border-[var(--border)] pt-4">
               {notice && (
                 <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
                   {notice}
@@ -305,7 +305,7 @@ export function AddJobModal({ open, onOpenChange, defaultStage }: Props) {
             </div>
           </div>
 
-          <DialogFooter className="border-t border-black/5 pt-4">
+          <DialogFooter className="border-t border-[var(--border)] pt-4">
             <Button
               type="button"
               variant="ghost"
@@ -317,7 +317,7 @@ export function AddJobModal({ open, onOpenChange, defaultStage }: Props) {
             <Button
               type="submit"
               disabled={pending || extracting !== null}
-              className="bg-[#482C4C] text-white hover:bg-[#482C4C]/90"
+              className="bg-[var(--ink)] text-white hover:bg-[var(--ink-hover)]"
             >
               {pending ? "Saving..." : "Add job"}
             </Button>
@@ -332,7 +332,7 @@ function Spinner() {
   return (
     <span
       aria-hidden
-      className="inline-block size-3 animate-spin rounded-full border-2 border-gray-300 border-t-[#482C4C]"
+      className="inline-block size-3 animate-spin rounded-full border-2 border-[var(--border-strong)] border-t-[var(--ink)]"
     />
   )
 }
