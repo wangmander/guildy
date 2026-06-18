@@ -85,6 +85,15 @@ export function JobCard({
     neutral:
       "border-[var(--border)] bg-[var(--surface-sunken)] text-[var(--text-secondary)] hover:bg-[var(--divider)]",
   }
+  // Per-stage hook sub-line. Wraps fully (no truncate) so the row grows to fit.
+  const HOOK_SUB: Record<string, string> = {
+    screen: "Sharpen your loop answers",
+    hm: "Read the room before the manager call",
+    loop: "Prep every round",
+    offer: "Map your counter and walk in ready",
+    neutral: "",
+  }
+  const hookSub = HOOK_SUB[tintKey]
 
   return (
     <div
@@ -187,15 +196,22 @@ export function JobCard({
             }
           }}
           className={cn(
-            "mt-3 flex w-full items-center gap-2.5 rounded-[11px] border px-3 py-2.5 text-left transition-colors",
+            "mt-3 flex w-full items-start gap-2.5 rounded-[11px] border px-3 py-2.5 text-left transition-colors",
             HOOK_TINT[tintKey]
           )}
         >
-          <Plus className="size-[15px] shrink-0" />
-          <span className="min-w-0 flex-1 truncate font-bricolage text-[14px] font-medium leading-tight">
-            {hookLabel}
+          <Plus className="mt-[1px] size-[15px] shrink-0" />
+          <span className="min-w-0 flex-1">
+            <span className="block font-bricolage text-[14px] font-medium leading-tight">
+              {hookLabel}
+            </span>
+            {hookSub && (
+              <span className="mt-1 block text-[12px] font-normal leading-snug opacity-80">
+                {hookSub}
+              </span>
+            )}
           </span>
-          <ChevronRight className="size-3.5 shrink-0 opacity-70" />
+          <ChevronRight className="mt-[1px] size-3.5 shrink-0 opacity-70" />
         </button>
       )}
 
