@@ -109,6 +109,17 @@ export function PrepCanvas({
   const [upgradeOpen, setUpgradeOpen] = useState(false)
   const fullLoop = isFullLoopStage(stage)
 
+  // Every upgrade CTA (rail card, Deep/UPGRADE toggle, locked-preview Upgrade
+  // buttons) calls onUpgrade, which dispatches guildy:open-upgrade. The rail
+  // card lives outside this component, so we open the modal off the event
+  // rather than a prop. The Generate-time paywall intercept still opens it
+  // directly via setUpgradeOpen.
+  useEffect(() => {
+    const open = () => setUpgradeOpen(true)
+    window.addEventListener("guildy:open-upgrade", open)
+    return () => window.removeEventListener("guildy:open-upgrade", open)
+  }, [])
+
   // Phase 6b: Deep tier paywall gate. active = always allowed; past_due gets
   // a 3-day grace window past current_period_end (mirrors the server-side
   // gate in generatePrepAction); everything else triggers UpgradeModal in

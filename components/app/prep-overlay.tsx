@@ -174,9 +174,11 @@ export function PrepOverlay({
   )
 
   const onUpgradeClick = useCallback(() => {
-    // PHASE 6b: wire to Stripe checkout. Logging only in test mode.
-    // eslint-disable-next-line no-console
-    console.log("upgrade clicked, paywall ships in 6b")
+    // Open the UpgradeModal (owned by PrepCanvas) from any upgrade CTA. The
+    // rail UpgradeWidget lives outside PrepCanvas, so this crosses the
+    // boundary via a CustomEvent that PrepCanvas listens for (same pattern as
+    // guildy:open-comp). The Stripe checkout itself lives in UpgradeModal.
+    window.dispatchEvent(new CustomEvent("guildy:open-upgrade"))
   }, [])
 
   useEffect(() => {
