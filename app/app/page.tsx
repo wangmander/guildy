@@ -114,6 +114,11 @@ export default async function AppPage({
   const jobParam = searchParams?.job
   const initialOpenJobId = typeof jobParam === "string" ? jobParam : null
 
+  // Handoff landing: ?new flags the just-created card for its one-time
+  // entrance animation. Separate from ?job so the overlay stays closed.
+  const newParam = searchParams?.new
+  const initialNewJobId = typeof newParam === "string" ? newParam : null
+
   // Command rail: real stats + automatic Job Source Advisor, both derived
   // from the user's actual cards. Closed cards are excluded (hidden on Home).
   const jobRows = (jobs ?? []) as JobRow[]
@@ -296,6 +301,7 @@ export default async function AppPage({
               noteByJobId={noteByJobId}
               questByJobId={questByJobId}
               initialOpenJobId={initialOpenJobId}
+              initialNewJobId={initialNewJobId}
             />
           </div>
         </div>

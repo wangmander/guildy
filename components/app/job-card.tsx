@@ -24,6 +24,7 @@ type Props = {
   onDragStart?: (jobId: string) => void
   onDragEnd?: () => void
   isDragging?: boolean
+  isNew?: boolean
 }
 
 // Job-card next-move treatment (gem-guide section 3): no gem, no hook box.
@@ -43,6 +44,7 @@ export function JobCard({
   onDragStart,
   onDragEnd,
   isDragging,
+  isNew,
 }: Props) {
   const justDraggedRef = useRef(false)
   const cardRef = useRef<HTMLDivElement | null>(null)
@@ -136,7 +138,8 @@ export function JobCard({
         draggable && "cursor-grab active:cursor-grabbing",
         clickable &&
           "focus-visible:ring-2 focus-visible:ring-[var(--accent)]/30 focus-visible:ring-offset-2",
-        isDragging && "opacity-50"
+        isDragging && "opacity-50",
+        isNew && "card-enter"
       )}
     >
       <div className="flex items-start justify-between gap-2">

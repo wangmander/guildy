@@ -67,6 +67,7 @@ type Props = {
   noteByJobId: Record<string, string>
   questByJobId: Record<string, JobQuest>
   initialOpenJobId: string | null
+  initialNewJobId: string | null
 }
 
 export function Board({
@@ -79,6 +80,7 @@ export function Board({
   noteByJobId,
   questByJobId,
   initialOpenJobId,
+  initialNewJobId,
 }: Props) {
   const router = useRouter()
   const pathname = usePathname()
@@ -101,6 +103,22 @@ export function Board({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlJobId])
+
+  // Handoff landing: the just-created card plays a one-time entrance glow.
+  // Seeded from the ?new param; held in state so the animation survives the
+  // URL clean-up. We strip ?new on first paint so a refresh or later nav
+  // never replays it (the card animates via a mount-only class downstream).
+  const [justCreatedJobId] = useState<string | null>(initialNewJobId)
+  const newParamStrippedRef = useRef(false)
+  useEffect(() => {
+    if (newParamStrippedRef.current) return
+    if (!searchParams.get("new")) return
+    newParamStrippedRef.current = true
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete("new")
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }, [searchParams, pathname, router])
 
   // Phase 4f patch 3.5: client-side parser trigger. The earlier server-side
   // hookup inside moveJobStageAction blocked the drag-drop response by ~3s.
@@ -452,6 +470,7 @@ export function Board({
                     label={col.label}
                     jobs={grouped.applied}
                     questByJobId={questByJobId}
+                    justCreatedJobId={justCreatedJobId}
                     isSearchActive={isSearchActive}
                     draggedJobId={draggedJobId}
                     onJobOpen={open}

@@ -19,6 +19,7 @@ type Props = {
   label: string
   jobs: JobRow[]
   questByJobId: Record<string, JobQuest>
+  justCreatedJobId?: string | null
   isSearchActive: boolean
   draggedJobId: string | null
   onJobOpen: (jobId: string) => void
@@ -31,6 +32,7 @@ export function AppliedColumn({
   label,
   jobs,
   questByJobId,
+  justCreatedJobId,
   draggedJobId,
   onJobOpen,
   onJobDrop,
@@ -103,6 +105,7 @@ export function AppliedColumn({
             meta={job.tc ?? undefined}
             variant="inactive"
             quest={questByJobId[job.id]}
+            isNew={job.id === justCreatedJobId}
             onActivate={() => setActivatingJob(job)}
             onOpen={onJobOpen}
             onDragStart={onDragStart}

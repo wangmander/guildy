@@ -6,6 +6,7 @@ import { createClient } from "@supabase/supabase-js"
 
 import { trackKanbanJobCreated, trackSignupCompleted } from "@/lib/analytics"
 import { buildContextHash } from "@/lib/ai/context-hash"
+import { extractJobFields } from "@/lib/ai/extract-jd"
 import { QUICK_PREP_MODEL } from "@/lib/ai/models"
 import { stageKeyToPrepStage } from "@/lib/ai/prep-types"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
@@ -124,6 +125,28 @@ async function consumeHandoff(
 
   const jdText = row.jd_text as string
 
+  // The unauth funnel never parsed a company (unauth_handoffs stores only
+  // jd_text), so the card and prep header showed "Unknown company". Reuse
+  // the in-app JD parser on the stored jd_text at consume time to recover
+  // company, role, and TC. Best-effort: any failure (bad key, model error,
+  // null fields) falls back to the prior heuristics so signup is never
+  // blocked. Awaited before insert so the first board render is correct.
+  let parsedCompany: string | null = null
+  let parsedRole: string | null = null
+  let parsedTc: string | null = null
+  try {
+    const fields = await extractJobFields(jdText)
+    parsedCompany = fields.company_name
+    parsedRole = fields.role_title
+    parsedTc = fields.tc
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(
+      "[completeOnboarding] handoff JD parse failed:",
+      err instanceof Error ? err.message : err
+    )
+  }
+
   // Active-board Applied: state "active" + stage "applied" so the job
   // shows on the board immediately (per spec, this is the slot reserved
   // for jobs created directly into the active board).
@@ -131,8 +154,9 @@ async function consumeHandoff(
     .from("jobs")
     .insert({
       user_id: userId,
-      company_name: "Unknown company",
-      role_title: deriveJobTitle(jdText),
+      company_name: parsedCompany ?? "Unknown company",
+      role_title: parsedRole ?? deriveJobTitle(jdText),
+      tc: parsedTc,
       jd_text: jdText,
       state: "active",
       stage: "applied",
@@ -255,5 +279,8 @@ export async function completeOnboardingAction(handoffId?: string) {
     }
   }
 
-  redirect(openJobId ? `/app?job=${openJobId}` : "/app")
+  // Land on the board with the overlay closed. ?new flags the just-created
+  // card for its one-time entrance animation; it does NOT open the overlay
+  // (that is ?job, used by deep links). Board strips ?new after first paint.
+  redirect(openJobId ? `/app?new=${openJobId}` : "/app")
 }
