@@ -61,7 +61,7 @@ export default function ResetPasswordPage() {
         ) : ready === "invalid" ? (
           <p className="mt-4 text-[#1C1E21]">
             This reset link is invalid or expired. Request a new one from the{" "}
-            <a href="/login" className="text-[#482C4C] underline">
+            <a href="/login?mode=signin" className="text-[#482C4C] underline">
               sign-in page
             </a>
             .

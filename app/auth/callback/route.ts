@@ -14,14 +14,14 @@ export async function GET(request: NextRequest) {
   const handoff = searchParams.get("handoff")
 
   if (!code) {
-    return NextResponse.redirect(`${origin}/login?error=missing_code`)
+    return NextResponse.redirect(`${origin}/login?mode=signin&error=missing_code`)
   }
 
   const supabase = await createSupabaseServerClient()
   const { error } = await supabase.auth.exchangeCodeForSession(code)
 
   if (error) {
-    return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(error.message)}`)
+    return NextResponse.redirect(`${origin}/login?mode=signin&error=${encodeURIComponent(error.message)}`)
   }
 
   if (handoff && UUID_RE.test(handoff)) {

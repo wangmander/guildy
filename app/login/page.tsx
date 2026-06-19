@@ -18,7 +18,10 @@ function friendlyUrlError(code: string | null): string | null {
 }
 
 export default function LoginPage() {
-  const [mode, setMode] = useState<Mode>("signin")
+  // Zero-user stage: Create account is the right default for every bare
+  // /login entry (the signup CTAs all funnel here). Sign in stays reachable
+  // via the on-page toggle and via ?mode=signin for returning-user paths.
+  const [mode, setMode] = useState<Mode>("signup")
   const [view, setView] = useState<View>("form")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -33,9 +36,12 @@ export default function LoginPage() {
   // Surface errors bounced here from /auth/callback or /auth/confirm. Read via
   // window.location to avoid a useSearchParams Suspense boundary.
   useEffect(() => {
-    const code = new URLSearchParams(window.location.search).get("error")
-    const friendly = friendlyUrlError(code)
+    const params = new URLSearchParams(window.location.search)
+    const friendly = friendlyUrlError(params.get("error"))
     if (friendly) setError(friendly)
+    // Returning-user deep link: ?mode=signin opens Sign in directly. Any
+    // other value (or none) keeps the Create account default.
+    if (params.get("mode") === "signin") setMode("signin")
   }, [])
 
   async function submitPassword(event: React.FormEvent<HTMLFormElement>) {

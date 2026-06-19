@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   const next = searchParams.get("next") ?? "/app"
 
   if (!tokenHash || !type) {
-    return NextResponse.redirect(`${origin}/login?error=invalid_link`)
+    return NextResponse.redirect(`${origin}/login?mode=signin&error=invalid_link`)
   }
 
   const supabase = await createSupabaseServerClient()
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     return NextResponse.redirect(
-      `${origin}/login?error=${encodeURIComponent(error.message)}`
+      `${origin}/login?mode=signin&error=${encodeURIComponent(error.message)}`
     )
   }
 
