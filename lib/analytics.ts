@@ -39,6 +39,17 @@ export async function trackSignupCompleted(userId: string): Promise<void> {
   await captureServer("signup_completed", userId)
 }
 
+// Viral loop: a viewer who arrived via a shared prep link (?ref=shareId)
+// converted by signing up. distinct_id is the real new-user id; share_id rides
+// in properties so per-share performance is a property filter (never use
+// share_id as distinct_id, that would merge distinct viewers into one person).
+export async function trackPrepReferralConverted(
+  userId: string,
+  shareId: string
+): Promise<void> {
+  await captureServer("prep_referral_converted", userId, { share_id: shareId })
+}
+
 export async function trackFirstPrepGenerated(
   userId: string,
   jobId: string,

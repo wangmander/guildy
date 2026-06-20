@@ -59,12 +59,18 @@ export function OnboardingForm({ initialText }: { initialText: string }) {
       // round trip). Read it here and hand it to completion; clear it so
       // a later re-onboard does not replay a consumed handoff.
       let handoffId: string | undefined
+      let refId: string | undefined
       if (typeof window !== "undefined") {
         handoffId = window.localStorage.getItem("guildy_handoff") ?? undefined
         if (handoffId) window.localStorage.removeItem("guildy_handoff")
+        // Viral loop: shared-link referral stashed at /signup. Read, hand to
+        // completion for the signup-referral record, and clear so it does not
+        // replay on a later re-onboard.
+        refId = window.localStorage.getItem("guildy_ref") ?? undefined
+        if (refId) window.localStorage.removeItem("guildy_ref")
       }
 
-      const completeResult = await completeOnboardingAction(handoffId)
+      const completeResult = await completeOnboardingAction(handoffId, refId)
       if (completeResult && !completeResult.ok) {
         setStatus({ tone: "error", text: completeResult.message })
         return

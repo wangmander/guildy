@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 
 import { generatePrep } from "@/lib/ai/generate-prep"
 import type { PrepInput } from "@/lib/ai/prep-types"
+import { isShareId } from "@/lib/share/shareId"
+import { recordReferral } from "@/lib/share/store"
 
 // Prompt 20: unauthenticated Quick Prep generation for the guildy.ai hero
 // funnel. Lets a visitor paste a JD + resume/intro and get a Quick Prep
@@ -22,9 +24,13 @@ const JD_MAX = 20000
 const RESUME_MAX = 50000
 
 export async function POST(req: Request) {
-  let body: { jd?: unknown; resumeText?: unknown }
+  let body: { jd?: unknown; resumeText?: unknown; ref?: unknown }
   try {
-    body = (await req.json()) as { jd?: unknown; resumeText?: unknown }
+    body = (await req.json()) as {
+      jd?: unknown
+      resumeText?: unknown
+      ref?: unknown
+    }
   } catch {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 })
   }
@@ -32,6 +38,7 @@ export async function POST(req: Request) {
   const jd = typeof body.jd === "string" ? body.jd.trim() : ""
   const resumeText =
     typeof body.resumeText === "string" ? body.resumeText.trim() : ""
+  const ref = typeof body.ref === "string" ? body.ref : ""
 
   if (jd.length === 0 || resumeText.length === 0) {
     return NextResponse.json(
@@ -66,6 +73,22 @@ export async function POST(req: Request) {
 
   try {
     const prep = await generatePrep(input)
+    // Viral loop attribution: this generation came from a shared link. Record
+    // the "generated" conversion (user_id null, viewer is unauth). Best-effort
+    // and post-success so attribution never blocks or fails the prep. The
+    // PostHog prep_referral_converted event for this leg fires client-side
+    // from the marketing hero, which holds the viewer's anon distinct_id.
+    if (isShareId(ref)) {
+      try {
+        await recordReferral(ref, "generated", null)
+      } catch (refErr) {
+        // eslint-disable-next-line no-console
+        console.error(
+          "[generate-quick-prep-unauth] referral record failed:",
+          refErr instanceof Error ? refErr.message : refErr
+        )
+      }
+    }
     return NextResponse.json({ prep })
   } catch (err) {
     // Anthropic failure or exhausted credit: opaque fallback, no detail.

@@ -4,10 +4,16 @@ import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { createClient } from "@supabase/supabase-js"
 
-import { trackKanbanJobCreated, trackSignupCompleted } from "@/lib/analytics"
+import {
+  trackKanbanJobCreated,
+  trackPrepReferralConverted,
+  trackSignupCompleted,
+} from "@/lib/analytics"
 import { buildContextHash } from "@/lib/ai/context-hash"
 import { extractJobFields } from "@/lib/ai/extract-jd"
 import { QUICK_PREP_MODEL } from "@/lib/ai/models"
+import { isShareId } from "@/lib/share/shareId"
+import { recordReferral } from "@/lib/share/store"
 import { stageKeyToPrepStage } from "@/lib/ai/prep-types"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
@@ -217,7 +223,10 @@ async function consumeHandoff(
   return job.id as string
 }
 
-export async function completeOnboardingAction(handoffId?: string) {
+export async function completeOnboardingAction(
+  handoffId?: string,
+  refId?: string
+) {
   const supabase = await createSupabaseServerClient()
   const {
     data: { user },
@@ -251,6 +260,23 @@ export async function completeOnboardingAction(handoffId?: string) {
   // for the product to be useful (resume on file). Awaited so the capture
   // request gets to fly before redirect terminates the action.
   await trackSignupCompleted(user.id)
+
+  // Viral loop: if this signup came from a shared prep link, record the
+  // "signup" referral and fire prep_referral_converted (distinct_id is the
+  // real user id; share_id rides in properties). Best-effort: any failure
+  // logs and never blocks the user landing on /app.
+  if (isShareId(refId)) {
+    try {
+      await recordReferral(refId, "signup", user.id)
+      await trackPrepReferralConverted(user.id, refId)
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(
+        "[completeOnboarding] referral record failed:",
+        err instanceof Error ? err.message : err
+      )
+    }
+  }
 
   // Prompt 21: consume the unauth Quick Prep handoff if one is present.
   // Fully isolated and best-effort: any failure logs and the user still

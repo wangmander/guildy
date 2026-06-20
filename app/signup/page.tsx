@@ -25,6 +25,17 @@ function SignupCapture() {
         // still completes, just without the saved-prep handoff.
       }
     }
+    // Viral loop: a viewer arriving via a shared link carries ?ref=shareId.
+    // Stash it like the handoff so it survives to onboarding, where the signup
+    // referral is recorded. Lightweight: same-browser only.
+    const ref = searchParams.get("ref")
+    if (ref) {
+      try {
+        window.localStorage.setItem("guildy_ref", ref)
+      } catch {
+        // localStorage unavailable; attribution is best-effort and skipped.
+      }
+    }
     router.replace("/login")
   }, [router, searchParams])
 
