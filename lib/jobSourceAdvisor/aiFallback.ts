@@ -10,7 +10,7 @@ import Anthropic from "@anthropic-ai/sdk"
 import { QUICK_PREP_MODEL } from "@/lib/ai/models"
 import type { BoardRating } from "./boardRatings"
 
-const SYSTEM_PROMPT = `You are a job search advisor. Given a role title, rank the best places to find that role: major job boards, niche role-specific boards, and company career pages. Score each from 1 to 10 where 10 means highest quality and volume of relevant openings for that role. Give a single short reason per board (under 12 words). Return 6 to 8 entries. Never use em dashes in any reason; use commas or periods.`
+const SYSTEM_PROMPT = `You are a job search advisor. Given a role title, rank the best places to find that role: major job boards, niche role-specific boards, and company career pages. Score each from 1 to 10 where 10 means highest quality and volume of relevant openings for that role. Give a single short reason per board (under 12 words). For each board also give its generic jobs or careers landing page URL (the board's main jobs page, not a role-targeted or search-deep-linked URL); the URL must be a real, well-formed https URL. For "Company career pages" or any entry with no single canonical URL, return an empty string for the url. Return 6 to 8 entries. Never use em dashes in any reason; use commas or periods.`
 
 const TOOL_SCHEMA = {
   type: "object",
@@ -25,8 +25,13 @@ const TOOL_SCHEMA = {
           board: { type: "string", description: "Job board or channel name" },
           score: { type: "integer", minimum: 1, maximum: 10 },
           reason: { type: "string", description: "One short reason, no em dashes" },
+          url: {
+            type: "string",
+            description:
+              "Generic https jobs/careers landing page for the board, or empty string if none",
+          },
         },
-        required: ["board", "score", "reason"],
+        required: ["board", "score", "reason", "url"],
         additionalProperties: false,
       },
     },
@@ -40,6 +45,21 @@ const TIMEOUT_MS = 30_000
 function sanitizeReason(reason: string): string {
   // Strip any em dash (U+2014) the model emits despite the instruction.
   return reason.split(String.fromCharCode(0x2014)).join(",").trim()
+}
+
+// Accept a model-supplied URL only when it is a well-formed https URL. Anything
+// missing, malformed, or non-https resolves to null so the board renders as
+// plain text. Never guess or repair a URL the model did not validly supply.
+function sanitizeUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  try {
+    const parsed = new URL(trimmed)
+    return parsed.protocol === "https:" ? trimmed : null
+  } catch {
+    return null
+  }
 }
 
 export async function generateBoardMap(
@@ -94,12 +114,22 @@ export async function generateBoardMap(
     const boards: BoardRating[] = []
     for (const entry of raw.boards) {
       if (!entry || typeof entry !== "object") continue
-      const e = entry as { board?: unknown; score?: unknown; reason?: unknown }
+      const e = entry as {
+        board?: unknown
+        score?: unknown
+        reason?: unknown
+        url?: unknown
+      }
       if (typeof e.board !== "string" || typeof e.reason !== "string") continue
       const scoreNum = typeof e.score === "number" ? e.score : Number(e.score)
       if (!Number.isFinite(scoreNum)) continue
       const score = Math.max(1, Math.min(10, Math.round(scoreNum)))
-      boards.push({ board: e.board.trim(), score, reason: sanitizeReason(e.reason) })
+      boards.push({
+        board: e.board.trim(),
+        score,
+        reason: sanitizeReason(e.reason),
+        url: sanitizeUrl(e.url),
+      })
     }
 
     if (boards.length === 0) return null

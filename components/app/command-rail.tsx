@@ -350,11 +350,25 @@ function InsightsCard({ rows }: { rows: ApplyProjection["rows"] }) {
 }
 
 function BoardRow({ board, isTop }: { board: BoardRating; isTop: boolean }) {
+  // Boards carry a generic jobs URL on the rating record. When present the name
+  // is a new-tab link with a hover-underline affordance only (same #3A4453 text
+  // color, no new token); boards with a null url (e.g. "Company career pages")
+  // stay plain text. Row layout, rating chip, and dividers are unchanged.
+  const nameClass = "min-w-0 truncate text-[13px] font-medium text-[#3A4453]"
   return (
     <li className="flex items-center justify-between gap-2 py-[9px] [&:not(:first-child)]:border-t [&:not(:first-child)]:border-[var(--divider-kanban)]">
-      <span className="min-w-0 truncate text-[13px] font-medium text-[#3A4453]">
-        {board.board}
-      </span>
+      {board.url ? (
+        <a
+          href={board.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={cn(nameClass, "hover:underline")}
+        >
+          {board.board}
+        </a>
+      ) : (
+        <span className={nameClass}>{board.board}</span>
+      )}
       <span
         className={cn(
           "shrink-0 rounded-[7px] px-2 py-0.5 text-[12px] font-semibold tabular-nums",

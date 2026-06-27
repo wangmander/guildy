@@ -11,6 +11,12 @@ export type BoardRating = {
   board: string
   score: number // 0-10
   reason: string
+  // Generic careers/jobs URL for the board, or null for non-linkable entries
+  // (e.g. "Company career pages"). The URL travels with the rating so the link
+  // and score stay in sync. Generic landing pages only, never role-targeted or
+  // deep-linked search URLs. The AI fallback validates its URLs (https only)
+  // and sets this to null when the model returns nothing usable.
+  url: string | null
 }
 
 export type RoleKey =
@@ -40,15 +46,15 @@ export const ROLE_SEEDS: RoleSeed[] = [
     label: "Product Designer",
     matchers: ["designer", "ux", "product design", "design lead", "design manager"],
     boards: [
-      { board: "LinkedIn", score: 9, reason: "Highest volume and recruiter activity, strong design presence" },
-      { board: "Company career pages", score: 9, reason: "Best freshness when you target specific companies" },
-      { board: "Wellfound", score: 8, reason: "Startup design roles, direct founder contact" },
-      { board: "Built In", score: 7, reason: "Local tech market, good filters" },
-      { board: "Otta / Welcome to the Jungle", score: 7, reason: "Curated tech and startup roles" },
-      { board: "Glassdoor", score: 6, reason: "Research and salary, weaker for discovery" },
-      { board: "Dribbble", score: 6, reason: "Design-native, fewer serious product roles" },
-      { board: "Behance", score: 5, reason: "Portfolio-driven, inconsistent quality" },
-      { board: "Designer News", score: 5, reason: "Niche, sporadic postings" },
+      { board: "LinkedIn", score: 9, reason: "Highest volume and recruiter activity, strong design presence", url: "https://www.linkedin.com/jobs/" },
+      { board: "Company career pages", score: 9, reason: "Best freshness when you target specific companies", url: null },
+      { board: "Wellfound", score: 8, reason: "Startup design roles, direct founder contact", url: "https://wellfound.com/jobs" },
+      { board: "Built In", score: 7, reason: "Local tech market, good filters", url: "https://builtin.com/jobs" },
+      { board: "Otta / Welcome to the Jungle", score: 7, reason: "Curated tech and startup roles", url: "https://app.welcometothejungle.com/" },
+      { board: "Glassdoor", score: 6, reason: "Research and salary, weaker for discovery", url: "https://www.glassdoor.com/Job/index.htm" },
+      { board: "Dribbble", score: 6, reason: "Design-native, fewer serious product roles", url: "https://dribbble.com/jobs" },
+      { board: "Behance", score: 5, reason: "Portfolio-driven, inconsistent quality", url: "https://www.behance.net/joblist" },
+      { board: "Designer News", score: 5, reason: "Niche, sporadic postings", url: null },
     ],
   },
   {
@@ -65,13 +71,13 @@ export const ROLE_SEEDS: RoleSeed[] = [
       "analytics engineer",
     ],
     boards: [
-      { board: "LinkedIn", score: 9, reason: "Highest volume and recruiter activity" },
-      { board: "Company career pages", score: 9, reason: "Best freshness when you target specific companies" },
-      { board: "HN Who's Hiring", score: 7, reason: "Monthly thread, strong startup signal" },
-      { board: "Wellfound", score: 7, reason: "Startup roles, direct founder contact" },
-      { board: "Otta", score: 7, reason: "Curated tech and startup roles" },
-      { board: "Built In", score: 6, reason: "Local tech market, good filters" },
-      { board: "Kaggle Jobs", score: 6, reason: "Data and ML roles, smaller pool" },
+      { board: "LinkedIn", score: 9, reason: "Highest volume and recruiter activity", url: "https://www.linkedin.com/jobs/" },
+      { board: "Company career pages", score: 9, reason: "Best freshness when you target specific companies", url: null },
+      { board: "HN Who's Hiring", score: 7, reason: "Monthly thread, strong startup signal", url: "https://news.ycombinator.com/submitted?id=whoishiring" },
+      { board: "Wellfound", score: 7, reason: "Startup roles, direct founder contact", url: "https://wellfound.com/jobs" },
+      { board: "Otta", score: 7, reason: "Curated tech and startup roles", url: "https://app.welcometothejungle.com/" },
+      { board: "Built In", score: 6, reason: "Local tech market, good filters", url: "https://builtin.com/jobs" },
+      { board: "Kaggle Jobs", score: 6, reason: "Data and ML roles, smaller pool", url: "https://www.kaggle.com/jobs" },
     ],
   },
   {
@@ -79,13 +85,13 @@ export const ROLE_SEEDS: RoleSeed[] = [
     label: "Product Manager",
     matchers: ["product manager", "product management", "product owner", "product lead"],
     boards: [
-      { board: "LinkedIn", score: 9, reason: "Highest volume and recruiter activity" },
-      { board: "Company career pages", score: 9, reason: "Best freshness when you target specific companies" },
-      { board: "Lenny's Job Board", score: 8, reason: "PM-focused and curated" },
-      { board: "Wellfound", score: 7, reason: "Startup roles, direct founder contact" },
-      { board: "Otta", score: 7, reason: "Curated tech and startup roles" },
-      { board: "Built In", score: 6, reason: "Local tech market, good filters" },
-      { board: "Glassdoor", score: 6, reason: "Research and salary, weaker for discovery" },
+      { board: "LinkedIn", score: 9, reason: "Highest volume and recruiter activity", url: "https://www.linkedin.com/jobs/" },
+      { board: "Company career pages", score: 9, reason: "Best freshness when you target specific companies", url: null },
+      { board: "Lenny's Job Board", score: 8, reason: "PM-focused and curated", url: "https://www.lennysjobs.com/" },
+      { board: "Wellfound", score: 7, reason: "Startup roles, direct founder contact", url: "https://wellfound.com/jobs" },
+      { board: "Otta", score: 7, reason: "Curated tech and startup roles", url: "https://app.welcometothejungle.com/" },
+      { board: "Built In", score: 6, reason: "Local tech market, good filters", url: "https://builtin.com/jobs" },
+      { board: "Glassdoor", score: 6, reason: "Research and salary, weaker for discovery", url: "https://www.glassdoor.com/Job/index.htm" },
     ],
   },
   {
@@ -93,12 +99,12 @@ export const ROLE_SEEDS: RoleSeed[] = [
     label: "Marketing",
     matchers: ["marketing", "growth", "demand gen", "brand manager", "content strategist", "seo"],
     boards: [
-      { board: "LinkedIn", score: 9, reason: "Highest volume and recruiter activity" },
-      { board: "Company career pages", score: 8, reason: "Best freshness when you target specific companies" },
-      { board: "Built In", score: 6, reason: "Local tech market, good filters" },
-      { board: "Otta", score: 6, reason: "Curated tech and startup roles" },
-      { board: "Glassdoor", score: 6, reason: "Research and salary, weaker for discovery" },
-      { board: "Indeed", score: 6, reason: "Broad volume, lower signal per listing" },
+      { board: "LinkedIn", score: 9, reason: "Highest volume and recruiter activity", url: "https://www.linkedin.com/jobs/" },
+      { board: "Company career pages", score: 8, reason: "Best freshness when you target specific companies", url: null },
+      { board: "Built In", score: 6, reason: "Local tech market, good filters", url: "https://builtin.com/jobs" },
+      { board: "Otta", score: 6, reason: "Curated tech and startup roles", url: "https://app.welcometothejungle.com/" },
+      { board: "Glassdoor", score: 6, reason: "Research and salary, weaker for discovery", url: "https://www.glassdoor.com/Job/index.htm" },
+      { board: "Indeed", score: 6, reason: "Broad volume, lower signal per listing", url: "https://www.indeed.com/" },
     ],
   },
   {
@@ -114,12 +120,12 @@ export const ROLE_SEEDS: RoleSeed[] = [
       "revenue",
     ],
     boards: [
-      { board: "LinkedIn", score: 9, reason: "Highest volume and recruiter activity" },
-      { board: "Company career pages", score: 8, reason: "Best freshness when you target specific companies" },
-      { board: "RepVue", score: 7, reason: "Sales-specific with comp transparency" },
-      { board: "Built In", score: 6, reason: "Local tech market, good filters" },
-      { board: "Glassdoor", score: 6, reason: "Research and salary, weaker for discovery" },
-      { board: "Indeed", score: 6, reason: "Broad volume, lower signal per listing" },
+      { board: "LinkedIn", score: 9, reason: "Highest volume and recruiter activity", url: "https://www.linkedin.com/jobs/" },
+      { board: "Company career pages", score: 8, reason: "Best freshness when you target specific companies", url: null },
+      { board: "RepVue", score: 7, reason: "Sales-specific with comp transparency", url: "https://www.repvue.com/jobs" },
+      { board: "Built In", score: 6, reason: "Local tech market, good filters", url: "https://builtin.com/jobs" },
+      { board: "Glassdoor", score: 6, reason: "Research and salary, weaker for discovery", url: "https://www.glassdoor.com/Job/index.htm" },
+      { board: "Indeed", score: 6, reason: "Broad volume, lower signal per listing", url: "https://www.indeed.com/" },
     ],
   },
   {
@@ -141,28 +147,28 @@ export const ROLE_SEEDS: RoleSeed[] = [
       "sre",
     ],
     boards: [
-      { board: "LinkedIn", score: 9, reason: "Highest volume and recruiter activity" },
-      { board: "Company career pages", score: 9, reason: "Best freshness when you target specific companies" },
-      { board: "YC Work at a Startup", score: 9, reason: "High-quality vetted startup roles" },
-      { board: "HN Who's Hiring", score: 8, reason: "Monthly thread, strong startup signal" },
-      { board: "Wellfound", score: 8, reason: "Startup roles, direct founder contact" },
-      { board: "Otta", score: 7, reason: "Curated tech and startup roles" },
-      { board: "Built In", score: 6, reason: "Local tech market, good filters" },
-      { board: "Hired", score: 6, reason: "Reverse marketplace, companies reach out to you" },
-      { board: "Indeed", score: 5, reason: "Broad volume, lower signal per listing" },
+      { board: "LinkedIn", score: 9, reason: "Highest volume and recruiter activity", url: "https://www.linkedin.com/jobs/" },
+      { board: "Company career pages", score: 9, reason: "Best freshness when you target specific companies", url: null },
+      { board: "YC Work at a Startup", score: 9, reason: "High-quality vetted startup roles", url: "https://www.workatastartup.com/" },
+      { board: "HN Who's Hiring", score: 8, reason: "Monthly thread, strong startup signal", url: "https://news.ycombinator.com/submitted?id=whoishiring" },
+      { board: "Wellfound", score: 8, reason: "Startup roles, direct founder contact", url: "https://wellfound.com/jobs" },
+      { board: "Otta", score: 7, reason: "Curated tech and startup roles", url: "https://app.welcometothejungle.com/" },
+      { board: "Built In", score: 6, reason: "Local tech market, good filters", url: "https://builtin.com/jobs" },
+      { board: "Hired", score: 6, reason: "Reverse marketplace, companies reach out to you", url: "https://hired.com/" },
+      { board: "Indeed", score: 5, reason: "Broad volume, lower signal per listing", url: "https://www.indeed.com/" },
     ],
   },
 ]
 
 // Shown when no role is known yet (zero jobs, or jobs with no parsed role).
 export const GENERIC_BOARDS: BoardRating[] = [
-  { board: "LinkedIn", score: 9, reason: "Highest volume and recruiter activity" },
-  { board: "Company career pages", score: 9, reason: "Best freshness when you target specific companies" },
-  { board: "Wellfound", score: 8, reason: "Startup roles, direct founder contact" },
-  { board: "Otta", score: 7, reason: "Curated tech and startup roles" },
-  { board: "Built In", score: 6, reason: "Local tech market, good filters" },
-  { board: "Glassdoor", score: 6, reason: "Research and salary, weaker for discovery" },
-  { board: "Indeed", score: 5, reason: "Broad volume, lower signal per listing" },
+  { board: "LinkedIn", score: 9, reason: "Highest volume and recruiter activity", url: "https://www.linkedin.com/jobs/" },
+  { board: "Company career pages", score: 9, reason: "Best freshness when you target specific companies", url: null },
+  { board: "Wellfound", score: 8, reason: "Startup roles, direct founder contact", url: "https://wellfound.com/jobs" },
+  { board: "Otta", score: 7, reason: "Curated tech and startup roles", url: "https://app.welcometothejungle.com/" },
+  { board: "Built In", score: 6, reason: "Local tech market, good filters", url: "https://builtin.com/jobs" },
+  { board: "Glassdoor", score: 6, reason: "Research and salary, weaker for discovery", url: "https://www.glassdoor.com/Job/index.htm" },
+  { board: "Indeed", score: 5, reason: "Broad volume, lower signal per listing", url: "https://www.indeed.com/" },
 ]
 
 // Match a freeform role title to a seed bucket. Returns null on no match.
