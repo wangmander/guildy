@@ -886,8 +886,9 @@ export async function updateJobFieldsAction(
 }
 
 // Soft-delete (archive) a job. Sets jobs.archived_at = now() so the board
-// fetch (which filters archived_at IS NULL) drops it. Recoverable later; the
-// restore UI is a deferred follow-up, recovery is manual via the DB for now.
+// fetch (which filters archived_at IS NULL) drops it. Recoverable in-app via
+// restoreJobAction (the board's "Show archived" toggle surfaces archived
+// cards with a Restore button).
 // Prep rows, context, and comp are left intact so a restored job keeps them.
 const archiveJobSchema = z.object({
   job_id: z.string().uuid("Invalid job id"),
@@ -914,6 +915,49 @@ export async function archiveJobAction(
   const { error } = await supabase
     .from("jobs")
     .update({ archived_at: new Date().toISOString() })
+    .eq("id", parsed.data.job_id)
+    .eq("user_id", owned.userId)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath("/app")
+  return { ok: true }
+}
+
+// Restore (un-archive) a job. Clears jobs.archived_at so the board fetch
+// (which filters archived_at IS NULL) picks the job back up on the next
+// revalidate, returning it to its stage column fully interactive again.
+//
+// CRITICAL, prep cache is intentionally left alone. This action writes ONLY
+// jobs.archived_at. It does NOT touch prep_versions, does NOT recompute or
+// invalidate context_hash, and does NOT trigger any generation. A restored
+// job keeps its cached prep exactly as it was before archiving. Do not add
+// prep invalidation to this path.
+const restoreJobSchema = z.object({
+  job_id: z.string().uuid("Invalid job id"),
+})
+
+export type RestoreJobInput = z.input<typeof restoreJobSchema>
+export type RestoreJobResult = { ok: true } | { ok: false; error: string }
+
+export async function restoreJobAction(
+  input: RestoreJobInput
+): Promise<RestoreJobResult> {
+  const parsed = restoreJobSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input",
+    }
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const owned = await ownedJobOrError(supabase, parsed.data.job_id)
+  if (!owned.ok) return owned
+
+  // NOTE: prep_versions / context_hash deliberately untouched (see header).
+  const { error } = await supabase
+    .from("jobs")
+    .update({ archived_at: null })
     .eq("id", parsed.data.job_id)
     .eq("user_id", owned.userId)
   if (error) return { ok: false, error: error.message }

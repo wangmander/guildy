@@ -52,6 +52,7 @@ export default async function AppPage({
     { data: noteRows },
     { data: prepRows },
     { data: compRows },
+    { data: archivedJobsData },
   ] = await Promise.all([
     supabase
       .from("jobs")
@@ -59,8 +60,10 @@ export default async function AppPage({
         "id, company_name, role_title, tc, state, stage, source_url, jd_text, latest_message, full_loop_session_config, created_at, prep_status"
       )
       .eq("user_id", user.id)
-      // Soft-delete: archived jobs leave the board (and everything derived from
-      // this single fetch (rail, Today, TC matrix, quests). Recoverable via DB.
+      // Active-only board fetch. Everything derived below (rail, Today, TC
+      // matrix, quests, apply goal) reads ONLY this active set, so archived
+      // jobs never pollute stats or the advisor. Archived jobs are fetched
+      // separately (last query) and handed solely to <Board> for the toggle.
       .is("archived_at", null)
       .order("created_at", { ascending: false }),
     supabase
@@ -88,6 +91,17 @@ export default async function AppPage({
     // Comp rows for the TC matrix. One read for all of the user's rows; the
     // late-stage columns are filtered client-of-query below (no N+1).
     supabase.from("job_compensation").select("*").eq("user_id", user.id),
+    // Archived jobs, in one parallel read (no N+1). Fed ONLY to <Board> for
+    // the "Show archived" toggle; intentionally excluded from every server
+    // derivation above so stats/Today/rail/TC stay active-only.
+    supabase
+      .from("jobs")
+      .select(
+        "id, company_name, role_title, tc, state, stage, source_url, jd_text, latest_message, full_loop_session_config, created_at, prep_status"
+      )
+      .eq("user_id", user.id)
+      .not("archived_at", "is", null)
+      .order("created_at", { ascending: false }),
   ])
 
   const hasResume = !!profile?.resume_text && profile.resume_text.trim().length > 0
@@ -125,6 +139,8 @@ export default async function AppPage({
   // Command rail: real stats + automatic Job Source Advisor, both derived
   // from the user's actual cards. Closed cards are excluded (hidden on Home).
   const jobRows = (jobs ?? []) as JobRow[]
+  // Archived rows are passed straight to <Board>; nothing else reads them.
+  const archivedJobRows = (archivedJobsData ?? []) as JobRow[]
   const nonClosed = jobRows.filter((j) => j.stage !== "closed")
   // jobs are ordered created_at desc, so nonClosed is already recency-first.
   const advisor = selectAdvisor(nonClosed.map((j) => j.role_title))
@@ -292,6 +308,7 @@ export default async function AppPage({
           <div className="min-w-0 flex-1">
             <Board
               jobs={jobRows}
+              archivedJobs={archivedJobRows}
               hasResume={hasResume}
               resumeText={profile?.resume_text ?? null}
               subscriptionStatus={

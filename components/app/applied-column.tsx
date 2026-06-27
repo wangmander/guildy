@@ -18,12 +18,16 @@ const APPLIED = { band: "#97A1AD", text: "#62707E", chip: "#E5E9EE" }
 type Props = {
   label: string
   jobs: JobRow[]
+  // Archived Applied jobs, rendered muted below active cards when the board's
+  // "Show archived" toggle is on (parent passes [] when off).
+  archivedJobs: JobRow[]
   questByJobId: Record<string, JobQuest>
   justCreatedJobId?: string | null
   isSearchActive: boolean
   draggedJobId: string | null
   onJobOpen: (jobId: string) => void
   onJobArchive: (jobId: string) => void
+  onJobRestore: (jobId: string) => void
   onJobDrop: (jobId: string) => void
   onDragStart: (jobId: string) => void
   onDragEnd: () => void
@@ -32,11 +36,13 @@ type Props = {
 export function AppliedColumn({
   label,
   jobs,
+  archivedJobs,
   questByJobId,
   justCreatedJobId,
   draggedJobId,
   onJobOpen,
   onJobArchive,
+  onJobRestore,
   onJobDrop,
   onDragStart,
   onDragEnd,
@@ -114,6 +120,19 @@ export function AppliedColumn({
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
             isDragging={draggedJobId === job.id}
+          />
+        ))}
+        {/* Active cards sort above archived. */}
+        {archivedJobs.map((job) => (
+          <JobCard
+            key={job.id}
+            jobId={job.id}
+            company={job.company_name}
+            role={job.role_title}
+            meta={job.tc ?? undefined}
+            variant="inactive"
+            archived
+            onRestore={onJobRestore}
           />
         ))}
       </div>

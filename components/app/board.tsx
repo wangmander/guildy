@@ -11,11 +11,14 @@ import {
   useTransition,
 } from "react"
 
+import { Archive } from "lucide-react"
+
 import {
   archiveJobAction,
   getSubscriptionStatusAction,
   moveJobStageAction,
   parseFullLoopRoundsAction,
+  restoreJobAction,
   verifyCheckoutAndSyncAction,
 } from "@/app/app/actions"
 import {
@@ -33,6 +36,7 @@ import {
   type UiColumnKey,
 } from "@/lib/stages"
 import type { JobQuest } from "@/lib/quests/quests"
+import { cn } from "@/lib/utils"
 
 import { AppliedColumn } from "./applied-column"
 import { BoardColumn } from "./board-column"
@@ -60,6 +64,7 @@ export type InterviewerInfo = {
 
 type Props = {
   jobs: JobRow[]
+  archivedJobs: JobRow[]
   hasResume: boolean
   resumeText: string | null
   subscriptionStatus: string
@@ -73,6 +78,7 @@ type Props = {
 
 export function Board({
   jobs,
+  archivedJobs,
   hasResume,
   resumeText,
   subscriptionStatus,
@@ -184,9 +190,9 @@ export function Board({
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
   }, [router, pathname, searchParams])
 
-  const visibleJobs = useMemo(() => {
-    if (!isSearchActive) return jobs
-    return jobs.filter((j) => {
+  const matchesSearch = useCallback(
+    (j: JobRow) => {
+      if (!isSearchActive) return true
       const fields = [
         j.company_name,
         j.role_title,
@@ -196,8 +202,20 @@ export function Board({
       return fields.some(
         (f) => typeof f === "string" && f.toLowerCase().includes(q)
       )
-    })
-  }, [jobs, q, isSearchActive])
+    },
+    [q, isSearchActive]
+  )
+
+  const visibleJobs = useMemo(
+    () => jobs.filter(matchesSearch),
+    [jobs, matchesSearch]
+  )
+
+  // Archived cards respect the same search filter as active cards.
+  const visibleArchived = useMemo(
+    () => archivedJobs.filter(matchesSearch),
+    [archivedJobs, matchesSearch]
+  )
 
   // Phase 4e: optimistic stage overrides keyed by job_id. Applied on render
   // so the dragged card lands instantly in the destination column. Rolled
@@ -215,6 +233,19 @@ export function Board({
     () => new Set()
   )
   const [archiveError, setArchiveError] = useState<string | null>(null)
+
+  // Archived view toggle. Local UI state only, defaults OFF on every load so
+  // the board behaves exactly as before until the user opts in. Not persisted.
+  const [showArchived, setShowArchived] = useState(false)
+
+  // Soft-restore: ids removed optimistically from the archived list while
+  // restoreJobAction runs. On success the server jobs prop gains the row
+  // (back as active) and the cleanup effect prunes the id; on failure we roll
+  // the id back into the archived list + toast.
+  const [restoredJobIds, setRestoredJobIds] = useState<Set<string>>(
+    () => new Set()
+  )
+  const [restoreError, setRestoreError] = useState<string | null>(null)
 
   // Drop optimistic overrides whose server stage now matches.
   useEffect(() => {
@@ -266,6 +297,29 @@ export function Board({
     const t = setTimeout(() => setArchiveError(null), 4000)
     return () => clearTimeout(t)
   }, [archiveError])
+
+  // Drop optimistic-restore ids once the server jobs prop carries them as
+  // active (restore committed, revalidate moved the row back into `jobs` and
+  // out of `archivedJobs`). Mirrors the optimistic-archive cleanup above.
+  useEffect(() => {
+    setRestoredJobIds((prev) => {
+      if (prev.size === 0) return prev
+      let changed = false
+      const next = new Set<string>()
+      for (const id of prev) {
+        if (jobs.some((j) => j.id === id)) changed = true
+        else next.add(id)
+      }
+      return changed ? next : prev
+    })
+  }, [jobs])
+
+  // Auto-dismiss the restore error toast after 4s.
+  useEffect(() => {
+    if (!restoreError) return
+    const t = setTimeout(() => setRestoreError(null), 4000)
+    return () => clearTimeout(t)
+  }, [restoreError])
 
   // Prompt 12 post-checkout resume. Primary path: verify the Stripe
   // Checkout Session server-side and sync user_profiles from that read.
@@ -394,13 +448,48 @@ export function Board({
     full_loop: [],
     offer: [],
   }
+  const groupedArchived: Record<UiColumnKey, JobRow[]> = {
+    applied: [],
+    screen: [],
+    hiring_manager: [],
+    full_loop: [],
+    offer: [],
+  }
 
+  // Active cards: live active jobs (minus any optimistically archived), plus
+  // archived jobs the user just restored (shown active immediately).
   for (const job of visibleJobs) {
     if (archivedJobIds.has(job.id)) continue
     const effectiveStage = optimisticStages[job.id] ?? job.stage
     const col = stageToColumn(effectiveStage)
     if (col) grouped[col].push(job)
   }
+  for (const job of visibleArchived) {
+    if (!restoredJobIds.has(job.id)) continue
+    const col = stageToColumn(job.stage)
+    if (col) grouped[col].push(job)
+  }
+
+  // Archived cards (only when the toggle is on): archived jobs not being
+  // restored, plus active jobs the user just optimistically archived.
+  if (showArchived) {
+    for (const job of visibleArchived) {
+      if (restoredJobIds.has(job.id)) continue
+      const col = stageToColumn(job.stage)
+      if (col) groupedArchived[col].push(job)
+    }
+    for (const job of visibleJobs) {
+      if (!archivedJobIds.has(job.id)) continue
+      const col = stageToColumn(job.stage)
+      if (col) groupedArchived[col].push(job)
+    }
+  }
+
+  // Total archived count for the toggle label, reflecting optimistic state.
+  // Independent of the toggle and search so the label is stable.
+  const archivedCount =
+    archivedJobs.filter((j) => !restoredJobIds.has(j.id)).length +
+    jobs.filter((j) => archivedJobIds.has(j.id)).length
 
   const move = (
     jobId: string,
@@ -455,6 +544,30 @@ export function Board({
           return next
         })
         setArchiveError(res.error)
+      }
+    })
+  }
+
+  const restore = (jobId: string) => {
+    // Optimistic flip: the muted archived card becomes active immediately
+    // (full opacity, draggable, overlay-enabled) by moving its id into the
+    // restored set, which the grouping logic renders as an active card.
+    setRestoredJobIds((prev) => {
+      const next = new Set(prev)
+      next.add(jobId)
+      return next
+    })
+    setRestoreError(null)
+    restoreJobAction({ job_id: jobId }).then((res) => {
+      if (!res.ok) {
+        // Roll the card back into the archived list and surface the error.
+        setRestoredJobIds((prev) => {
+          if (!prev.has(jobId)) return prev
+          const next = new Set(prev)
+          next.delete(jobId)
+          return next
+        })
+        setRestoreError(res.error)
       }
     })
   }
@@ -515,64 +628,100 @@ export function Board({
           </div>
         </div>
       ) : null}
+      {restoreError ? (
+        <div className="px-4 lg:px-8">
+          <div
+            role="alert"
+            className="mb-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
+          >
+            Couldn&rsquo;t restore job: {restoreError}
+          </div>
+        </div>
+      ) : null}
       <section aria-label="Pipeline" className="w-full">
         <div className="px-4 lg:px-8">
-          <div className="flex snap-x snap-mandatory overflow-x-auto rounded-[18px] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-e1b)] lg:snap-none">
-            {UI_COLUMNS.map((col, i) => (
-              <Fragment key={col.key}>
-                {i > 0 && (
-                  <div
-                    aria-hidden
-                    className="w-px shrink-0 self-stretch"
-                    style={{
-                      background:
-                        col.key === "screen"
-                          ? "var(--divider-intake)"
-                          : "var(--divider)",
-                    }}
-                  />
+          <div className="overflow-hidden rounded-[18px] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-e1b)]">
+            {/* Board header row: the module's chrome bar, currently home only
+                to the archived-view toggle (right-aligned). */}
+            <div className="flex items-center justify-end border-b border-[var(--divider)] px-3 py-2">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={showArchived}
+                onClick={() => setShowArchived((v) => !v)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-[8px] border px-2.5 py-1 text-[12px] font-semibold transition-colors",
+                  showArchived
+                    ? "border-[var(--border-strong)] bg-[var(--surface-sunken)] text-[var(--text-body)]"
+                    : "border-[var(--border)] text-[var(--text-faint)] hover:bg-[var(--surface-sunken)] hover:text-[var(--text-body)]"
                 )}
-                {col.key === "applied" ? (
-                  <AppliedColumn
-                    label={col.label}
-                    jobs={grouped.applied}
-                    questByJobId={questByJobId}
-                    justCreatedJobId={justCreatedJobId}
-                    isSearchActive={isSearchActive}
-                    draggedJobId={draggedJobId}
-                    onJobOpen={open}
-                    onJobArchive={archive}
-                    onJobDrop={(jobId) => move(jobId, col.key, "drag")}
-                    onDragStart={setDraggedJobId}
-                    onDragEnd={() => setDraggedJobId(null)}
-                  />
-                ) : (
-                  <BoardColumn
-                    columnKey={col.key}
-                    label={col.label}
-                    jobs={grouped[col.key]}
-                    questByJobId={questByJobId}
-                    variant={col.variant}
-                    hint="Cards land here when you move them from earlier stages"
-                    isSearchActive={isSearchActive}
-                    draggedJobId={draggedJobId}
-                    onJobOpen={open}
-                    onJobArchive={archive}
-                    onJobMoveLeft={(jobId) => {
-                      const left = leftOfColumn(col.key)
-                      if (left) move(jobId, left, "arrow")
-                    }}
-                    onJobMoveRight={(jobId) => {
-                      const right = rightOfColumn(col.key)
-                      if (right) move(jobId, right, "arrow")
-                    }}
-                    onJobDrop={(jobId) => move(jobId, col.key, "drag")}
-                    onDragStart={setDraggedJobId}
-                    onDragEnd={() => setDraggedJobId(null)}
-                  />
-                )}
-              </Fragment>
-            ))}
+              >
+                <Archive className="size-3.5" />
+                Show archived
+                {archivedCount > 0 ? ` (${archivedCount})` : ""}
+              </button>
+            </div>
+            <div className="flex snap-x snap-mandatory overflow-x-auto lg:snap-none">
+              {UI_COLUMNS.map((col, i) => (
+                <Fragment key={col.key}>
+                  {i > 0 && (
+                    <div
+                      aria-hidden
+                      className="w-px shrink-0 self-stretch"
+                      style={{
+                        background:
+                          col.key === "screen"
+                            ? "var(--divider-intake)"
+                            : "var(--divider)",
+                      }}
+                    />
+                  )}
+                  {col.key === "applied" ? (
+                    <AppliedColumn
+                      label={col.label}
+                      jobs={grouped.applied}
+                      archivedJobs={groupedArchived.applied}
+                      questByJobId={questByJobId}
+                      justCreatedJobId={justCreatedJobId}
+                      isSearchActive={isSearchActive}
+                      draggedJobId={draggedJobId}
+                      onJobOpen={open}
+                      onJobArchive={archive}
+                      onJobRestore={restore}
+                      onJobDrop={(jobId) => move(jobId, col.key, "drag")}
+                      onDragStart={setDraggedJobId}
+                      onDragEnd={() => setDraggedJobId(null)}
+                    />
+                  ) : (
+                    <BoardColumn
+                      columnKey={col.key}
+                      label={col.label}
+                      jobs={grouped[col.key]}
+                      archivedJobs={groupedArchived[col.key]}
+                      questByJobId={questByJobId}
+                      variant={col.variant}
+                      hint="Cards land here when you move them from earlier stages"
+                      isSearchActive={isSearchActive}
+                      draggedJobId={draggedJobId}
+                      onJobOpen={open}
+                      onJobArchive={archive}
+                      onJobRestore={restore}
+                      onJobMoveLeft={(jobId) => {
+                        const left = leftOfColumn(col.key)
+                        if (left) move(jobId, left, "arrow")
+                      }}
+                      onJobMoveRight={(jobId) => {
+                        const right = rightOfColumn(col.key)
+                        if (right) move(jobId, right, "arrow")
+                      }}
+                      onJobDrop={(jobId) => move(jobId, col.key, "drag")}
+                      onDragStart={setDraggedJobId}
+                      onDragEnd={() => setDraggedJobId(null)}
+                    />
+                  )}
+                </Fragment>
+              ))}
+            </div>
           </div>
         </div>
       </section>

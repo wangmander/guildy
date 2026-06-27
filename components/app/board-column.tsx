@@ -34,6 +34,9 @@ type Props = {
   columnKey: UiColumnKey
   label: string
   jobs: JobRow[]
+  // Archived jobs mapped to this column. Rendered muted, below active cards,
+  // only when the board's "Show archived" toggle is on (parent passes [] off).
+  archivedJobs: JobRow[]
   questByJobId: Record<string, JobQuest>
   variant: CardVariant
   hint?: string
@@ -41,6 +44,7 @@ type Props = {
   draggedJobId: string | null
   onJobOpen: (jobId: string) => void
   onJobArchive: (jobId: string) => void
+  onJobRestore: (jobId: string) => void
   onJobMoveLeft: (jobId: string) => void
   onJobMoveRight: (jobId: string) => void
   onJobDrop: (jobId: string) => void
@@ -52,12 +56,14 @@ export function BoardColumn({
   columnKey,
   label,
   jobs,
+  archivedJobs,
   questByJobId,
   variant,
   isSearchActive,
   draggedJobId,
   onJobOpen,
   onJobArchive,
+  onJobRestore,
   onJobMoveLeft,
   onJobMoveRight,
   onJobDrop,
@@ -74,7 +80,11 @@ export function BoardColumn({
   const showPlus = columnKey !== "offer"
   const writeStage = columnToWriteStage(columnKey)
   const ramp = RAMP[columnKey as ActiveCol]
-  const showEmpty = count === 0 && !isSearchActive
+  // Count chip stays active-only (archived cards never inflate the pipeline
+  // count). Empty-state hides when archived cards are present so the dashed
+  // placeholder never sits above muted cards.
+  const showEmpty =
+    count === 0 && archivedJobs.length === 0 && !isSearchActive
 
   return (
     <div
@@ -140,26 +150,41 @@ export function BoardColumn({
             Cards land here when you move them from earlier stages.
           </div>
         ) : (
-          jobs.map((job) => (
-            <JobCard
-              key={job.id}
-              jobId={job.id}
-              company={job.company_name}
-              role={job.role_title}
-              meta={job.tc ?? undefined}
-              variant={variant}
-              quest={questByJobId[job.id]}
-              onOpen={onJobOpen}
-              onArchive={onJobArchive}
-              onMoveLeft={() => onJobMoveLeft(job.id)}
-              onMoveRight={() => onJobMoveRight(job.id)}
-              canMoveLeft={canMoveLeft}
-              canMoveRight={canMoveRight}
-              onDragStart={onDragStart}
-              onDragEnd={onDragEnd}
-              isDragging={draggedJobId === job.id}
-            />
-          ))
+          <>
+            {jobs.map((job) => (
+              <JobCard
+                key={job.id}
+                jobId={job.id}
+                company={job.company_name}
+                role={job.role_title}
+                meta={job.tc ?? undefined}
+                variant={variant}
+                quest={questByJobId[job.id]}
+                onOpen={onJobOpen}
+                onArchive={onJobArchive}
+                onMoveLeft={() => onJobMoveLeft(job.id)}
+                onMoveRight={() => onJobMoveRight(job.id)}
+                canMoveLeft={canMoveLeft}
+                canMoveRight={canMoveRight}
+                onDragStart={onDragStart}
+                onDragEnd={onDragEnd}
+                isDragging={draggedJobId === job.id}
+              />
+            ))}
+            {/* Active cards sort above archived. */}
+            {archivedJobs.map((job) => (
+              <JobCard
+                key={job.id}
+                jobId={job.id}
+                company={job.company_name}
+                role={job.role_title}
+                meta={job.tc ?? undefined}
+                variant={variant}
+                archived
+                onRestore={onJobRestore}
+              />
+            ))}
+          </>
         )}
       </div>
 

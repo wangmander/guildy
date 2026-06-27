@@ -1,7 +1,13 @@
 "use client"
 
 import { useState, useRef } from "react"
-import { ChevronLeft, ChevronRight, MoreVertical, Plus } from "lucide-react"
+import {
+  ChevronLeft,
+  ChevronRight,
+  MoreVertical,
+  Plus,
+  RotateCcw,
+} from "lucide-react"
 
 import type { JobQuest } from "@/lib/quests/quests"
 import { cn } from "@/lib/utils"
@@ -26,6 +32,11 @@ type Props = {
   onDragEnd?: () => void
   isDragging?: boolean
   isNew?: boolean
+  // Archived presentation: muted card, "Archived" badge, Restore is the one
+  // interactive control. Suppresses drag, click-to-open, arrows, archive
+  // kebab, the hook CTA, and "They Responded".
+  archived?: boolean
+  onRestore?: (jobId: string) => void
 }
 
 // Job-card next-move treatment (gem-guide section 3): no gem, no hook box.
@@ -47,19 +58,26 @@ export function JobCard({
   onDragEnd,
   isDragging,
   isNew,
+  archived,
+  onRestore,
 }: Props) {
   const justDraggedRef = useRef(false)
   const cardRef = useRef<HTMLDivElement | null>(null)
   const [confirmingArchive, setConfirmingArchive] = useState(false)
 
   const isInactive = variant === "inactive"
-  const draggable = Boolean(jobId) && Boolean(onDragStart)
+  // Archived cards are inert except for Restore: never draggable, never open
+  // the overlay, no arrows / archive kebab / hook.
+  const draggable = Boolean(jobId) && Boolean(onDragStart) && !archived
   const showArrows =
-    !isInactive && (onMoveLeft !== undefined || onMoveRight !== undefined)
-  const clickable = Boolean(jobId && onOpen)
+    !isInactive &&
+    !archived &&
+    (onMoveLeft !== undefined || onMoveRight !== undefined)
+  const clickable = Boolean(jobId && onOpen) && !archived
   // Archive kebab: shown for any card with an id + handler. Hidden mid-drag so
-  // the affordance never appears while the card is being moved.
-  const showArchive = Boolean(jobId && onArchive) && !isDragging
+  // the affordance never appears while the card is being moved, and never on
+  // an already-archived card.
+  const showArchive = Boolean(jobId && onArchive) && !isDragging && !archived
 
   const open = () => {
     if (!jobId || !onOpen) return
@@ -145,17 +163,25 @@ export function JobCard({
         clickable &&
           "focus-visible:ring-2 focus-visible:ring-[var(--accent)]/30 focus-visible:ring-offset-2",
         isDragging && "opacity-50",
+        archived && "opacity-60",
         isNew && "card-enter"
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <span
-          className={cn(
-            "min-w-0 truncate text-[var(--text-primary)]",
-            isInactive ? "type-applied-company" : "type-job-company"
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span
+            className={cn(
+              "min-w-0 truncate text-[var(--text-primary)]",
+              isInactive ? "type-applied-company" : "type-job-company"
+            )}
+          >
+            {company}
+          </span>
+          {archived && (
+            <span className="shrink-0 rounded-[6px] bg-[var(--surface-sunken)] px-1.5 py-px text-[10.5px] font-semibold uppercase tracking-[0.04em] text-[var(--text-faint)]">
+              Archived
+            </span>
           )}
-        >
-          {company}
         </span>
         {(showArrows || showArchive) && (
           <div className="-mt-0.5 -mr-1 flex shrink-0 items-center gap-0.5" onClick={stop}>
@@ -211,7 +237,7 @@ export function JobCard({
         </span>
       )}
 
-      {quest && !isInactive && (
+      {quest && !isInactive && !archived && (
         <button
           type="button"
           onClick={(e) => {
@@ -242,7 +268,7 @@ export function JobCard({
         </button>
       )}
 
-      {onActivate && (
+      {onActivate && !archived && (
         <button
           type="button"
           onClick={(e) => {
@@ -252,6 +278,21 @@ export function JobCard({
           className="mt-3 w-full rounded-[10px] border border-[var(--border)] bg-[var(--surface-sunken)] py-[9px] text-[13px] font-semibold text-[#46505F] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--divider)]"
         >
           They Responded
+        </button>
+      )}
+
+      {archived && (
+        <button
+          type="button"
+          draggable={false}
+          onClick={(e) => {
+            e.stopPropagation()
+            if (jobId) onRestore?.(jobId)
+          }}
+          className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-[10px] border border-[var(--border)] bg-[var(--surface-sunken)] py-[9px] text-[13px] font-semibold text-[#46505F] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--divider)]"
+        >
+          <RotateCcw className="size-3.5" />
+          Restore
         </button>
       )}
 
