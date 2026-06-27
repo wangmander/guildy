@@ -1,7 +1,7 @@
 "use client"
 
-import { useRef } from "react"
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react"
+import { useState, useRef } from "react"
+import { ChevronLeft, ChevronRight, MoreVertical, Plus } from "lucide-react"
 
 import type { JobQuest } from "@/lib/quests/quests"
 import { cn } from "@/lib/utils"
@@ -16,6 +16,7 @@ type Props = {
   variant: CardVariant
   quest?: JobQuest
   onOpen?: (jobId: string) => void
+  onArchive?: (jobId: string) => void
   onActivate?: () => void
   onMoveLeft?: () => void
   onMoveRight?: () => void
@@ -36,6 +37,7 @@ export function JobCard({
   variant,
   quest,
   onOpen,
+  onArchive,
   onActivate,
   onMoveLeft,
   onMoveRight,
@@ -48,12 +50,16 @@ export function JobCard({
 }: Props) {
   const justDraggedRef = useRef(false)
   const cardRef = useRef<HTMLDivElement | null>(null)
+  const [confirmingArchive, setConfirmingArchive] = useState(false)
 
   const isInactive = variant === "inactive"
   const draggable = Boolean(jobId) && Boolean(onDragStart)
   const showArrows =
     !isInactive && (onMoveLeft !== undefined || onMoveRight !== undefined)
   const clickable = Boolean(jobId && onOpen)
+  // Archive kebab: shown for any card with an id + handler. Hidden mid-drag so
+  // the affordance never appears while the card is being moved.
+  const showArchive = Boolean(jobId && onArchive) && !isDragging
 
   const open = () => {
     if (!jobId || !onOpen) return
@@ -151,8 +157,24 @@ export function JobCard({
         >
           {company}
         </span>
-        {showArrows && (
+        {(showArrows || showArchive) && (
           <div className="-mt-0.5 -mr-1 flex shrink-0 items-center gap-0.5" onClick={stop}>
+            {showArchive && (
+              <button
+                type="button"
+                draggable={false}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setConfirmingArchive(true)
+                }}
+                aria-label="Archive job"
+                className="inline-flex size-6 items-center justify-center rounded-[7px] text-[var(--text-faint)] opacity-0 transition-[color,background-color,opacity] hover:bg-[var(--surface-sunken)] hover:text-[#4A5566] focus-visible:opacity-100 group-hover:opacity-100"
+              >
+                <MoreVertical className="size-3.5" />
+              </button>
+            )}
+            {showArrows && (
+              <>
             <button
               type="button"
               onClick={(e) => {
@@ -177,6 +199,8 @@ export function JobCard({
             >
               <ChevronRight className="size-3.5" />
             </button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -231,6 +255,42 @@ export function JobCard({
         </button>
       )}
 
+      {confirmingArchive && (
+        <div
+          // Inline confirm layer over the card. Stops propagation + drag so it
+          // never opens the overlay or starts a drag while deciding.
+          draggable={false}
+          onClick={(e) => e.stopPropagation()}
+          className="absolute inset-0 z-10 flex flex-col justify-center gap-2.5 rounded-[14px] border border-[var(--border-card)] bg-[var(--surface)]/95 p-3.5 backdrop-blur-[2px]"
+        >
+          <p className="text-[12.5px] leading-snug text-[var(--text-secondary)]">
+            Archive this job? It leaves your board and can be restored later.
+          </p>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                setConfirmingArchive(false)
+              }}
+              className="inline-flex h-7 items-center rounded-[8px] px-2.5 text-xs font-semibold text-[var(--text-body)] transition-colors hover:text-[var(--text-primary)]"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                setConfirmingArchive(false)
+                if (jobId) onArchive?.(jobId)
+              }}
+              className="inline-flex h-7 items-center rounded-[8px] bg-[var(--ink)] px-3 text-xs font-semibold text-white transition-colors hover:bg-[var(--ink-hover)]"
+            >
+              Archive
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

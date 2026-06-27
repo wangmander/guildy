@@ -813,6 +813,115 @@ export async function clearNoteAction(
   return { ok: true }
 }
 
+// Update a job's identity fields (company / role / comp) from the overlay
+// inline editor. Only the provided keys are written.
+//
+// CRITICAL, prep cache is intentionally left alone. This action writes ONLY
+// jobs.* columns. It does NOT touch prep_versions, does NOT recompute or
+// invalidate context_hash, and does NOT trigger any generation. company_name,
+// role_title, and tc are not inputs to buildContextHash (see
+// lib/ai/context-hash.ts), so an edit here can never mark a cached prep row
+// stale. Cached prep stays exactly as-is; the user regenerates manually for
+// fresh prep. Do not add prep invalidation to this path.
+const updateJobFieldsSchema = z.object({
+  job_id: z.string().uuid("Invalid job id"),
+  // Required when present: company and role cannot be blanked.
+  company: z.string().trim().min(1, "Company is required").max(200).optional(),
+  role: z.string().trim().min(1, "Role title is required").max(200).optional(),
+  // Comp maps to jobs.tc (single string, no parsing). Nullable + optional:
+  // undefined means "not edited", "" / null means "clear to null".
+  comp: z.string().trim().max(200).nullable().optional(),
+})
+
+export type UpdateJobFieldsInput = z.input<typeof updateJobFieldsSchema>
+export type UpdateJobFieldsResult = { ok: true } | { ok: false; error: string }
+
+export async function updateJobFieldsAction(
+  input: UpdateJobFieldsInput
+): Promise<UpdateJobFieldsResult> {
+  const parsed = updateJobFieldsSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input",
+    }
+  }
+
+  // Build a partial update from only the provided fields. comp distinguishes
+  // "not edited" (undefined, skipped) from "cleared" (empty/null -> null).
+  const updates: {
+    company_name?: string
+    role_title?: string
+    tc?: string | null
+  } = {}
+  if (parsed.data.company !== undefined) {
+    updates.company_name = parsed.data.company
+  }
+  if (parsed.data.role !== undefined) {
+    updates.role_title = parsed.data.role
+  }
+  if (parsed.data.comp !== undefined) {
+    const c = parsed.data.comp?.trim()
+    updates.tc = c && c.length > 0 ? c : null
+  }
+  if (Object.keys(updates).length === 0) {
+    // Nothing to write; no-op success keeps the caller's Save path simple.
+    return { ok: true }
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const owned = await ownedJobOrError(supabase, parsed.data.job_id)
+  if (!owned.ok) return owned
+
+  // NOTE: prep_versions / context_hash deliberately untouched (see header).
+  const { error } = await supabase
+    .from("jobs")
+    .update(updates)
+    .eq("id", parsed.data.job_id)
+    .eq("user_id", owned.userId)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath("/app")
+  return { ok: true }
+}
+
+// Soft-delete (archive) a job. Sets jobs.archived_at = now() so the board
+// fetch (which filters archived_at IS NULL) drops it. Recoverable later; the
+// restore UI is a deferred follow-up, recovery is manual via the DB for now.
+// Prep rows, context, and comp are left intact so a restored job keeps them.
+const archiveJobSchema = z.object({
+  job_id: z.string().uuid("Invalid job id"),
+})
+
+export type ArchiveJobInput = z.input<typeof archiveJobSchema>
+export type ArchiveJobResult = { ok: true } | { ok: false; error: string }
+
+export async function archiveJobAction(
+  input: ArchiveJobInput
+): Promise<ArchiveJobResult> {
+  const parsed = archiveJobSchema.safeParse(input)
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Invalid input",
+    }
+  }
+
+  const supabase = await createSupabaseServerClient()
+  const owned = await ownedJobOrError(supabase, parsed.data.job_id)
+  if (!owned.ok) return owned
+
+  const { error } = await supabase
+    .from("jobs")
+    .update({ archived_at: new Date().toISOString() })
+    .eq("id", parsed.data.job_id)
+    .eq("user_id", owned.userId)
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath("/app")
+  return { ok: true }
+}
+
 // User profile -------------------------------------------------------------
 
 const updateUserResumeSchema = z.object({

@@ -598,6 +598,9 @@ export function PrepOverlay({
                 >
                   <InputsWidget
                     jobId={job.id}
+                    company={job.company_name}
+                    role={job.role_title}
+                    comp={job.tc}
                     hasResume={hasResume}
                     resumeText={resumeText}
                     jdText={job.jd_text}

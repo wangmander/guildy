@@ -40,6 +40,7 @@ type Props = {
   isSearchActive: boolean
   draggedJobId: string | null
   onJobOpen: (jobId: string) => void
+  onJobArchive: (jobId: string) => void
   onJobMoveLeft: (jobId: string) => void
   onJobMoveRight: (jobId: string) => void
   onJobDrop: (jobId: string) => void
@@ -56,6 +57,7 @@ export function BoardColumn({
   isSearchActive,
   draggedJobId,
   onJobOpen,
+  onJobArchive,
   onJobMoveLeft,
   onJobMoveRight,
   onJobDrop,
@@ -148,6 +150,7 @@ export function BoardColumn({
               variant={variant}
               quest={questByJobId[job.id]}
               onOpen={onJobOpen}
+              onArchive={onJobArchive}
               onMoveLeft={() => onJobMoveLeft(job.id)}
               onMoveRight={() => onJobMoveRight(job.id)}
               canMoveLeft={canMoveLeft}

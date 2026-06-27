@@ -23,6 +23,7 @@ type Props = {
   isSearchActive: boolean
   draggedJobId: string | null
   onJobOpen: (jobId: string) => void
+  onJobArchive: (jobId: string) => void
   onJobDrop: (jobId: string) => void
   onDragStart: (jobId: string) => void
   onDragEnd: () => void
@@ -35,6 +36,7 @@ export function AppliedColumn({
   justCreatedJobId,
   draggedJobId,
   onJobOpen,
+  onJobArchive,
   onJobDrop,
   onDragStart,
   onDragEnd,
@@ -108,6 +110,7 @@ export function AppliedColumn({
             isNew={job.id === justCreatedJobId}
             onActivate={() => setActivatingJob(job)}
             onOpen={onJobOpen}
+            onArchive={onJobArchive}
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
             isDragging={draggedJobId === job.id}

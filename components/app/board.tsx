@@ -12,6 +12,7 @@ import {
 } from "react"
 
 import {
+  archiveJobAction,
   getSubscriptionStatusAction,
   moveJobStageAction,
   parseFullLoopRoundsAction,
@@ -207,6 +208,14 @@ export function Board({
   >({})
   const [moveError, setMoveError] = useState<string | null>(null)
 
+  // Soft-delete: ids removed optimistically while archiveJobAction runs. On
+  // success the server jobs prop drops the row (filtered server-side) and the
+  // cleanup effect prunes the id; on failure we roll the id back out + toast.
+  const [archivedJobIds, setArchivedJobIds] = useState<Set<string>>(
+    () => new Set()
+  )
+  const [archiveError, setArchiveError] = useState<string | null>(null)
+
   // Drop optimistic overrides whose server stage now matches.
   useEffect(() => {
     setOptimisticStages((prev) => {
@@ -234,6 +243,29 @@ export function Board({
     const t = setTimeout(() => setMoveError(null), 4000)
     return () => clearTimeout(t)
   }, [moveError])
+
+  // Drop optimistic-archive ids once the server jobs prop no longer carries
+  // them (archive committed, revalidate dropped the row). Mirrors the
+  // optimistic-stage cleanup above.
+  useEffect(() => {
+    setArchivedJobIds((prev) => {
+      if (prev.size === 0) return prev
+      let changed = false
+      const next = new Set<string>()
+      for (const id of prev) {
+        if (jobs.some((j) => j.id === id)) next.add(id)
+        else changed = true
+      }
+      return changed ? next : prev
+    })
+  }, [jobs])
+
+  // Auto-dismiss the archive error toast after 4s.
+  useEffect(() => {
+    if (!archiveError) return
+    const t = setTimeout(() => setArchiveError(null), 4000)
+    return () => clearTimeout(t)
+  }, [archiveError])
 
   // Prompt 12 post-checkout resume. Primary path: verify the Stripe
   // Checkout Session server-side and sync user_profiles from that read.
@@ -364,6 +396,7 @@ export function Board({
   }
 
   for (const job of visibleJobs) {
+    if (archivedJobIds.has(job.id)) continue
     const effectiveStage = optimisticStages[job.id] ?? job.stage
     const col = stageToColumn(effectiveStage)
     if (col) grouped[col].push(job)
@@ -398,6 +431,30 @@ export function Board({
           return next
         })
         setMoveError(res.error)
+      }
+    })
+  }
+
+  const archive = (jobId: string) => {
+    // Optimistic removal: the card leaves the board immediately.
+    setArchivedJobIds((prev) => {
+      const next = new Set(prev)
+      next.add(jobId)
+      return next
+    })
+    setArchiveError(null)
+    // Archiving the job whose overlay is open closes the overlay.
+    if (openJobId === jobId) close()
+    archiveJobAction({ job_id: jobId }).then((res) => {
+      if (!res.ok) {
+        // Roll the card back onto the board and surface the error.
+        setArchivedJobIds((prev) => {
+          if (!prev.has(jobId)) return prev
+          const next = new Set(prev)
+          next.delete(jobId)
+          return next
+        })
+        setArchiveError(res.error)
       }
     })
   }
@@ -448,6 +505,16 @@ export function Board({
           </div>
         </div>
       ) : null}
+      {archiveError ? (
+        <div className="px-4 lg:px-8">
+          <div
+            role="alert"
+            className="mb-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"
+          >
+            Couldn&rsquo;t archive job: {archiveError}
+          </div>
+        </div>
+      ) : null}
       <section aria-label="Pipeline" className="w-full">
         <div className="px-4 lg:px-8">
           <div className="flex snap-x snap-mandatory overflow-x-auto rounded-[18px] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-e1b)] lg:snap-none">
@@ -474,6 +541,7 @@ export function Board({
                     isSearchActive={isSearchActive}
                     draggedJobId={draggedJobId}
                     onJobOpen={open}
+                    onJobArchive={archive}
                     onJobDrop={(jobId) => move(jobId, col.key, "drag")}
                     onDragStart={setDraggedJobId}
                     onDragEnd={() => setDraggedJobId(null)}
@@ -489,6 +557,7 @@ export function Board({
                     isSearchActive={isSearchActive}
                     draggedJobId={draggedJobId}
                     onJobOpen={open}
+                    onJobArchive={archive}
                     onJobMoveLeft={(jobId) => {
                       const left = leftOfColumn(col.key)
                       if (left) move(jobId, left, "arrow")

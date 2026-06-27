@@ -21,6 +21,7 @@ import {
 import {
   clearInterviewerAction,
   clearNoteAction,
+  updateJobFieldsAction,
   updateJobJdAction,
   updateJobLatestMessageAction,
   updateUserResumeAction,
@@ -31,6 +32,13 @@ import type { InputsExpansionSection } from "@/components/app/prep-overlay"
 
 type Props = {
   jobId: string
+  // Job identity fields (company / role / comp). Editable inline in the "Job
+  // details" group below. Edits never touch cached prep (see
+  // updateJobFieldsAction); these are not prep-context inputs and are excluded
+  // from the X/5 context count.
+  company: string
+  role: string
+  comp: string | null
   hasResume: boolean
   resumeText: string | null
   jdText: string | null
@@ -51,7 +59,13 @@ type Props = {
   ) => void
 }
 
-type RowKey = "background" | InputsExpansionSection
+// "background" + the 5 context sections, plus the Job details keys
+// (company/role/comp). Loosened to string so the Job details rows can reuse
+// the shared RowItem without widening InputsExpansionSection (which drives the
+// 5-row context state machine).
+type RowKey = string
+
+type JobDetailKey = "company" | "role" | "comp"
 
 type Row = {
   key: RowKey
@@ -67,6 +81,9 @@ const PREVIEW_CHARS = 50
 
 export function InputsWidget({
   jobId,
+  company,
+  role,
+  comp,
   hasResume,
   resumeText,
   jdText,
@@ -132,6 +149,22 @@ export function InputsWidget({
   ]
   const filled = rows.filter((r) => r.present).length
 
+  // Job details group: company / role / comp, edited inline with the same
+  // expand pattern but its OWN local open state (separate from the shared
+  // `expansion` machine) so it never affects the 5-row context count or the
+  // interviewer pulse. Excluded from `filled`/`rows.length`.
+  const [openDetail, setOpenDetail] = useState<JobDetailKey | null>(null)
+  const detailRows: {
+    key: JobDetailKey
+    label: string
+    value: string | null
+    required: boolean
+  }[] = [
+    { key: "company", label: "Company", value: company, required: true },
+    { key: "role", label: "Role", value: role, required: true },
+    { key: "comp", label: "Compensation", value: comp, required: false },
+  ]
+
   // Pulse outer border when an external trigger (e.g. InterviewerWidget) opens
   // the widget at a section, so the user's eye follows the action across columns.
   const [pulse, setPulse] = useState(false)
@@ -189,6 +222,48 @@ export function InputsWidget({
       <p className="mt-0.5 text-[11px] leading-snug text-[var(--text-faint)]">
         Deep is sharper with all 5.
       </p>
+
+      {/* Job details: editable company / role / comp. Uncounted (identity, not
+          prep context). Editing never invalidates cached prep. */}
+      <div className="mt-3">
+        <h4 className="type-rail-label text-[var(--text-faint)]">Job details</h4>
+        <ul className="mt-2 space-y-1.5">
+          {detailRows.map((d) => (
+            <RowItem
+              key={d.key}
+              row={{
+                key: d.key,
+                label: d.label,
+                preview: previewOf(d.value),
+                present: d.required
+                  ? true
+                  : !!d.value && d.value.trim().length > 0,
+                clickable: true,
+                section: null,
+              }}
+              isOpen={openDetail === d.key}
+              onClick={() =>
+                setOpenDetail((cur) => (cur === d.key ? null : d.key))
+              }
+            />
+          ))}
+        </ul>
+        <div className="mt-1.5 space-y-1.5">
+          {detailRows.map((d) => (
+            <Section key={d.key} isOpen={openDetail === d.key}>
+              <JobFieldForm
+                jobId={jobId}
+                field={d.key}
+                label={d.label}
+                initial={d.value ?? ""}
+                required={d.required}
+                onSaved={() => setOpenDetail(null)}
+              />
+            </Section>
+          ))}
+        </div>
+        <div className="mt-3 h-px bg-[var(--border)]" />
+      </div>
 
       <ul className="mt-3 space-y-1.5">
         {rows.map((row) => (
@@ -720,6 +795,93 @@ function NoteForm({
         placeholder="Personal context, target comp, internal referrals, anything…"
         rows={8}
         className="w-full resize-y rounded-[10px] border border-[var(--border-card)] bg-[var(--surface)] px-3 py-2.5 text-sm leading-relaxed text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/15"
+      />
+    </FormShell>
+  )
+}
+
+// Single short-field editor for the Job details group (company / role / comp).
+// Reuses FormShell so Save / Cancel / Clear match the context fields exactly.
+// Persists ONLY the edited field via updateJobFieldsAction, which never touches
+// cached prep or context_hash.
+function JobFieldForm({
+  jobId,
+  field,
+  label,
+  initial,
+  required,
+  onSaved,
+}: {
+  jobId: string
+  field: JobDetailKey
+  label: string
+  initial: string
+  required: boolean
+  onSaved: () => void
+}) {
+  const router = useRouter()
+  const [value, setValue] = useState(initial)
+  const [error, setError] = useState<string | null>(null)
+  // Local pending (not useTransition) so the async action types cleanly.
+  const [pending, setPending] = useState(false)
+
+  useEffect(() => setValue(initial), [initial])
+
+  const persist = useCallback(
+    (next: string) => {
+      const payload: {
+        job_id: string
+        company?: string
+        role?: string
+        comp?: string | null
+      } = { job_id: jobId }
+      if (field === "company") payload.company = next
+      else if (field === "role") payload.role = next
+      else payload.comp = next
+
+      setError(null)
+      setPending(true)
+      updateJobFieldsAction(payload).then((res) => {
+        setPending(false)
+        if (!res.ok) return setError(res.error)
+        router.refresh()
+        onSaved()
+      })
+    },
+    [jobId, field, router, onSaved]
+  )
+
+  const onSave = useCallback(() => {
+    const trimmed = value.trim()
+    if (required && trimmed.length === 0) {
+      setError(`${label} is required`)
+      return
+    }
+    persist(trimmed)
+  }, [value, required, label, persist])
+
+  // Only comp (non-required) is clearable; company/role have no Clear.
+  const onClear = useCallback(() => {
+    setValue("")
+    persist("")
+  }, [persist])
+
+  return (
+    <FormShell
+      label={required ? `${label} (required)` : `${label} (optional)`}
+      hasExisting={!required && initial.trim().length > 0}
+      onSave={onSave}
+      onClear={onClear}
+      onCancel={onSaved}
+      pending={pending}
+      error={error}
+    >
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder={label}
+        className="h-9 w-full rounded-[10px] border border-[var(--border-card)] bg-[var(--surface)] px-3 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/15"
       />
     </FormShell>
   )

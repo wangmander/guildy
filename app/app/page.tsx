@@ -59,6 +59,9 @@ export default async function AppPage({
         "id, company_name, role_title, tc, state, stage, source_url, jd_text, latest_message, full_loop_session_config, created_at, prep_status"
       )
       .eq("user_id", user.id)
+      // Soft-delete: archived jobs leave the board (and everything derived from
+      // this single fetch (rail, Today, TC matrix, quests). Recoverable via DB.
+      .is("archived_at", null)
       .order("created_at", { ascending: false }),
     supabase
       .from("user_profiles")
