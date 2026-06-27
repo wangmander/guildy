@@ -36,6 +36,16 @@ const QUICK_POSITIONING_VISIBLE_FRAMES = 2
 const SECTION_CARD =
   "rounded-[14px] border border-[var(--border-card)] bg-[var(--surface)] p-5 shadow-[var(--shadow-e1)] scroll-mt-6"
 
+// Tier-branded primary CTA color. Quick = the Screen-stage palette teal
+// (#3E767E, white label, AA 5.1:1) so the free path reads visually distinct
+// from the paid purple; Deep keeps the existing --accent purple. Literal-hex
+// arbitrary classes (not a globals.css token) so Tailwind JIT emits them and
+// the diff stays scoped to this file.
+const TIER_CTA_COLOR: Record<PrepTier, string> = {
+  quick: "bg-[#3E767E] hover:bg-[#34646B]",
+  deep: "bg-[var(--accent)] hover:bg-[var(--accent-deep)]",
+}
+
 type Props = {
   jobId: string
   stage: StageKey
@@ -193,7 +203,6 @@ export function PrepCanvas({
           <TierSelector
             tier={tier}
             onTierChange={onTierChange}
-            onUpgrade={onUpgrade}
             disabled={isGenerating}
             hideQuick={hideQuickTier}
           />
@@ -294,21 +303,21 @@ export function PrepCanvas({
 function TierSelector({
   tier,
   onTierChange,
-  onUpgrade,
   disabled = false,
   hideQuick = false,
 }: {
   tier: PrepTier
   onTierChange: (tier: PrepTier) => void
-  onUpgrade: () => void
   disabled?: boolean
   // Prompt 15: paid users see only the Deep compartment.
   hideQuick?: boolean
 }) {
-  // Tuning pass 2 (item 3): short top-right pill. Quick = white when selected
-  // with a HAIKU 4.5 badge; Deep = always purple-filled, with an UPGRADE tag
-  // for unpaid users (hideQuick === paid). Click flips tier; on the unpaid
-  // view it also fires onUpgrade (paywall), exactly as before.
+  // Tuning pass 2 (item 3): short top-right pill. Quick = teal-filled when
+  // selected with a HAIKU 4.5 badge; Deep = always purple-filled, with an
+  // UPGRADE tag for unpaid users (hideQuick === paid). Click only flips tier.
+  // The paywall is NOT fired here anymore. A non-subscriber can switch to the
+  // Deep view freely; the UpgradeModal opens at Generate Deep Prep instead
+  // (see triggerGenerate).
   const pillBase =
     "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] transition-colors"
   const lockedSuffix = disabled ? " cursor-not-allowed opacity-60" : ""
@@ -334,7 +343,7 @@ function TierSelector({
             pillBase +
             " " +
             (tier === "quick"
-              ? "bg-[var(--surface)] text-[var(--text-primary)] shadow-[var(--shadow-e1)]"
+              ? "bg-[#3E767E] text-white shadow-[var(--shadow-e1)]"
               : "text-[var(--text-faint)] hover:text-[var(--text-primary)]") +
             lockedSuffix
           }
@@ -355,8 +364,6 @@ function TierSelector({
         onClick={() => {
           if (disabled) return
           onTierChange("deep")
-          // Unpaid view: flipping to Deep also fires the upgrade/paywall.
-          if (!hideQuick) onUpgrade()
         }}
         className={
           pillBase +
@@ -478,7 +485,10 @@ function StaleToast({
       <button
         type="button"
         onClick={onRegenerate}
-        className="inline-flex h-8 shrink-0 items-center rounded-[10px] bg-[var(--accent)] px-3 text-xs font-semibold text-white transition-colors hover:bg-[var(--accent-deep)]"
+        className={cn(
+          "inline-flex h-8 shrink-0 items-center rounded-[10px] px-3 text-xs font-semibold text-white transition-colors",
+          TIER_CTA_COLOR[tier]
+        )}
       >
         Regenerate {tier === "deep" ? "Deep" : "Quick"}
       </button>
@@ -538,7 +548,10 @@ function EmptyState({
               ? "Add your resume in onboarding before running prep."
               : undefined
           }
-          className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-[11px] bg-[var(--accent)] px-5 text-sm font-semibold text-white shadow-[var(--shadow-accent-cta)] transition-colors hover:bg-[var(--accent-deep)] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
+          className={cn(
+            "mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-[11px] px-5 text-sm font-semibold text-white shadow-[var(--shadow-accent-cta)] transition-colors disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none",
+            TIER_CTA_COLOR[tier]
+          )}
         >
           <Sparkles className="size-4" />
           Generate {tierLabel}
