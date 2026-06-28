@@ -6,6 +6,7 @@ import { BarChart3, ChevronUp, Lock, X } from "lucide-react"
 import type { CompPrioritiesRaw } from "@/lib/compMatrix/dimensions"
 
 import { TcMatrix, type TcColumn } from "./tc-matrix"
+import { NegotiationPanel } from "./widgets/negotiation-panel"
 
 type Props = {
   columns: TcColumn[]
@@ -21,6 +22,12 @@ type Props = {
 export function TcMatrixSheet(props: Props) {
   const { columns } = props
   const [open, setOpen] = useState(false)
+  // Standalone Negotiation Prep surface. Opened DIRECTLY from an offer card's
+  // "Negotiation Prep" CTA (guildy:open-negotiation), scoped to that job, with
+  // no matrix detour. Reuses the same NegotiationPanel the matrix's per-offer
+  // Negotiate button uses. A TcColumn is structurally a NegotiationJob, so the
+  // looked-up column is passed straight through (raw comp + tc).
+  const [negotiateJob, setNegotiateJob] = useState<TcColumn | null>(null)
   const locked = columns.length === 0
 
   useEffect(() => {
@@ -45,6 +52,20 @@ export function TcMatrixSheet(props: Props) {
     window.addEventListener("guildy:open-comp", onOpen)
     return () => window.removeEventListener("guildy:open-comp", onOpen)
   }, [locked])
+
+  // Offer card "Negotiation Prep" CTA dispatches this with the jobId. Open the
+  // standalone panel for that job WITHOUT opening the matrix sheet.
+  useEffect(() => {
+    const onNegotiate = (e: Event) => {
+      const jobId = (e as CustomEvent<{ jobId?: string }>).detail?.jobId
+      if (!jobId) return
+      const col = columns.find((c) => c.jobId === jobId)
+      if (col) setNegotiateJob(col)
+    }
+    window.addEventListener("guildy:open-negotiation", onNegotiate)
+    return () =>
+      window.removeEventListener("guildy:open-negotiation", onNegotiate)
+  }, [columns])
 
   const count = columns.length
 
@@ -152,6 +173,13 @@ export function TcMatrixSheet(props: Props) {
           </div>
         </div>
       ) : null}
+
+      <NegotiationPanel
+        job={negotiateJob}
+        onOpenChange={(o) => {
+          if (!o) setNegotiateJob(null)
+        }}
+      />
     </>
   )
 }

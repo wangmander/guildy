@@ -39,6 +39,45 @@ type Props = {
   onRestore?: (jobId: string) => void
 }
 
+// Shared ghost-row CTA (gem-guide section 3 hook): + icon, label, wrapped
+// sub-line, chevron, stage tint. Offer-stage cards render two of these
+// (Compare + Negotiation); every other stage renders one.
+function GhostRow({
+  label,
+  sub,
+  tintClass,
+  onClick,
+}: {
+  label: string
+  sub: string
+  tintClass: string
+  onClick: (e: React.MouseEvent) => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "mt-3 flex w-full items-start gap-2.5 rounded-[11px] border px-3 py-2.5 text-left transition-colors",
+        tintClass
+      )}
+    >
+      <Plus className="mt-[1px] size-[15px] shrink-0" />
+      <span className="min-w-0 flex-1">
+        <span className="block font-bricolage text-[14px] font-medium leading-tight">
+          {label}
+        </span>
+        {sub && (
+          <span className="mt-1 block text-[12px] font-normal leading-snug opacity-80">
+            {sub}
+          </span>
+        )}
+      </span>
+      <ChevronRight className="mt-[1px] size-3.5 shrink-0 opacity-70" />
+    </button>
+  )
+}
+
 // Job-card next-move treatment (gem-guide section 3): no gem, no hook box.
 // Company + 6px status-cue dot + salary pill + next-move line + one CTA.
 export function JobCard({
@@ -244,36 +283,49 @@ export function JobCard({
         </span>
       )}
 
-      {quest && !isInactive && !archived && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            if (isCompare) {
-              window.dispatchEvent(new CustomEvent("guildy:open-comp"))
-            } else {
+      {quest && !isInactive && !archived ? (
+        isCompare ? (
+          // Offer stage: two distinct actions. Compare opens the comp matrix;
+          // Negotiation Prep opens its own standalone view directly for THIS
+          // job (guildy:open-negotiation), no matrix detour.
+          <>
+            <GhostRow
+              label="Compare offers"
+              sub="See how your offers stack up"
+              tintClass={HOOK_TINT.offer}
+              onClick={(e) => {
+                e.stopPropagation()
+                window.dispatchEvent(new CustomEvent("guildy:open-comp"))
+              }}
+            />
+            <GhostRow
+              label="Negotiation Prep"
+              sub="Map your counter and walk in ready"
+              tintClass={HOOK_TINT.offer}
+              onClick={(e) => {
+                e.stopPropagation()
+                if (jobId) {
+                  window.dispatchEvent(
+                    new CustomEvent("guildy:open-negotiation", {
+                      detail: { jobId },
+                    })
+                  )
+                }
+              }}
+            />
+          </>
+        ) : (
+          <GhostRow
+            label={hookLabel ?? ""}
+            sub={hookSub}
+            tintClass={HOOK_TINT[tintKey]}
+            onClick={(e) => {
+              e.stopPropagation()
               open()
-            }
-          }}
-          className={cn(
-            "mt-3 flex w-full items-start gap-2.5 rounded-[11px] border px-3 py-2.5 text-left transition-colors",
-            HOOK_TINT[tintKey]
-          )}
-        >
-          <Plus className="mt-[1px] size-[15px] shrink-0" />
-          <span className="min-w-0 flex-1">
-            <span className="block font-bricolage text-[14px] font-medium leading-tight">
-              {hookLabel}
-            </span>
-            {hookSub && (
-              <span className="mt-1 block text-[12px] font-normal leading-snug opacity-80">
-                {hookSub}
-              </span>
-            )}
-          </span>
-          <ChevronRight className="mt-[1px] size-3.5 shrink-0 opacity-70" />
-        </button>
-      )}
+            }}
+          />
+        )
+      ) : null}
 
       {onActivate && !archived && (
         <button
