@@ -37,6 +37,12 @@ export type PrepInput = {
   interviewer_title: string | null
   interviewer_link: string | null
   note_text: string | null
+  // INTEL: researched, sourced interviewer rapport brief (Deep only). Fetched
+  // and cached per-interviewer by generatePrepAction, injected as an
+  // [INTERVIEWER INTEL] block. Null when there's no interviewer, on Quick, or
+  // when the search failed; generation then proceeds without it, never with
+  // synthetic person-facts.
+  interviewer_intel?: string | null
   session_role?: PrepSessionRole
   // Phase 5: user-edited Full Loop round label (full_loop_session_config[role].label).
   // When non-null, drives prep emphasis ahead of the role-keyed SESSION_ROLE_EMPHASIS

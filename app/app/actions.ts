@@ -11,7 +11,7 @@ import {
   trackNegotiationCtaClicked,
   trackNegotiationGenerated,
 } from "@/lib/analytics"
-import { generatePrep } from "@/lib/ai/generate-prep"
+import { generatePrep, getInterviewerIntel } from "@/lib/ai/generate-prep"
 import {
   buildNegotiationContextHash,
   fetchNegotiationContext,
@@ -38,6 +38,7 @@ import {
   prepTierSchema,
   stageKeyToPrepStage,
   type FullLoopSessionConfig,
+  type PrepInput,
   type PrepOutput,
   type PrepStage,
   type PrepTier,
@@ -1305,22 +1306,82 @@ export async function generatePrepAction(
   // dispatching the Sonnet call.
 
 
+  const basePrepInput: PrepInput = {
+    resume_text: profile?.resume_text ?? null,
+    jd_text: job.jd_text,
+    latest_message: job.latest_message,
+    company_name: job.company_name,
+    role_title: job.role_title,
+    stage: prepStage,
+    interviewer_name: interviewerName,
+    interviewer_title: interviewerTitle,
+    interviewer_link: interviewerLink,
+    note_text: noteText,
+    session_role: parsed.data.session_role,
+    session_label: sessionLabel,
+    tier,
+  }
+
+  // INTEL (flagship): on Deep with an interviewer, attach a researched, sourced
+  // rapport brief. Cached per-interviewer in a job_context type='other' row
+  // (metadata.kind='interviewer_intel') keyed on the interviewer identity, so
+  // an unchanged interviewer reuses the brief across Deep regenerations and an
+  // edit (identity change) re-searches on the next Deep. The web search runs at
+  // most once here; the brief is injected into Deep generation. On failure the
+  // brief is null and Deep proceeds with the name/title block only, never with
+  // synthetic person-facts. interviewer_intel is NOT in buildContextHash: the
+  // interviewer name/title/link it derives from already are, so editing the
+  // interviewer already invalidates the prep cache.
+  let interviewerIntel: string | null = null
+  if (tier === "deep" && interviewerName && interviewerName.trim().length > 0) {
+    const identity = [interviewerName, interviewerTitle, interviewerLink]
+      .map((v) => (v ?? "").trim().toLowerCase())
+      .join("|")
+    const { data: intelRow } = await supabase
+      .from("job_context")
+      .select("content, metadata")
+      .eq("job_id", parsed.data.job_id)
+      .eq("user_id", user.id)
+      .eq("type", "other")
+      .filter("metadata->>kind", "eq", "interviewer_intel")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    const cachedIdentity =
+      (intelRow?.metadata as { identity?: string | null } | null)?.identity ??
+      null
+    if (intelRow?.content && cachedIdentity === identity) {
+      interviewerIntel = intelRow.content as string
+      // eslint-disable-next-line no-console
+      console.log("[generatePrep] Interviewer intel cache hit")
+    } else {
+      interviewerIntel = await getInterviewerIntel(basePrepInput)
+      if (interviewerIntel) {
+        // Replace any prior intel row for this job (delete-then-insert),
+        // mirroring the interviewer-row upsert pattern.
+        await supabase
+          .from("job_context")
+          .delete()
+          .eq("job_id", parsed.data.job_id)
+          .eq("user_id", user.id)
+          .eq("type", "other")
+          .filter("metadata->>kind", "eq", "interviewer_intel")
+        await supabase.from("job_context").insert({
+          job_id: parsed.data.job_id,
+          user_id: user.id,
+          type: "other",
+          content: interviewerIntel,
+          metadata: { kind: "interviewer_intel", identity },
+        })
+      }
+    }
+  }
+
   let prep: PrepOutput
   try {
     prep = await generatePrep({
-      resume_text: profile?.resume_text ?? null,
-      jd_text: job.jd_text,
-      latest_message: job.latest_message,
-      company_name: job.company_name,
-      role_title: job.role_title,
-      stage: prepStage,
-      interviewer_name: interviewerName,
-      interviewer_title: interviewerTitle,
-      interviewer_link: interviewerLink,
-      note_text: noteText,
-      session_role: parsed.data.session_role,
-      session_label: sessionLabel,
-      tier,
+      ...basePrepInput,
+      interviewer_intel: interviewerIntel,
     })
   } catch (err) {
     const message =

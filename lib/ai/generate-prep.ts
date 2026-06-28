@@ -38,6 +38,28 @@ const COMPANY_CONTEXT_MAX_TOKENS = 1024
 
 const COMPANY_CONTEXT_SYSTEM = `You are a research assistant. Given a company name and role context, perform exactly one web_search and produce a 150-220 word terse summary covering: recent company news, funding/financials, key products or strategic moves, named competitors, hiring posture if visible. No fluff, no preamble. Plain text only, no markdown.`
 
+// INTEL (flagship): bounded single web_search on the SPECIFIC interviewer.
+// Tighter 45s budget than company context so the worst-case Deep wall-clock
+// (interviewer 45 + company 60 + Sonnet 180 = 285s) stays under the 300s
+// maxDuration without extending DEEP_TIMEOUT_MS. One Haiku call, max_uses: 1.
+const INTERVIEWER_INTEL_TIMEOUT_MS = 45_000
+const INTERVIEWER_INTEL_MAX_TOKENS = 1024
+
+const INTERVIEWER_INTEL_SYSTEM = `You are a research assistant building a PROFESSIONAL rapport brief on a specific interviewer for a candidate. Perform exactly one web_search.
+
+DISAMBIGUATION: the interviewer works at the named company. Combine the name, company, title, and profile link to pin the RIGHT individual. Prioritize the person AT THAT COMPANY. If you cannot confidently identify the specific person, say so and lower the confidence rather than asserting.
+
+PROFESSIONAL ONLY: current role and team, professional background and prior companies, public professional work (conference talks, blog posts, articles, GitHub, podcasts, company posts), and professional social presence. EXCLUDE anything personal, private, or sensitive (home, family, health, finances, relationships, age, religion, politics). Do not speculate.
+
+OUTPUT a terse 150-220 word plain-text brief (no markdown, no preamble) with:
+- Confidence: high | medium | low, with one clause on who you believe this is and why.
+- Background: prior roles/companies relevant to this interview.
+- Current role and team at the company.
+- Recent public work: talks, posts, writing, GitHub, podcasts, with source URLs where available.
+- Rapport angles: 2-3 concrete, specific hooks the candidate can use, each grounded in the facts above.
+
+If identity is uncertain, return low confidence and only what is verifiable. Never fabricate facts about the person.`
+
 const SYSTEM_PROMPT = `You are a senior interview prep coach with 15+ years guiding candidates through interviews at top tech companies. You produce sharp, candidate-specific prep — never generic boilerplate.
 
 INPUTS YOU RECEIVE
@@ -61,6 +83,7 @@ QUALITY BAR
 6. Do not invent facts about the company that aren't in the JD or message.
 7. When [COMPANY CONTEXT] is present in the user prompt, use it to ground positioning, risks, and questions. Do not invent facts not present in resume, JD, latest message, or company context.
 8. When [SESSION] contains a 'Round name' line, treat it as the primary session target. Drive prep emphasis from the round name. The role-keyed Focus/Emphasize/Defer lines that follow are supporting context, not the dominant signal. If round name and role enum imply different emphasis, prioritize the round name.
+9. When [INTERVIEWER INTEL] is present, ground interviewer_insights and any interviewer-specific rapport/positioning in it. Use ONLY facts present in the intel about the person; do not invent biographical details not in the intel. If the intel states low confidence or cannot identify the person, keep interviewer_insights cautious and general rather than asserting specifics. Weave 1-2 of the intel's rapport angles into prep where natural.
 
 QUICK PREP TIER RULES (when tier === "quick")
 
@@ -531,6 +554,112 @@ async function fetchCompanyContext(
   }
 }
 
+// INTEL (flagship): Haiku-backed, bounded web search on the SPECIFIC
+// interviewer, modeled on fetchCompanyContext. Disambiguates with name +
+// company + title + link so it pins the right person. Returns a terse,
+// source-cited, professional-only rapport brief, or null on no-name / timeout /
+// auth error / empty result so Deep NEVER breaks or injects synthetic facts.
+// Caching + the cache write live in generatePrepAction (this layer has no DB).
+async function fetchInterviewerIntel(
+  client: Anthropic,
+  input: PrepInput
+): Promise<string | null> {
+  const name = input.interviewer_name?.trim()
+  if (!name) return null
+  const start = Date.now()
+  const controller = new AbortController()
+  const timeoutId = setTimeout(
+    () => controller.abort(),
+    INTERVIEWER_INTEL_TIMEOUT_MS
+  )
+  try {
+    const title = input.interviewer_title?.trim()
+    const link = input.interviewer_link?.trim()
+    const query = [
+      `Interviewer name: ${name}`,
+      `Company (interviewer works here): ${input.company_name}`,
+      `Title: ${title && title.length > 0 ? title : "(not provided)"}`,
+      `Profile link: ${link && link.length > 0 ? link : "(not provided)"}`,
+      `Role the candidate is interviewing for: ${input.role_title}`,
+      "",
+      "Search for this specific person at this company and produce the brief.",
+    ].join("\n")
+    const response = await client.messages.create(
+      {
+        model: QUICK_PREP_MODEL,
+        max_tokens: INTERVIEWER_INTEL_MAX_TOKENS,
+        temperature: 0.2,
+        system: [
+          {
+            type: "text",
+            text: INTERVIEWER_INTEL_SYSTEM,
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+        messages: [{ role: "user", content: query }],
+        tools: [
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          {
+            type: "web_search_20250305",
+            name: "web_search",
+            max_uses: 1,
+          } as any,
+        ],
+        tool_choice: { type: "auto" },
+      },
+      { signal: controller.signal }
+    )
+
+    let summary = ""
+    for (const block of response.content) {
+      if (block.type === "text") summary += block.text
+    }
+    summary = summary.trim()
+    if (summary.length === 0) {
+      // eslint-disable-next-line no-console
+      console.log(
+        "[generatePrep] Interviewer intel fetch failed, proceeding without: empty summary"
+      )
+      return null
+    }
+    // eslint-disable-next-line no-console
+    console.log(
+      `[generatePrep] Interviewer intel fetched: ${summary.length} chars in ${Date.now() - start}ms`
+    )
+    return summary
+  } catch (err) {
+    const reason =
+      err instanceof Anthropic.APIUserAbortError
+        ? "timeout"
+        : err instanceof Error
+          ? err.message
+          : String(err)
+    // eslint-disable-next-line no-console
+    console.log(
+      `[generatePrep] Interviewer intel fetch failed, proceeding without: ${reason}`
+    )
+    return null
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+// Exported entry point for the action layer, which owns the per-interviewer
+// cache (job_context). Self-guards: returns null unless Deep + an interviewer
+// name is present, and on a missing API key. Creates its own client so the
+// caller doesn't have to. Run at most once per generatePrepAction (the brief
+// is then passed into generatePrep as input.interviewer_intel and reused on
+// the retry path, mirroring companyContext).
+export async function getInterviewerIntel(
+  input: PrepInput
+): Promise<string | null> {
+  if (input.tier !== "deep") return null
+  if (!input.interviewer_name?.trim()) return null
+  if (!process.env.ANTHROPIC_API_KEY) return null
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  return fetchInterviewerIntel(client, input)
+}
+
 // Phase 4d: per-session emphasis injected into the user prompt when
 // input.session_role is set. Each role gets its own focus / emphasize /
 // defer block so a single Full Loop stage produces materially distinct
@@ -671,6 +800,14 @@ function buildUserPrompt(
   // before session-role overrides. Absent when fetch failed or for Quick.
   if (companyContext) {
     lines.push("", "[COMPANY CONTEXT]", companyContext)
+  }
+
+  // INTEL: researched interviewer rapport brief (Deep only). Sits alongside the
+  // [INTERVIEWER] identity block and [COMPANY CONTEXT]; SYSTEM_PROMPT rule 9
+  // tells the model to ground interviewer_insights in it and not invent facts.
+  const interviewerIntel = input.interviewer_intel?.trim()
+  if (interviewerIntel && interviewerIntel.length > 0) {
+    lines.push("", "[INTERVIEWER INTEL]", interviewerIntel)
   }
 
   if (input.session_role) {
