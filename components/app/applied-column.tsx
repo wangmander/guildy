@@ -94,7 +94,7 @@ export function AppliedColumn({
         </span>
       </div>
 
-      <div className="flex max-h-[60vh] flex-col gap-[11px] overflow-y-auto px-3 pb-[14px]">
+      <div className="flex flex-col gap-[11px] px-3 pb-[14px]">
         <button
           type="button"
           onClick={() => setOpen(true)}

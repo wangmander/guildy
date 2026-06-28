@@ -144,7 +144,7 @@ export function BoardColumn({
         ) : null}
       </div>
 
-      <div className="flex max-h-[60vh] flex-col gap-[11px] overflow-y-auto px-3 pb-[14px]">
+      <div className="flex flex-col gap-[11px] px-3 pb-[14px]">
         {showEmpty ? (
           <div className="rounded-[14px] border-[1.5px] border-dashed border-[var(--border-strong)] px-[14px] py-[18px] text-center text-[12.5px] leading-[1.5] text-[#A2ACB9]">
             Cards land here when you move them from earlier stages.

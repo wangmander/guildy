@@ -78,6 +78,12 @@ export function JobCard({
   // the affordance never appears while the card is being moved, and never on
   // an already-archived card.
   const showArchive = Boolean(jobId && onArchive) && !isDragging && !archived
+  // Minimal Applied card: the active (non-archived) Applied-column card is
+  // dense (company name + a skinny "They Responded" button only, no TC/meta
+  // pill). Archived Applied cards (muted + Restore) and active-stage cards keep
+  // their richer layout. onActivate is passed only by the Applied column, but
+  // gate on the variant so the meta/padding rules can't leak elsewhere.
+  const isMinimalApplied = isInactive && !archived
 
   const open = () => {
     if (!jobId || !onOpen) return
@@ -153,7 +159,8 @@ export function JobCard({
         }
       }}
       className={cn(
-        "group relative rounded-[14px] border border-[var(--border-card)] bg-[var(--surface)] px-4 py-[15px] outline-none transition",
+        "group relative rounded-[14px] border border-[var(--border-card)] bg-[var(--surface)] outline-none transition",
+        isMinimalApplied ? "px-3.5 py-3" : "px-4 py-[15px]",
         isInactive
           ? "shadow-[var(--shadow-e1)]"
           : "shadow-[var(--shadow-e2)]",
@@ -231,7 +238,7 @@ export function JobCard({
         )}
       </div>
 
-      {meta && (
+      {meta && !isMinimalApplied && (
         <span className="mt-[9px] inline-block rounded-lg bg-[var(--salary-bg)] px-[9px] py-1 text-[12.5px] font-semibold tabular-nums text-[var(--salary-text)]">
           {meta}
         </span>
@@ -275,9 +282,10 @@ export function JobCard({
             e.stopPropagation()
             onActivate()
           }}
-          className="mt-3 w-full rounded-[10px] border border-[var(--border)] bg-[var(--surface-sunken)] py-[9px] text-[13px] font-semibold text-[#46505F] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--divider)]"
+          className="mt-2 flex w-full items-center justify-center gap-1 rounded-[9px] border border-[var(--border)] bg-[var(--surface-sunken)] py-[7px] text-[12.5px] font-semibold text-[#46505F] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--divider)]"
         >
           They Responded
+          <ChevronRight className="size-3.5" />
         </button>
       )}
 
