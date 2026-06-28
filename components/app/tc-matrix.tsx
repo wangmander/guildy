@@ -17,6 +17,7 @@ import {
   softRating,
   winnerIndex,
 } from "@/lib/compMatrix/scoring"
+import { parseMoneyString } from "@/lib/compMatrix/normalize"
 import { cn } from "@/lib/utils"
 import type { JobCompensation } from "@/types"
 
@@ -65,6 +66,41 @@ function hasAnyComp(comp: JobCompensation | null): boolean {
   )
 }
 
+// Auto-carry the comp the user already entered on the card (jobs.tc) into the
+// matrix so a known offer never renders an empty "Add compensation" column.
+// A clean single value ("180k", "$190,000") seeds Base (and thus Year-1) and
+// rates normally. A tc that can't parse to one number (ranges like
+// "$170k-$205k", or "210k + 200k equity") returns the original comp, so the
+// column instead shows the raw tc string as its headline (see ViewColumn.tcOnly)
+// rather than an Add prompt. Existing structured comp always wins; any soft
+// ratings already on the row are preserved.
+function effectiveComp(c: TcColumn): JobCompensation | null {
+  if (hasAnyComp(c.comp)) return c.comp
+  const base = parseMoneyString(c.tc)
+  if (base === null) return c.comp
+  const baseRow: JobCompensation = c.comp ?? {
+    id: `seed-${c.jobId}`,
+    job_id: c.jobId,
+    user_id: "",
+    base: null,
+    signing_bonus: null,
+    annual_bonus_pct: null,
+    equity_grant_total: null,
+    vesting_years: null,
+    location: null,
+    benefits_notes: null,
+    ratings: {},
+    created_at: "",
+    updated_at: "",
+  }
+  return { ...baseRow, base }
+}
+
+// A column with its effective comp resolved. tcOnly = the job has comp text
+// but it couldn't be parsed into a number, so the column is "present" (no Add
+// prompt) and renders tcText as the Year-1 headline with no numeric breakdown.
+type ViewColumn = TcColumn & { tcOnly: boolean; tcText: string | null }
+
 const LABEL_COL = "sticky left-0 z-10 w-[210px] whitespace-nowrap bg-[var(--surface)]"
 const VALUE_COL = "w-[220px]"
 // BEST-column wash tints (comp-sheet-only, literal per spec).
@@ -87,11 +123,11 @@ function MatrixRow({
   labelClassName,
 }: {
   label: string
-  columns: TcColumn[]
+  columns: ViewColumn[]
   winIdx: number
-  present: (c: TcColumn) => boolean
-  renderValue: (c: TcColumn) => React.ReactNode
-  onAdd: (c: TcColumn) => void
+  present: (c: ViewColumn) => boolean
+  renderValue: (c: ViewColumn) => React.ReactNode
+  onAdd: (c: ViewColumn) => void
   topBorder?: boolean
   labelClassName?: string
 }) {
@@ -194,9 +230,18 @@ export function TcMatrix({
   const { enabledSoft, weights } = resolveCompPriorities(compPriorities)
   const enabledSoftDims = SOFT_DIMS.filter((d) => enabledSoft.includes(d.key))
 
-  const comps = columns.map((c) => c.comp)
+  // Resolve each column's effective comp once (seeds from jobs.tc when there's
+  // no structured row). Everything below reads `eff`, not `columns`: the cells,
+  // the scoring, the header CTA, the Negotiate enable, and the modals.
+  const eff: ViewColumn[] = columns.map((c) => {
+    const ec = effectiveComp(c)
+    const tcText = c.tc?.trim() ? c.tc.trim() : null
+    return { ...c, comp: ec, tcOnly: !hasAnyComp(ec) && !!tcText, tcText }
+  })
+
+  const comps = eff.map((c) => c.comp)
   const compMax = compMaxes(comps)
-  const overalls = columns.map((c) =>
+  const overalls = eff.map((c) =>
     overallScore(c.comp, { compMax, enabledSoft, weights })
   )
   const winIdx = multi ? winnerIndex(overalls) : -1
@@ -227,8 +272,11 @@ export function TcMatrix({
           <thead>
             <tr>
               <th className={cn(LABEL_COL, "py-2 pr-4 text-left align-bottom")} />
-              {columns.map((c, i) => {
+              {eff.map((c, i) => {
                 const isBest = multi && i === winIdx
+                // Known = numeric comp (incl. tc-seeded base) or unparseable tc
+                // text on the job. Either way it's "Edit comp", never "Add".
+                const known = hasAnyComp(c.comp) || c.tcOnly
                 return (
                   <th
                     key={c.jobId}
@@ -259,12 +307,12 @@ export function TcMatrix({
                         onClick={() => setEditingJob(c)}
                         className={cn(
                           "text-[12px] transition-colors hover:text-[var(--accent)]",
-                          hasAnyComp(c.comp)
+                          known
                             ? "text-[var(--text-faint)]"
                             : "inline-flex items-center gap-1 font-medium text-[var(--accent-deep)] hover:underline"
                         )}
                       >
-                        {hasAnyComp(c.comp) ? (
+                        {known ? (
                           "Edit comp"
                         ) : (
                           <>
@@ -279,7 +327,9 @@ export function TcMatrix({
                         disabled={!hasAnyComp(c.comp)}
                         title={
                           !hasAnyComp(c.comp)
-                            ? "Add the offer's compensation first"
+                            ? c.tcOnly
+                              ? "Add a single comp figure to negotiate"
+                              : "Add the offer's compensation first"
                             : undefined
                         }
                         className="inline-flex items-center gap-1 text-[12px] font-medium text-[var(--accent-deep)] transition-opacity hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-40"
@@ -301,10 +351,13 @@ export function TcMatrix({
               <MatrixRow
                 key={d.key}
                 label={d.label}
-                columns={columns}
+                columns={eff}
                 winIdx={winIdx}
-                present={(c) => hasAnyComp(c.comp)}
+                present={(c) => hasAnyComp(c.comp) || c.tcOnly}
                 renderValue={(c) => {
+                  // tcOnly columns have no numeric breakdown; the figure shows
+                  // on the Year-1 row instead.
+                  if (!hasAnyComp(c.comp)) return <Dash />
                   const rating = autoRating(d.key, c.comp, compMax[d.key] ?? 0)
                   return (
                     <span className="inline-flex items-baseline gap-2">
@@ -326,16 +379,27 @@ export function TcMatrix({
             {/* Anchor: year-1 total, dollar only, no rating. Heavier top rule. */}
             <MatrixRow
               label="Year-1 total"
-              columns={columns}
+              columns={eff}
               winIdx={winIdx}
               topBorder
               labelClassName="font-semibold text-[var(--text-secondary)]"
-              present={(c) => hasAnyComp(c.comp)}
-              renderValue={(c) => (
-                <span className="font-bricolage text-[16px] font-semibold tabular-nums text-[var(--ink)]">
-                  {usd(dimValue("year1_total", c.comp))}
-                </span>
-              )}
+              present={(c) => hasAnyComp(c.comp) || c.tcOnly}
+              renderValue={(c) =>
+                hasAnyComp(c.comp) ? (
+                  <span className="font-bricolage text-[16px] font-semibold tabular-nums text-[var(--ink)]">
+                    {usd(dimValue("year1_total", c.comp))}
+                  </span>
+                ) : (
+                  // Unparseable tc: show the raw stored comp string as the
+                  // headline so the known offer carries without re-entry.
+                  <span
+                    title={c.tcText ?? undefined}
+                    className="block truncate font-bricolage text-[14px] font-medium text-[var(--text-secondary)]"
+                  >
+                    {c.tcText}
+                  </span>
+                )
+              }
               onAdd={setEditingJob}
             />
 
@@ -344,7 +408,7 @@ export function TcMatrix({
               <MatrixRow
                 key={d.key}
                 label={d.label}
-                columns={columns}
+                columns={eff}
                 winIdx={winIdx}
                 present={(c) => softRating(d.key, c.comp) !== null}
                 renderValue={(c) => (
@@ -368,7 +432,7 @@ export function TcMatrix({
                 >
                   Overall
                 </td>
-                {columns.map((c, i) => {
+                {eff.map((c, i) => {
                   const isBest = i === winIdx
                   return (
                     <td

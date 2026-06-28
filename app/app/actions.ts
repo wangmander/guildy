@@ -26,7 +26,7 @@ import {
   NEGOTIATION_PREP_MODEL,
   QUICK_PREP_MODEL,
 } from "@/lib/ai/models"
-import { normalizeComp } from "@/lib/compMatrix/normalize"
+import { normalizeComp, parseMoneyString } from "@/lib/compMatrix/normalize"
 import { SCORED_KEYS, SOFT_KEYS } from "@/lib/compMatrix/dimensions"
 import {
   parseFullLoopRounds,
@@ -2060,7 +2060,7 @@ export async function generateNegotiationAction(
 
   const { data: job, error: jobError } = await supabase
     .from("jobs")
-    .select("id, company_name, role_title, stage")
+    .select("id, company_name, role_title, stage, tc")
     .eq("id", parsed.data.job_id)
     .eq("user_id", user.id)
     .maybeSingle()
@@ -2085,10 +2085,28 @@ export async function generateNegotiationAction(
     .eq("job_id", parsed.data.job_id)
     .eq("user_id", user.id)
     .maybeSingle()
-  if (!compHasData(comp as CompRow | null)) {
-    return { ok: false, error: "Add the offer's compensation first." }
+  const dbComp = comp as CompRow | null
+  let compRow: CompRow
+  if (compHasData(dbComp)) {
+    compRow = dbComp as CompRow
+  } else {
+    // Carry the comp the user already entered on the card (jobs.tc) so a known
+    // single-figure offer negotiates without re-entry. Ranges / multi-number
+    // tc can't anchor the year-1 walk-away math, so they still require a
+    // structured figure. Mirrors the matrix's tc auto-seed (tc-matrix.tsx).
+    const seededBase = parseMoneyString((job.tc as string | null) ?? null)
+    if (seededBase === null) {
+      return { ok: false, error: "Add the offer's compensation first." }
+    }
+    compRow = {
+      base: seededBase,
+      signing_bonus: null,
+      annual_bonus_pct: null,
+      equity_grant_total: null,
+      vesting_years: null,
+      location: null,
+    }
   }
-  const compRow = comp as CompRow
 
   const target = parsed.data.target
   const leverage = parsed.data.leverage?.trim() ? parsed.data.leverage.trim() : null
