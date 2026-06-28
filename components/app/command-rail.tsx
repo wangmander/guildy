@@ -351,10 +351,13 @@ function InsightsCard({ rows }: { rows: ApplyProjection["rows"] }) {
 
 function BoardRow({ board, isTop }: { board: BoardRating; isTop: boolean }) {
   // Boards carry a generic jobs URL on the rating record. When present the name
-  // is a new-tab link with a hover-underline affordance only (same #3A4453 text
-  // color, no new token); boards with a null url (e.g. "Company career pages")
-  // stay plain text. Row layout, rating chip, and dividers are unchanged.
-  const nameClass = "min-w-0 truncate text-[13px] font-medium text-[#3A4453]"
+  // gets a persistent inline-link affordance: the app's --accent-deep link
+  // token (same as "Compare Quick vs Deep") + a trailing ExternalLink icon +
+  // hover underline, so the row reads clickable at rest, not only on hover. The
+  // name truncates while the icon stays (shrink-0) so long names never wrap.
+  // Boards with a null url (e.g. "Company career pages") stay plain #3A4453
+  // text. Row layout, rating chip, and dividers are unchanged.
+  const baseName = "text-[13px] font-medium"
   return (
     <li className="flex items-center justify-between gap-2 py-[9px] [&:not(:first-child)]:border-t [&:not(:first-child)]:border-[var(--divider-kanban)]">
       {board.url ? (
@@ -362,12 +365,18 @@ function BoardRow({ board, isTop }: { board: BoardRating; isTop: boolean }) {
           href={board.url}
           target="_blank"
           rel="noopener noreferrer"
-          className={cn(nameClass, "hover:underline")}
+          className={cn(
+            baseName,
+            "flex min-w-0 items-center gap-1 text-[var(--accent-deep)] hover:underline"
+          )}
         >
-          {board.board}
+          <span className="truncate">{board.board}</span>
+          <ExternalLink className="size-3 shrink-0" />
         </a>
       ) : (
-        <span className={nameClass}>{board.board}</span>
+        <span className={cn(baseName, "min-w-0 truncate text-[#3A4453]")}>
+          {board.board}
+        </span>
       )}
       <span
         className={cn(
