@@ -36,14 +36,22 @@ const QUICK_POSITIONING_VISIBLE_FRAMES = 2
 const SECTION_CARD =
   "rounded-[14px] border border-[var(--border-card)] bg-[var(--surface)] p-5 shadow-[var(--shadow-e1)] scroll-mt-6"
 
-// Tier-branded primary CTA color. Quick = the Screen-stage palette teal
-// (#3E767E, white label, AA 5.1:1) so the free path reads visually distinct
-// from the paid purple; Deep keeps the existing --accent purple. Literal-hex
-// arbitrary classes (not a globals.css token) so Tailwind JIT emits them and
-// the diff stays scoped to this file.
+// Tier-branded primary CTA color. Quick = a soft teal (#7FC8CB) with a dark
+// ink label (AA 7.8:1) so the free path reads visually distinct from the paid
+// purple; the paler fill needs dark text, unlike the white-on-purple Deep CTA.
+// Deep keeps the existing --accent purple. Literal-hex arbitrary classes (not
+// a globals.css token) so Tailwind JIT emits them and the diff stays scoped to
+// this file. Teal lives ONLY on these CTAs, never on the TierSelector pill.
 const TIER_CTA_COLOR: Record<PrepTier, string> = {
-  quick: "bg-[#3E767E] hover:bg-[#34646B]",
-  deep: "bg-[var(--accent)] hover:bg-[var(--accent-deep)]",
+  quick: "bg-[#7FC8CB] text-[var(--text-primary)] hover:bg-[#6FBDC0]",
+  deep: "bg-[var(--accent)] text-white hover:bg-[var(--accent-deep)]",
+}
+
+// Primary-CTA drop shadow per tier: Deep keeps the purple accent shadow; the
+// teal Quick CTA uses a neutral gray shadow (the standard E2), no purple tint.
+const TIER_CTA_SHADOW: Record<PrepTier, string> = {
+  quick: "shadow-[var(--shadow-e2)]",
+  deep: "shadow-[var(--shadow-accent-cta)]",
 }
 
 type Props = {
@@ -312,9 +320,10 @@ function TierSelector({
   // Prompt 15: paid users see only the Deep compartment.
   hideQuick?: boolean
 }) {
-  // Tuning pass 2 (item 3): short top-right pill. Quick = teal-filled when
-  // selected with a HAIKU 4.5 badge; Deep = always purple-filled, with an
-  // UPGRADE tag for unpaid users (hideQuick === paid). Click only flips tier.
+  // Tuning pass 2 (item 3): short top-right pill. Quick = neutral white pill
+  // when selected with a HAIKU 4.5 badge (no teal here, teal lives only on the
+  // Quick CTAs); Deep = always purple-filled, with an UPGRADE tag for unpaid
+  // users (hideQuick === paid). Click only flips tier.
   // The paywall is NOT fired here anymore. A non-subscriber can switch to the
   // Deep view freely; the UpgradeModal opens at Generate Deep Prep instead
   // (see triggerGenerate).
@@ -343,7 +352,7 @@ function TierSelector({
             pillBase +
             " " +
             (tier === "quick"
-              ? "bg-[#3E767E] text-white shadow-[var(--shadow-e1)]"
+              ? "bg-[var(--surface)] text-[var(--text-primary)] shadow-[var(--shadow-e1)]"
               : "text-[var(--text-faint)] hover:text-[var(--text-primary)]") +
             lockedSuffix
           }
@@ -486,7 +495,7 @@ function StaleToast({
         type="button"
         onClick={onRegenerate}
         className={cn(
-          "inline-flex h-8 shrink-0 items-center rounded-[10px] px-3 text-xs font-semibold text-white transition-colors",
+          "inline-flex h-8 shrink-0 items-center rounded-[10px] px-3 text-xs font-semibold transition-colors",
           TIER_CTA_COLOR[tier]
         )}
       >
@@ -549,8 +558,9 @@ function EmptyState({
               : undefined
           }
           className={cn(
-            "mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-[11px] px-5 text-sm font-semibold text-white shadow-[var(--shadow-accent-cta)] transition-colors disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none",
-            TIER_CTA_COLOR[tier]
+            "mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-[11px] px-5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none",
+            TIER_CTA_COLOR[tier],
+            TIER_CTA_SHADOW[tier]
           )}
         >
           <Sparkles className="size-4" />
