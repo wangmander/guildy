@@ -18,7 +18,38 @@ import {
 // Bump when the prompt or output contract changes so cached rows re-generate.
 // neg-v3: removed live web search; added elicitation (priorities/leverage)
 // grounding + the static research-backed stat set.
-export const NEGOTIATION_PROMPT_VERSION = "neg-v3"
+// neg-v4: added best-effort market-comp lookup ([MARKET COMP] anchor).
+export const NEGOTIATION_PROMPT_VERSION = "neg-v4"
+
+// Market-comp lookup budget. One Haiku web_search, ~45s cap, so worst-case Deep
+// negotiation wall-clock (45 + Opus 210) stays under the 300s route maxDuration.
+const MARKET_COMP_TIMEOUT_MS = 45_000
+const MARKET_COMP_MAX_TOKENS = 600
+
+// Comp-RANGE researcher. Distinct from the removed company-patterns search: this
+// fetches a real number (range) for the role, the one per-job input the user
+// can't reliably supply. Honest or null, never fabricated.
+const MARKET_COMP_SYSTEM = `You are a compensation data researcher. Perform exactly one web_search and return a best-effort MARKET COMP range for the given role.
+
+LOCATION: use the provided structured location if present; else infer the location from the job description snippet if it names one; else treat as US national. State which location the range is for.
+
+LEVEL: infer seniority from the role title (Senior, Staff, Lead, Manager, Director, etc.). If unclear, assume a mid-to-senior individual contributor.
+
+DATA PRIORITY:
+- Prefer a real COMPANY-SPECIFIC band ONLY if the company is large enough to have public comp data (big tech, well-populated levels.fyi entries) AND you confidently find it. Mark it company-specific.
+- Otherwise return the role + level + location MARKET range (levels.fyi aggregate, Glassdoor-style, BLS). Mark it market-rate.
+
+HONESTY:
+- NEVER fabricate a number. If you cannot find a confident range, output exactly NONE and nothing else.
+- Present a RANGE (low to high) for total compensation (or base only, labeled as such), with the source named.
+
+OUTPUT (terse plain text, no markdown, no em dashes, at most ~80 words):
+Range: <low> to <high>, <what it covers, e.g. total comp>
+Location: <location the range is for>
+Level: <inferred level>
+Type: company-specific OR market-rate
+Source: <named source>
+Read: <one line on what this implies for the candidate>`
 
 // Static, research-backed negotiation benchmarks. General and stable (the same
 // way the command rail's apply-pace numbers are static constants), NEVER live
@@ -49,21 +80,22 @@ GROUNDING:
 - Center the plan on the candidate's [PRIORITIES] (what they want most). If none are given, assume base salary plus package levers (signing bonus, equity, PTO, title, earlier review).
 - Anchor the asks to the candidate's [TARGET] (in their words) and the offer's year-1 figure. Coach them to ask for their chosen priority.
 - Use [LEVERAGE] to shape leverage_analysis and the scripts. With a competing offer, coach using it respectfully. With "None yet", coach building soft leverage (fit, enthusiasm, market rate) without bluffing.
-- There is NO live company research. Give strong GENERAL negotiation guidance. Never fabricate company-specific claims (no invented flex percentages, bands, or policies). You may name the company generically.
+- There is no company-PATTERNS research. A best-effort [MARKET COMP] range may be provided; when present, use it to calibrate the asks (see rule 2). Give strong GENERAL negotiation tactics. Never fabricate company-specific claims (no invented flex percentages, bands, or policies). You may name the company generically.
 
 ${NEGOTIATION_STATS}
 
 SCRIPTS must adapt to the chosen priorities and this offer, not be a generic list. Draw from and tailor these where they fit:
 - Package pivot (when base is fixed): "If base is fixed, could we close the gap with a signing bonus or additional equity/PTO?"
-- Market-anchored base counter (when Base is a priority): a respectful counter citing market range and the candidate's fit, without inventing a company band.
+- Market-anchored base counter (when Base is a priority): a respectful counter citing the market range (use [MARKET COMP] when present) and the candidate's fit, without inventing a company band.
 - Get it in writing: confirm any agreed change in the written offer.
 - Let silence work: make the ask, then stop talking.
 Each script is a named scenario plus word-for-word language the candidate can say.
 
 HARD RULES:
-1. Numbers. Use ONLY the normalized figure provided in [OFFER FIGURES] when referencing the offer's value, and refer to it in words ("your year-1 total figure shown") rather than restating dollar amounts. Never invent any dollar amount. Never reference steady-state or cost-of-living-adjusted figures; year-1 total is the only anchor. The [TARGET] is free text: reference their stated goal in their own words, but do NOT derive any precise number from it, no floor, no gap, no recommended counter amount. Walk-away and ask guidance stay qualitative, anchored to the provided figure and the stated target. The stat figures above are general benchmarks you MAY cite as research, never as this offer's numbers.
-2. company_patterns: describe how offers are generally structured and where flexibility usually lives (base vs equity vs signing, one time vs recurring), framed as general patterns and backed by the relevant stats. Never claim company-specific facts.
-3. Output. company_patterns, leverage_analysis, and walk_away_guidance are non-empty prose. scripts has at least 2 entries, each a named scenario plus word-for-word language the candidate can say.
+1. Numbers. Use ONLY the normalized figure provided in [OFFER FIGURES] when referencing the offer's value, and refer to it in words ("your year-1 total figure shown") rather than restating exact dollars. Never reference steady-state or cost-of-living-adjusted figures; year-1 total is the only offer anchor. Never invent any dollar amount, and never derive a number from [TARGET] or [OFFER FIGURES] (no floor, no gap). The ONLY external numbers you may cite are (a) the static research benchmarks above, framed as general research, and (b) the [MARKET COMP] range when present, cited as a sourced range. Never present either as this offer's or this company's exact internal numbers.
+2. Market comp. When [MARKET COMP] is present, compare the candidate's year-1 figure and stated target against the range: tell them where the offer sits (below, within, or above the range) and what to counter toward (for a below-range offer, the upper part of the range). Cite it as a market range with its source, and call it "a market range, not a company-exact band" UNLESS the block is marked company-specific. When [MARKET COMP] is ABSENT, keep the plan tactics-only and tell the candidate to look up their number on levels.fyi for their role, level, and location. Never fabricate a range.
+3. company_patterns: describe how offers are generally structured and where flexibility usually lives (base vs equity vs signing, one time vs recurring), framed as general patterns and backed by the relevant stats. Never claim company-specific facts. When [MARKET COMP] is present, this module is the home for the where-your-offer-sits read.
+4. Output. company_patterns, leverage_analysis, and walk_away_guidance are non-empty prose. scripts has at least 2 entries, each a named scenario plus word-for-word language the candidate can say.
 
 VOICE: terse, direct, no preamble, no AI tells, no em dashes.`
 
@@ -118,6 +150,11 @@ function buildUserPrompt(input: NegotiationInput, retryHint: string): string {
   const leverage =
     input.leverage.length > 0 ? input.leverage.join(", ") : "(none provided)"
   lines.push(`[LEVERAGE]\n${leverage}`)
+  if (input.marketComp) {
+    lines.push(
+      `[MARKET COMP] (best-effort, sourced; treat as a market range unless marked company-specific)\n${input.marketComp}`
+    )
+  }
   if (input.companyContext) {
     lines.push(`[COMPANY CONTEXT]\n${input.companyContext}`)
   }
@@ -224,6 +261,8 @@ export function buildNegotiationContextHash(args: {
     vesting_years: number | null
     location: string | null
   }
+  company: string
+  role: string
   priorities: string[]
   target: string
   leverage: string[]
@@ -234,6 +273,8 @@ export function buildNegotiationContextHash(args: {
   const normList = (arr: string[]): string =>
     [...arr].map((s) => s.trim().toLowerCase()).sort().join("|")
   const obj: Record<string, unknown> = {
+    company: normHash(args.company),
+    role: normHash(args.role),
     base: args.comp.base ?? 0,
     signing_bonus: args.comp.signing_bonus ?? 0,
     annual_bonus_pct: args.comp.annual_bonus_pct ?? 0,
@@ -271,6 +312,110 @@ export async function generateNegotiation(
     }
     throw err
   }
+}
+
+type MarketCompInput = {
+  role: string
+  company: string
+  // Structured curated metro from the comp-edit modal (or null). Primary
+  // location signal; jdSnippet is the fallback the model reads.
+  location: string | null
+  jdSnippet: string | null
+}
+
+// Best-effort market-comp lookup: one bounded Haiku web_search for a real comp
+// RANGE for the role+level+location (company-specific only when confidently
+// found). Modeled on generate-prep's fetchCompanyContext / fetchInterviewerIntel.
+// Returns a terse sourced anchor string, or null on NONE / no number / timeout /
+// auth / empty so the plan stays tactics-only and never invents a figure. This
+// is comp-focused and DISTINCT from the removed fetchNegotiationContext.
+async function fetchMarketComp(
+  client: Anthropic,
+  input: MarketCompInput
+): Promise<string | null> {
+  const start = Date.now()
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), MARKET_COMP_TIMEOUT_MS)
+  try {
+    const query = [
+      `Role: ${input.role}`,
+      `Company: ${input.company}`,
+      `Structured location: ${input.location && input.location.trim().length > 0 ? input.location : "(not provided)"}`,
+      `Job description snippet (use for location only): ${input.jdSnippet && input.jdSnippet.trim().length > 0 ? input.jdSnippet : "(not provided)"}`,
+      "",
+      "Search and return the comp range per the format, or NONE.",
+    ].join("\n")
+    const response = await client.messages.create(
+      {
+        model: QUICK_PREP_MODEL,
+        max_tokens: MARKET_COMP_MAX_TOKENS,
+        temperature: 0.2,
+        system: [
+          {
+            type: "text",
+            text: MARKET_COMP_SYSTEM,
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+        messages: [{ role: "user", content: query }],
+        tools: [
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          {
+            type: "web_search_20250305",
+            name: "web_search",
+            max_uses: 1,
+          } as any,
+        ],
+        tool_choice: { type: "auto" },
+      },
+      { signal: controller.signal }
+    )
+
+    let summary = ""
+    for (const block of response.content) {
+      if (block.type === "text") summary += block.text
+    }
+    summary = summary.trim()
+    // Honesty guard: empty, an explicit NONE, or no digit at all means no
+    // confident range was found. Tactics-only.
+    if (summary.length === 0 || /^none\b/i.test(summary) || !/\d/.test(summary)) {
+      // eslint-disable-next-line no-console
+      console.log(
+        "[generateNegotiation] Market comp not found, proceeding tactics-only"
+      )
+      return null
+    }
+    // eslint-disable-next-line no-console
+    console.log(
+      `[generateNegotiation] Market comp fetched: ${summary.length} chars in ${Date.now() - start}ms`
+    )
+    return summary
+  } catch (err) {
+    const reason =
+      err instanceof Anthropic.APIUserAbortError
+        ? "timeout"
+        : err instanceof Error
+          ? err.message
+          : String(err)
+    // eslint-disable-next-line no-console
+    console.log(
+      `[generateNegotiation] Market comp fetch failed, proceeding tactics-only: ${reason}`
+    )
+    return null
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+// Exported entry point for the action layer. Self-guards on a missing API key
+// and creates its own client (mirrors generate-prep's getInterviewerIntel), so
+// the action doesn't import the Anthropic SDK. Best-effort, null on any failure.
+export async function getMarketComp(
+  input: MarketCompInput
+): Promise<string | null> {
+  if (!process.env.ANTHROPIC_API_KEY) return null
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  return fetchMarketComp(client, input)
 }
 
 // Dedicated Haiku grounding for the company-patterns module. Intentionally

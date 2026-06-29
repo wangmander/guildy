@@ -29,6 +29,10 @@ export type NegotiationInput = {
   leverage: string[]
   offer_normalized: NegotiationOfferNormalized
   companyContext: string | null
+  // Best-effort sourced market-comp range (Haiku + web_search), or null when
+  // none was confidently found (plan stays tactics-only). Distinct from the
+  // removed company-patterns search.
+  marketComp: string | null
 }
 
 export const negotiationScriptSchema = z.object({

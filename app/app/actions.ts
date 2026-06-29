@@ -13,6 +13,7 @@ import { generatePrep, getInterviewerIntel } from "@/lib/ai/generate-prep"
 import {
   buildNegotiationContextHash,
   generateNegotiation,
+  getMarketComp,
 } from "@/lib/ai/generate-negotiation"
 import type {
   NegotiationOfferNormalized,
@@ -2123,7 +2124,7 @@ export async function generateNegotiationAction(
 
   const { data: job, error: jobError } = await supabase
     .from("jobs")
-    .select("id, company_name, role_title, stage, tc")
+    .select("id, company_name, role_title, stage, tc, jd_text")
     .eq("id", parsed.data.job_id)
     .eq("user_id", user.id)
     .maybeSingle()
@@ -2184,6 +2185,8 @@ export async function generateNegotiationAction(
       vesting_years: compRow.vesting_years,
       location: compRow.location,
     },
+    company: job.company_name,
+    role: job.role_title,
     priorities,
     target,
     leverage,
@@ -2203,13 +2206,30 @@ export async function generateNegotiationAction(
 
   const offerNormalized = snapshotNormalized(compRow)
 
+  // Best-effort market-comp anchor: a comp-RANGE lookup (Haiku + web_search),
+  // the one per-job number the user can't reliably supply. DISTINCT from the
+  // removed company-patterns search (fetchNegotiationContext, still uncalled).
+  // Runs here, AFTER the idempotency gate above, so a cached reopen never
+  // re-searches; the fetched string is woven into the plan's first module.
+  // Null (timeout / none found) -> plan stays tactics-only, no fabricated
+  // number. Location: structured comp location first, then a JD snippet the
+  // model reads, then US-national.
+  const jdSnippet =
+    typeof job.jd_text === "string" && job.jd_text.trim().length > 0
+      ? job.jd_text.slice(0, 1500)
+      : null
+  const marketComp = await getMarketComp({
+    role: job.role_title,
+    company: job.company_name,
+    location: compRow.location,
+    jdSnippet,
+  })
+
   let output: NegotiationOutput
   try {
-    // Web search removed: Negotiation grounds on the user's elicitation answers
-    // (priorities/target/leverage) plus the static stat set baked into the
-    // prompt, never live company research. company_patterns is general and
-    // stats-backed. fetchNegotiationContext stays defined-but-uncalled
-    // (reversible); Deep Prep's separate company fetch is untouched.
+    // Grounding is the elicitation answers + the static stat set + the
+    // best-effort [MARKET COMP] anchor above, never live company-patterns
+    // research. companyContext stays null. Deep Prep's company fetch untouched.
     output = await generateNegotiation({
       company: job.company_name,
       role: job.role_title,
@@ -2218,6 +2238,7 @@ export async function generateNegotiationAction(
       leverage,
       offer_normalized: offerNormalized,
       companyContext: null,
+      marketComp,
     })
   } catch (err) {
     return {
