@@ -4,8 +4,6 @@ import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { z } from "zod"
 
-import Anthropic from "@anthropic-ai/sdk"
-
 import {
   trackFirstPrepGenerated,
   trackNegotiationCtaClicked,
@@ -14,7 +12,6 @@ import {
 import { generatePrep, getInterviewerIntel } from "@/lib/ai/generate-prep"
 import {
   buildNegotiationContextHash,
-  fetchNegotiationContext,
   generateNegotiation,
 } from "@/lib/ai/generate-negotiation"
 import type {
@@ -1951,8 +1948,9 @@ export type NegotiationRow = {
   model_used: string
   context_hash: string
   inputs: {
+    priorities: string[]
     target: string
-    leverage: string | null
+    leverage: string[]
     offer_raw: unknown
     offer_normalized: NegotiationOfferNormalized
   }
@@ -2094,8 +2092,12 @@ export async function getCachedNegotiationAction(
 
 const generateNegotiationSchema = z.object({
   job_id: z.string().uuid(),
-  target: z.string().trim().min(1).max(4000),
-  leverage: z.string().trim().max(4000).nullable().optional(),
+  // Elicitation: priorities (pick up to 3) + optional free-text target +
+  // leverage chips. Empty selections are allowed (the prompt assumes a sensible
+  // base + package-levers default).
+  priorities: z.array(z.string().trim().min(1)).max(3).optional().default([]),
+  target: z.string().trim().max(4000).optional().default(""),
+  leverage: z.array(z.string().trim().min(1)).max(8).optional().default([]),
 })
 
 export type GenerateNegotiationResult =
@@ -2169,8 +2171,9 @@ export async function generateNegotiationAction(
     }
   }
 
+  const priorities = parsed.data.priorities
   const target = parsed.data.target
-  const leverage = parsed.data.leverage?.trim() ? parsed.data.leverage.trim() : null
+  const leverage = parsed.data.leverage
 
   const contextHash = buildNegotiationContextHash({
     comp: {
@@ -2181,6 +2184,7 @@ export async function generateNegotiationAction(
       vesting_years: compRow.vesting_years,
       location: compRow.location,
     },
+    priorities,
     target,
     leverage,
   })
@@ -2200,25 +2204,20 @@ export async function generateNegotiationAction(
   const offerNormalized = snapshotNormalized(compRow)
 
   let output: NegotiationOutput
-  let grounded = false
   try {
-    const apiKey = process.env.ANTHROPIC_API_KEY
-    let companyContext: string | null = null
-    if (apiKey) {
-      const client = new Anthropic({ apiKey })
-      companyContext = await fetchNegotiationContext(client, {
-        company: job.company_name,
-        role: job.role_title,
-      })
-    }
-    grounded = companyContext !== null
+    // Web search removed: Negotiation grounds on the user's elicitation answers
+    // (priorities/target/leverage) plus the static stat set baked into the
+    // prompt, never live company research. company_patterns is general and
+    // stats-backed. fetchNegotiationContext stays defined-but-uncalled
+    // (reversible); Deep Prep's separate company fetch is untouched.
     output = await generateNegotiation({
       company: job.company_name,
       role: job.role_title,
+      priorities,
       target,
       leverage,
       offer_normalized: offerNormalized,
-      companyContext,
+      companyContext: null,
     })
   } catch (err) {
     return {
@@ -2235,12 +2234,13 @@ export async function generateNegotiationAction(
       model_used: NEGOTIATION_PREP_MODEL,
       context_hash: contextHash,
       inputs: {
+        priorities,
         target,
         leverage,
         offer_raw: compRow,
         offer_normalized: offerNormalized,
       },
-      output: { ...output, grounded, offer_normalized: offerNormalized },
+      output: { ...output, grounded: false, offer_normalized: offerNormalized },
     })
     .select("id, job_id, model_used, context_hash, inputs, output, created_at")
     .single()

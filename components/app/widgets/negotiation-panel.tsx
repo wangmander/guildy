@@ -158,27 +158,13 @@ function ScriptBlock({
   )
 }
 
-function Modules({
-  row,
-  company,
-}: {
-  row: NegotiationRow
-  company: string
-}) {
+function Modules({ row }: { row: NegotiationRow }) {
   const o = row.output
   const snap = o.offer_normalized
   return (
     <div className="mt-4 flex flex-col gap-4">
       <section className="flex flex-col gap-1.5">
-        <ModuleHeading>
-          {o.grounded ? `Patterns for ${company}` : "General negotiation patterns"}
-        </ModuleHeading>
-        {o.grounded ? null : (
-          <p className="text-xs text-[var(--text-faint)]">
-            Couldn&rsquo;t find {company}-specific signals, this is general
-            guidance.
-          </p>
-        )}
+        <ModuleHeading>Negotiation patterns</ModuleHeading>
         <p className="whitespace-pre-wrap text-sm leading-snug text-[var(--text-body)]">
           {o.company_patterns}
         </p>
@@ -211,12 +197,61 @@ function Modules({
   )
 }
 
+// Elicitation chips (Option 1, single screen). Priorities pick up to 3.
+const PRIORITY_OPTIONS = [
+  "Base salary",
+  "Equity",
+  "Signing bonus",
+  "Start date",
+  "Remote/flexibility",
+  "Title/level",
+  "Review timing",
+] as const
+
+const LEVERAGE_OPTIONS = [
+  "Competing offer",
+  "In-demand skills",
+  "Current comp is higher",
+  "Strong interview performance",
+  "None yet",
+] as const
+
+function Chip({
+  label,
+  selected,
+  disabled = false,
+  onClick,
+}: {
+  label: string
+  selected: boolean
+  disabled?: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled && !selected}
+      aria-pressed={selected}
+      className={cn(
+        "inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+        selected
+          ? "border-[var(--accent)] bg-[var(--accent-tint-bg)] text-[var(--accent-deep)]"
+          : "border-[var(--border)] text-[var(--text-body)] hover:bg-[var(--surface-sunken)]"
+      )}
+    >
+      {label}
+    </button>
+  )
+}
+
 export function NegotiationPanel({ job, onOpenChange }: Props) {
   const [loadingCache, setLoadingCache] = useState(false)
   const [row, setRow] = useState<NegotiationRow | null>(null)
   const [stale, setStale] = useState(false)
+  const [priorities, setPriorities] = useState<string[]>([])
   const [target, setTarget] = useState("")
-  const [leverage, setLeverage] = useState("")
+  const [leverage, setLeverage] = useState<string[]>([])
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [editComp, setEditComp] = useState(false)
@@ -235,12 +270,25 @@ export function NegotiationPanel({ job, onOpenChange }: Props) {
       if (res.ok) {
         if (res.row) {
           setRow(res.row)
-          setTarget(res.row.inputs.target ?? "")
-          setLeverage(res.row.inputs.leverage ?? "")
+          // Defensive prefill: old (pre neg-v3) rows stored leverage as a
+          // string and had no priorities. Coerce both shapes safely.
+          const inp = res.row.inputs as {
+            priorities?: unknown
+            target?: unknown
+            leverage?: unknown
+          }
+          setPriorities(
+            Array.isArray(inp.priorities) ? (inp.priorities as string[]) : []
+          )
+          setTarget(typeof inp.target === "string" ? inp.target : "")
+          setLeverage(
+            Array.isArray(inp.leverage) ? (inp.leverage as string[]) : []
+          )
           setStale(res.stale)
         } else {
+          setPriorities([])
           setTarget("")
-          setLeverage("")
+          setLeverage([])
         }
       } else {
         setError(res.error)
@@ -253,13 +301,16 @@ export function NegotiationPanel({ job, onOpenChange }: Props) {
   }, [jobId])
 
   async function generate() {
-    if (!job || target.trim().length === 0) return
+    // No required field: empty selections fall back to a sensible default plan
+    // server-side (base + package levers).
+    if (!job) return
     setGenerating(true)
     setError(null)
     const res = await generateNegotiationAction({
       job_id: job.jobId,
-      target,
-      leverage: leverage.trim() ? leverage.trim() : null,
+      priorities,
+      target: target.trim(),
+      leverage,
     })
     setGenerating(false)
     if (res.ok) {
@@ -316,39 +367,81 @@ export function NegotiationPanel({ job, onOpenChange }: Props) {
               </p>
             ) : null}
 
-            <div className="mt-4 flex flex-col gap-3">
-              <label className="flex flex-col gap-1">
-                <span className="text-xs text-[var(--text-muted)]">
-                  Target (what you want, in your words)
+            <div className="mt-4 flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <span className="text-xs font-semibold text-[var(--text-primary)]">
+                  What matters most?{" "}
+                  <span className="font-normal text-[var(--text-faint)]">
+                    (pick up to 3)
+                  </span>
                 </span>
-                <textarea
-                  className={cn(inputClass, "resize-none")}
-                  rows={2}
+                <div className="flex flex-wrap gap-1.5">
+                  {PRIORITY_OPTIONS.map((opt) => (
+                    <Chip
+                      key={opt}
+                      label={opt}
+                      selected={priorities.includes(opt)}
+                      disabled={priorities.length >= 3}
+                      onClick={() =>
+                        setPriorities((prev) =>
+                          prev.includes(opt)
+                            ? prev.filter((p) => p !== opt)
+                            : prev.length >= 3
+                              ? prev
+                              : [...prev, opt]
+                        )
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-[var(--text-primary)]">
+                  Your target or walk-away?{" "}
+                  <span className="font-normal text-[var(--text-faint)]">
+                    (optional)
+                  </span>
+                </span>
+                <input
+                  type="text"
+                  className={inputClass}
                   value={target}
                   onChange={(e) => setTarget(e.target.value)}
-                  placeholder="A higher base, or more equity, or a signing bonus to bridge the gap"
+                  placeholder="e.g. 230k base, or 10k more"
                 />
               </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-xs text-[var(--text-muted)]">
-                  Leverage (optional: competing offers, scarce skills, timing)
+
+              <div className="flex flex-col gap-2">
+                <span className="text-xs font-semibold text-[var(--text-primary)]">
+                  Your leverage?
                 </span>
-                <textarea
-                  className={cn(inputClass, "resize-none")}
-                  rows={2}
-                  value={leverage}
-                  onChange={(e) => setLeverage(e.target.value)}
-                  placeholder="Another offer in hand, a skill they are short on, a deadline"
-                />
-              </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {LEVERAGE_OPTIONS.map((opt) => (
+                    <Chip
+                      key={opt}
+                      label={opt}
+                      selected={leverage.includes(opt)}
+                      onClick={() =>
+                        setLeverage((prev) =>
+                          prev.includes(opt)
+                            ? prev.filter((p) => p !== opt)
+                            : [...prev, opt]
+                        )
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
+
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={generate}
-                  disabled={generating || target.trim().length === 0}
+                  disabled={generating}
                   className="inline-flex h-9 items-center justify-center rounded-[10px] bg-[var(--accent)] px-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-deep)] disabled:opacity-60"
                 >
-                  {row ? "Regenerate" : "Generate negotiation prep"}
+                  {row ? "Rebuild my plan" : "Build my plan"}
                 </button>
                 {loadingCache ? (
                   <span className="text-xs text-[var(--text-faint)]">
@@ -366,7 +459,7 @@ export function NegotiationPanel({ job, onOpenChange }: Props) {
                 <ProgressLoader tier="deep" />
               </div>
             ) : row ? (
-              <Modules row={row} company={job.company} />
+              <Modules row={row} />
             ) : null}
           </>
         ) : null}

@@ -16,7 +16,20 @@ import {
 // action runs upstream and passes in as input.companyContext.
 
 // Bump when the prompt or output contract changes so cached rows re-generate.
-export const NEGOTIATION_PROMPT_VERSION = "neg-v2"
+// neg-v3: removed live web search; added elicitation (priorities/leverage)
+// grounding + the static research-backed stat set.
+export const NEGOTIATION_PROMPT_VERSION = "neg-v3"
+
+// Static, research-backed negotiation benchmarks. General and stable (the same
+// way the command rail's apply-pace numbers are static constants), NEVER live
+// or company-specific. Baked into the system prompt; the model weaves only the
+// fitting ones in as motivation, never as facts about this offer or company.
+const NEGOTIATION_STATS = `RESEARCH-BACKED STATS (static general benchmarks, NOT company-specific, NOT live data). Weave ONLY the ones that fit the candidate's situation into the plan as motivation and to calibrate expectations. Do NOT dump them all as a list. Always frame as general research ("research shows...", "studies find..."), never as facts about this specific company or offer.
+- About 85% of people who counter an offer get at least some of what they asked for (Fidelity); about 87% for ages 25 to 35.
+- Only about 30% of workers ask for higher pay when hired (Pew); about 42% of candidates counter (Fidelity). Most never ask.
+- Tech candidates who countered won an average raise of about 12% (around $27,000 per year) in a roughly 3,858 person study (UCLA Anderson).
+- The downside is smaller than feared: employers who already chose a candidate rarely rescind over a respectful, professional counter.
+- When base is fixed, other levers (signing bonus, equity, PTO, title, earlier review) are often easier yeses. A signing bonus is a one time cost that does not move salary bands or set precedent, and package levers can add roughly $15,000 to $40,000 in value.`
 
 const NEGOTIATION_MAX_TOKENS = 8192
 // Opus AbortController budget. Haiku grounding (60s) plus this stays under the
@@ -30,11 +43,26 @@ const GROUNDING_MAX_TOKENS = 600
 // signals, not generic company news.
 const NEGOTIATION_CONTEXT_SYSTEM = `You are a compensation research assistant. Given a company name and role, perform exactly one web_search and produce a 150 to 220 word terse summary focused on negotiation-relevant signals: how this company structures offers (base vs equity vs signing weighting), where it tends to have flexibility, recent funding or headcount or hiring-posture signals that affect candidate leverage, and any public comp-band signals. No fluff, no preamble. Plain text only, no markdown. Never use em dashes.`
 
-const SYSTEM_PROMPT = `You are a senior compensation negotiation advisor. You produce a tight, actionable negotiation playbook for one job offer. Use the submit_negotiation tool for your entire response.
+const SYSTEM_PROMPT = `You are a senior compensation negotiation advisor. You produce a tight, actionable negotiation playbook for one job offer, centered on what THIS candidate told you matters most. Use the submit_negotiation tool for your entire response.
+
+GROUNDING:
+- Center the plan on the candidate's [PRIORITIES] (what they want most). If none are given, assume base salary plus package levers (signing bonus, equity, PTO, title, earlier review).
+- Anchor the asks to the candidate's [TARGET] (in their words) and the offer's year-1 figure. Coach them to ask for their chosen priority.
+- Use [LEVERAGE] to shape leverage_analysis and the scripts. With a competing offer, coach using it respectfully. With "None yet", coach building soft leverage (fit, enthusiasm, market rate) without bluffing.
+- There is NO live company research. Give strong GENERAL negotiation guidance. Never fabricate company-specific claims (no invented flex percentages, bands, or policies). You may name the company generically.
+
+${NEGOTIATION_STATS}
+
+SCRIPTS must adapt to the chosen priorities and this offer, not be a generic list. Draw from and tailor these where they fit:
+- Package pivot (when base is fixed): "If base is fixed, could we close the gap with a signing bonus or additional equity/PTO?"
+- Market-anchored base counter (when Base is a priority): a respectful counter citing market range and the candidate's fit, without inventing a company band.
+- Get it in writing: confirm any agreed change in the written offer.
+- Let silence work: make the ask, then stop talking.
+Each script is a named scenario plus word-for-word language the candidate can say.
 
 HARD RULES:
-1. Numbers. Use ONLY the normalized figure provided in [OFFER FIGURES] when referencing the offer's value, and refer to it in words ("your year-1 total figure shown") rather than restating dollar amounts. Never invent any dollar amount. Never reference steady-state or cost-of-living-adjusted figures; year-1 total is the only anchor. The candidate's [TARGET] is free text: reference their stated goal in their own words, but do NOT derive any precise number from it, no floor, no gap, no recommended counter amount. Walk-away and ask guidance stay qualitative, anchored to the provided figure and the stated target.
-2. Company specificity. When [COMPANY CONTEXT] is present, ground company_patterns in it. When it is absent, give honest general negotiation guidance and never fabricate company-specific claims (do not invent flex percentages or company policies).
+1. Numbers. Use ONLY the normalized figure provided in [OFFER FIGURES] when referencing the offer's value, and refer to it in words ("your year-1 total figure shown") rather than restating dollar amounts. Never invent any dollar amount. Never reference steady-state or cost-of-living-adjusted figures; year-1 total is the only anchor. The [TARGET] is free text: reference their stated goal in their own words, but do NOT derive any precise number from it, no floor, no gap, no recommended counter amount. Walk-away and ask guidance stay qualitative, anchored to the provided figure and the stated target. The stat figures above are general benchmarks you MAY cite as research, never as this offer's numbers.
+2. company_patterns: describe how offers are generally structured and where flexibility usually lives (base vs equity vs signing, one time vs recurring), framed as general patterns and backed by the relevant stats. Never claim company-specific facts.
 3. Output. company_patterns, leverage_analysis, and walk_away_guidance are non-empty prose. scripts has at least 2 entries, each a named scenario plus word-for-word language the candidate can say.
 
 VOICE: terse, direct, no preamble, no AI tells, no em dashes.`
@@ -79,10 +107,17 @@ function buildUserPrompt(input: NegotiationInput, retryHint: string): string {
     `[OFFER FIGURES] (normalized, for your reasoning only, do not restate exact dollars)\n` +
       `Year-1 total: ${Math.round(o.year1_total)}`
   )
-  lines.push(`[TARGET]\n${input.target}`)
-  if (input.leverage && input.leverage.trim().length > 0) {
-    lines.push(`[LEVERAGE]\n${input.leverage}`)
-  }
+  const priorities =
+    input.priorities.length > 0
+      ? input.priorities.join(", ")
+      : "(none selected, assume base salary plus package levers)"
+  lines.push(`[PRIORITIES] (what the candidate wants most)\n${priorities}`)
+  const target =
+    input.target.trim().length > 0 ? input.target.trim() : "(not provided)"
+  lines.push(`[TARGET]\n${target}`)
+  const leverage =
+    input.leverage.length > 0 ? input.leverage.join(", ") : "(none provided)"
+  lines.push(`[LEVERAGE]\n${leverage}`)
   if (input.companyContext) {
     lines.push(`[COMPANY CONTEXT]\n${input.companyContext}`)
   }
@@ -189,9 +224,15 @@ export function buildNegotiationContextHash(args: {
     vesting_years: number | null
     location: string | null
   }
+  priorities: string[]
   target: string
-  leverage: string | null
+  leverage: string[]
 }): string {
+  // Arrays are order-independent: normalized, lowercased, sorted, joined so the
+  // same selections in any order hash identically (edit invalidates, reorder
+  // does not).
+  const normList = (arr: string[]): string =>
+    [...arr].map((s) => s.trim().toLowerCase()).sort().join("|")
   const obj: Record<string, unknown> = {
     base: args.comp.base ?? 0,
     signing_bonus: args.comp.signing_bonus ?? 0,
@@ -199,8 +240,9 @@ export function buildNegotiationContextHash(args: {
     equity_grant_total: args.comp.equity_grant_total ?? 0,
     vesting_years: args.comp.vesting_years ?? 4,
     location: normHash(args.comp.location),
+    priorities: normList(args.priorities),
     target: normHash(args.target),
-    leverage: normHash(args.leverage),
+    leverage: normList(args.leverage),
     model: NEGOTIATION_PREP_MODEL,
     prompt_version: NEGOTIATION_PROMPT_VERSION,
   }

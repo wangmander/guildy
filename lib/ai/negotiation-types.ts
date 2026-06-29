@@ -17,13 +17,16 @@ export type NegotiationOfferNormalized = {
   annualized_equity: number
 }
 
-// Input handed to generateNegotiation(). companyContext is the Haiku grounding
-// summary or null (ungrounded).
+// Input handed to generateNegotiation(). priorities/leverage are the user's
+// elicitation chip selections; target is their free-text goal (may be empty).
+// companyContext stays for type compatibility but is always null now (the live
+// web search was removed; grounding is the elicitation answers + static stats).
 export type NegotiationInput = {
   company: string
   role: string
+  priorities: string[]
   target: string
-  leverage: string | null
+  leverage: string[]
   offer_normalized: NegotiationOfferNormalized
   companyContext: string | null
 }
