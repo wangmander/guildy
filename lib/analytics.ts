@@ -84,6 +84,16 @@ export async function trackKanbanJobCreated(
   await captureServer("kanban_job_created", userId, { source })
 }
 
+// G0 growth build (FTUE): activation_reached fires once when a user first
+// crosses the activation bar — 3+ non-archived jobs AND at least one
+// prep_versions row. Fired from both the job-create and prep-create server
+// paths, gated on a count transition (job count === 3 / first prep) so it
+// lands once per user in normal flows. No properties; the userId is the
+// signal.
+export async function trackActivationReached(userId: string): Promise<void> {
+  await captureServer("activation_reached", userId)
+}
+
 // Feature 4: Negotiation Prep. CTA-clicked fires server-side from
 // getCachedNegotiationAction (the panel-open path); generated fires after a
 // successful negotiation_preps insert.

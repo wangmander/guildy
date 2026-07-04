@@ -1,9 +1,10 @@
 "use client"
 
-import { Fragment, useEffect, useState } from "react"
+import { Fragment, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import {
   ArrowRight,
+  Check,
   ChevronDown,
   Compass,
   ExternalLink,
@@ -12,6 +13,7 @@ import {
 } from "lucide-react"
 
 import { getJobSourceAdvisorAction } from "@/app/app/actions"
+import { AddJobModal } from "./add-job-modal"
 import {
   GENERIC_BOARDS,
   type Advisor,
@@ -48,12 +50,24 @@ export type OnboardingMoment =
   | { kind: "empty" }
   | { kind: "first_job"; company: string }
 
+// FTUE setup checklist (G0 growth build). Server-derived in app/app/page.tsx;
+// null once the user is activated (page.tsx computes the hide-forever gate),
+// so this component never has to decide visibility. activeJobCount drives the
+// "X of 3" progress; hasPrep is any prep_versions row; mostRecentJobId targets
+// the prep overlay for the Generate step.
+export type SetupChecklist = {
+  activeJobCount: number
+  hasPrep: boolean
+  mostRecentJobId: string | null
+}
+
 type Props = {
   advisor: Advisor
   today: TodayItem[]
   applyGoal: ApplyGoal | null
   milestone: Milestone | null
   onboarding: OnboardingMoment | null
+  setup: SetupChecklist | null
 }
 
 const APPLY_TARGET = 15
@@ -552,12 +566,169 @@ function TodayPanel({ items }: { items: TodayItem[] }) {
   )
 }
 
+// One checklist step. Done steps are non-interactive (filled check, muted
+// label). Incomplete steps that carry an action (href or onClick) render as an
+// affordance with a trailing arrow; an incomplete step with no action yet
+// (Generate before any job exists) is a plain pending row.
+type SetupStep = {
+  key: string
+  done: boolean
+  title: string
+  subtitle: string | null
+  pulse: boolean
+  href: string | null
+  onClick: (() => void) | null
+}
+
+const SETUP_ROW_INNER = "flex w-full items-start gap-2.5 py-[10px] text-left"
+
+function SetupRow({ step }: { step: SetupStep }) {
+  const interactive = !step.done && !!(step.href || step.onClick)
+
+  const marker = step.done ? (
+    <span className="mt-px inline-flex size-[18px] shrink-0 items-center justify-center rounded-full bg-[var(--accent)]">
+      <Check className="size-3 text-white" strokeWidth={3} />
+    </span>
+  ) : (
+    <span className="mt-px inline-flex size-[18px] shrink-0 rounded-full border-2 border-[var(--border-strong)]" />
+  )
+
+  const body = (
+    <>
+      {marker}
+      <span className="min-w-0 flex-1">
+        <span
+          className={cn(
+            "block text-[13.5px] leading-[1.4]",
+            step.done
+              ? "text-[var(--text-faint)]"
+              : "font-semibold text-[var(--text-primary)]"
+          )}
+        >
+          {step.title}
+        </span>
+        {step.subtitle ? (
+          <span className="mt-0.5 block text-[12px] tabular-nums text-[var(--text-faint)]">
+            {step.subtitle}
+          </span>
+        ) : null}
+      </span>
+      {interactive ? (
+        <ArrowRight className="mt-px size-3.5 shrink-0 text-[var(--text-faint)]" />
+      ) : null}
+    </>
+  )
+
+  // The one-shot pulse animates the row background (guildyPulse) for two short
+  // cycles, then the parent clears the flag. Rounded so the wash reads as a
+  // highlight, not a full-bleed band.
+  const pulseClass = step.pulse
+    ? "animate-[guildyPulse_1.2s_ease-in-out_2] rounded-[8px]"
+    : ""
+
+  return (
+    <li className="[&:not(:first-child)]:border-t [&:not(:first-child)]:border-[var(--divider)]">
+      {interactive && step.href ? (
+        <Link
+          href={step.href}
+          className={cn(SETUP_ROW_INNER, "transition-opacity hover:opacity-70", pulseClass)}
+        >
+          {body}
+        </Link>
+      ) : interactive ? (
+        <button
+          type="button"
+          onClick={step.onClick ?? undefined}
+          className={cn(SETUP_ROW_INNER, "transition-opacity hover:opacity-70", pulseClass)}
+        >
+          {body}
+        </button>
+      ) : (
+        <div className={cn(SETUP_ROW_INNER, pulseClass)}>{body}</div>
+      )}
+    </li>
+  )
+}
+
+// Setup checklist card (G0 growth build): the first-session path from 0 jobs to
+// activated. Mounts its own Add Job modal so steps 1 and 3 open it with no
+// board wiring; step 2 links to the prep overlay on the most recent job. Shown
+// only while page.tsx passes a non-null `setup`, so it disappears for good once
+// the user activates.
+function SetupCard({ setup }: { setup: SetupChecklist }) {
+  const [addOpen, setAddOpen] = useState(false)
+
+  const jobsLogged = Math.min(setup.activeJobCount, 3)
+
+  // One-shot pulse on the Generate step when the user logs their first job
+  // (active count 0 -> 1) while this card is mounted, regardless of whether the
+  // job came from this modal or the Applied column button. prevCountRef seeds
+  // from the server value so SSR and the first client render agree (no pulse),
+  // and a fresh landing at count 1 never triggers it.
+  const [pulseStep2, setPulseStep2] = useState(false)
+  const prevCountRef = useRef(setup.activeJobCount)
+  useEffect(() => {
+    const prev = prevCountRef.current
+    prevCountRef.current = setup.activeJobCount
+    if (prev === 0 && setup.activeJobCount === 1 && !setup.hasPrep) {
+      setPulseStep2(true)
+      const t = setTimeout(() => setPulseStep2(false), 2600)
+      return () => clearTimeout(t)
+    }
+  }, [setup.activeJobCount, setup.hasPrep])
+
+  const steps: SetupStep[] = [
+    {
+      key: "add",
+      done: setup.activeJobCount >= 1,
+      title: "Add your first job",
+      subtitle: null,
+      pulse: false,
+      href: null,
+      onClick: () => setAddOpen(true),
+    },
+    {
+      key: "prep",
+      done: setup.hasPrep,
+      title: "Generate your first prep",
+      subtitle: null,
+      pulse: pulseStep2,
+      href: setup.mostRecentJobId ? `/app?job=${setup.mostRecentJobId}` : null,
+      onClick: null,
+    },
+    {
+      key: "more",
+      done: setup.activeJobCount >= 3,
+      title: "Add 2 more jobs",
+      subtitle: `${jobsLogged} of 3`,
+      pulse: false,
+      href: null,
+      onClick: () => setAddOpen(true),
+    },
+  ]
+
+  return (
+    <Panel className="px-5 pb-2.5 pt-5">
+      <h2 className="mb-2 text-[15px] font-bold text-[var(--text-primary)]">
+        Get set up
+      </h2>
+      <ul className="flex flex-col">
+        {steps.map((step) => (
+          <SetupRow key={step.key} step={step} />
+        ))}
+      </ul>
+      <AddJobModal open={addOpen} onOpenChange={setAddOpen} defaultStage="applied" />
+    </Panel>
+  )
+}
+
 export function CommandRail({
   advisor,
   today,
   applyGoal,
   milestone,
   onboarding,
+  setup,
 }: Props) {
   const [mounted, setMounted] = useState(false)
   const [dismissed, setDismissed] = useState(false)
@@ -591,12 +762,15 @@ export function CommandRail({
   // Primary gem surface: the onboarding card during early moments only. The
   // steady-state "Your next move" card was removed (it duplicated the Today
   // panel and was a purple source); hero + Today carry the rail. Order:
-  // milestone -> hero -> onboarding (early) -> insights -> where -> Today.
-  const primary = onboarding ? <OnboardingCard moment={onboarding} /> : null
+  // setup -> milestone -> hero -> onboarding (early) -> insights -> where ->
+  // Today. The FTUE setup checklist supersedes the onboarding gem card while
+  // shown, so a pre-activation user sees one onboarding surface, not two.
+  const primary = onboarding && !setup ? <OnboardingCard moment={onboarding} /> : null
 
   return (
     <aside className="w-full shrink-0 px-4 lg:w-[300px] lg:px-8 lg:pr-0">
       <div className="flex flex-col gap-[18px]">
+        {setup ? <SetupCard setup={setup} /> : null}
         {milestoneVisible && milestone ? (
           <MilestoneCard milestone={milestone} onDismiss={dismissMilestone} />
         ) : null}

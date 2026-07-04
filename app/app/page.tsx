@@ -5,6 +5,7 @@ import {
   CommandRail,
   type ApplyGoal,
   type OnboardingMoment,
+  type SetupChecklist,
   type TodayItem,
 } from "@/components/app/command-rail"
 import { TcMatrixSheet } from "@/components/app/tc-matrix-sheet"
@@ -287,6 +288,25 @@ export default async function AppPage({
         ? { kind: "first_job", company: nonClosed[0].company_name }
         : null
 
+  // FTUE setup checklist (G0 growth build). Walks a new user from 0 jobs to
+  // activated (3+ non-archived jobs AND a first prep). Everything is derived,
+  // no schema: activeJobCount drives the "X of 3" progress; hasPrep is any
+  // prep_versions row (Quick or Deep, including the handoff's cached Quick).
+  // Hide-forever gate uses TOTAL job rows (active + archived) so an activated
+  // user who archives back below 3 never gets the checklist again. Nothing is
+  // hard-deleted in-app, so "3 rows ever + a prep" cleanly means "activated".
+  const activeJobCount = jobRows.length
+  const totalJobCount = jobRows.length + archivedJobRows.length
+  const hasPrep = preppedJobIds.size > 0
+  const isActivated = totalJobCount >= 3 && hasPrep
+  const setup: SetupChecklist | null = isActivated
+    ? null
+    : {
+        activeJobCount,
+        hasPrep,
+        mostRecentJobId: jobRows[0]?.id ?? null,
+      }
+
   return (
     <div className="min-h-screen bg-[var(--page-bg)]">
       <TopNav
@@ -304,6 +324,7 @@ export default async function AppPage({
             applyGoal={applyGoal}
             milestone={milestone}
             onboarding={onboarding}
+            setup={setup}
           />
           <div className="min-w-0 flex-1">
             <Board

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation"
 import { z } from "zod"
 
 import {
+  trackActivationReached,
   trackFirstPrepGenerated,
   trackNegotiationCtaClicked,
   trackNegotiationGenerated,
@@ -365,6 +366,27 @@ export async function createJobAction(
   }
 
   revalidatePath("/app")
+
+  // G0 growth build (FTUE): activation_reached fires once when the user first
+  // reaches 3 non-archived jobs with at least one prep on file. active count
+  // === 3 is the transition gate (mirrors the first_prep_generated count === 1
+  // check in generatePrepAction), so a later 4th job never re-fires. Firing is
+  // best-effort and never blocks the create response.
+  const { count: activeJobCount } = await supabase
+    .from("jobs")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .is("archived_at", null)
+  if (activeJobCount === 3) {
+    const { count: prepCount } = await supabase
+      .from("prep_versions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+    if ((prepCount ?? 0) >= 1) {
+      await trackActivationReached(user.id)
+    }
+  }
+
   return { ok: true, id: data.id }
 }
 
@@ -1443,6 +1465,19 @@ export async function generatePrepAction(
       tier,
       modelForTier(tier)
     )
+
+    // G0 growth build (FTUE): this is the user's first prep. If they already
+    // have 3+ non-archived jobs, that first prep completes activation. Mirrors
+    // the active-count === 3 gate in createJobAction; between the two paths,
+    // activation_reached lands once whichever condition crosses last.
+    const { count: activeJobCount } = await supabase
+      .from("jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .is("archived_at", null)
+    if ((activeJobCount ?? 0) >= 3) {
+      await trackActivationReached(user.id)
+    }
   }
 
   return { ok: true, prep: persistedOutput }
