@@ -110,3 +110,29 @@ export async function trackNegotiationGenerated(
 ): Promise<void> {
   await captureServer("negotiation_generated", userId, { job_id: jobId })
 }
+
+// 5-day streak (S-20260811-01). Read access to PostHog is blocked on this
+// project (no keychain item) as of this ship. These fire regardless, per
+// explicit instruction, so the read side has real data the moment it's
+// unblocked instead of a gap starting from whenever someone remembers to
+// add the calls.
+export async function trackStreakCarriedToAccount(
+  userId: string,
+  day: number
+): Promise<void> {
+  await captureServer("streak_carried_to_account", userId, { day })
+}
+
+export async function trackStreakDayIncremented(
+  userId: string,
+  day: number
+): Promise<void> {
+  await captureServer("streak_day_incremented", userId, { day })
+}
+
+export async function trackStreakBroken(
+  userId: string,
+  dayReached: number
+): Promise<void> {
+  await captureServer("streak_broken", userId, { day_reached: dayReached })
+}

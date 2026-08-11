@@ -8,6 +8,7 @@ import {
   trackKanbanJobCreated,
   trackPrepReferralConverted,
   trackSignupCompleted,
+  trackStreakCarriedToAccount,
 } from "@/lib/analytics"
 import { buildContextHash } from "@/lib/ai/context-hash"
 import { extractJobFields } from "@/lib/ai/extract-jd"
@@ -108,6 +109,46 @@ function deriveJobTitle(jd: string): string {
   return candidate.slice(0, 80)
 }
 
+// 2026-08-11: carries the streak's start timestamp onto the new account,
+// same handoff row the prep payload rides in on. Best-effort like the rest
+// of this path: a failure here never blocks signup, it just means the
+// streak doesn't carry (same honest degradation the prep handoff already
+// has for a missing/expired row).
+async function carryStreak(
+  admin: ReturnType<typeof handoffAdminClient>,
+  userId: string,
+  streakStartedAt: string
+): Promise<boolean> {
+  const startedAt = new Date(streakStartedAt)
+  if (Number.isNaN(startedAt.getTime())) return false
+
+  const daysElapsed = Math.floor(
+    (Date.now() - startedAt.getTime()) / (24 * 60 * 60 * 1000)
+  )
+  // Landing was day 1; a signup happening the same day or the next still
+  // reads as day 1 or 2. Clamp to the 5-day window: a handoff older than
+  // that reads as already-closed, not as a phantom day 6+.
+  const currentDay = Math.max(1, Math.min(5, daysElapsed + 1))
+
+  const { error } = await admin
+    .from("user_profiles")
+    .update({
+      streak_started_at: startedAt.toISOString(),
+      streak_current_day: currentDay,
+      streak_last_active_date: new Date().toISOString().slice(0, 10),
+      streak_broken_at: null,
+    })
+    .eq("id", userId)
+
+  if (error) {
+    // eslint-disable-next-line no-console
+    console.error("[completeOnboarding] streak carry failed:", error.message)
+    return false
+  }
+  await trackStreakCarriedToAccount(userId, currentDay)
+  return true
+}
+
 async function consumeHandoff(
   handoffId: string,
   userId: string,
@@ -117,7 +158,7 @@ async function consumeHandoff(
 
   const { data: row, error: fetchError } = await admin
     .from("unauth_handoffs")
-    .select("id, jd_text, prep_output, created_at")
+    .select("id, jd_text, prep_output, streak_started_at, created_at")
     .eq("id", handoffId)
     .maybeSingle()
   if (fetchError || !row) return null
@@ -125,6 +166,17 @@ async function consumeHandoff(
   // Read-time expiry: a handoff older than the TTL is dropped, not used.
   const ageMs = Date.now() - new Date(row.created_at as string).getTime()
   if (ageMs > HANDOFF_TTL_MS) {
+    await admin.from("unauth_handoffs").delete().eq("id", handoffId)
+    return null
+  }
+
+  const streakStartedAt = row.streak_started_at as string | null
+  if (streakStartedAt) await carryStreak(admin, userId, streakStartedAt)
+
+  // Streak-only row (visitor landed, never touched the demo): nothing to
+  // turn into a job. Consume it here and stop; the prep-specific insert
+  // logic below requires jd_text.
+  if (!row.jd_text) {
     await admin.from("unauth_handoffs").delete().eq("id", handoffId)
     return null
   }

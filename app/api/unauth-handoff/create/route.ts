@@ -6,6 +6,15 @@ import { createClient } from "@supabase/supabase-js"
 // here after a successful unauth generation; we store the payload and
 // return a uuid the signup flow consumes on onboarding completion.
 //
+// 2026-08-11: second payload, same mechanism. A visitor's 5-day streak
+// starts on landing, before any demo interaction, so this now also
+// accepts { streakStartedAt } alone, plus an optional { id } so a visitor
+// who already has a streak handoff and later runs the demo (or vice
+// versa) gets ONE row carrying both payloads, not two rows racing for
+// which uuid makes it into the signup link. Requires at least one
+// complete payload (all three prep fields, or streakStartedAt); the
+// same rule as the unauth_handoffs_payload_check constraint.
+//
 // No auth: uses the service-role client against an RLS-protected table
 // with no policies, so the returned uuid is the only capability token.
 // Mirrors the adminClient pattern in the Stripe webhook route.
@@ -16,6 +25,7 @@ export const maxDuration = 30
 // cannot bloat the row.
 const JD_MAX = 20000
 const RESUME_MAX = 50000
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function adminClient() {
   return createClient(
@@ -26,40 +36,75 @@ function adminClient() {
 }
 
 export async function POST(req: Request) {
-  let body: { jd?: unknown; resumeText?: unknown; prepOutput?: unknown }
+  let body: {
+    id?: unknown
+    jd?: unknown
+    resumeText?: unknown
+    prepOutput?: unknown
+    streakStartedAt?: unknown
+  }
   try {
-    body = (await req.json()) as {
-      jd?: unknown
-      resumeText?: unknown
-      prepOutput?: unknown
-    }
+    body = await req.json()
   } catch {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 })
   }
 
+  const id = typeof body.id === "string" && UUID_RE.test(body.id) ? body.id : null
   const jd = typeof body.jd === "string" ? body.jd.trim() : ""
   const resumeText =
     typeof body.resumeText === "string" ? body.resumeText.trim() : ""
   const prepOutput = body.prepOutput
+  const streakStartedAt =
+    typeof body.streakStartedAt === "string" ? body.streakStartedAt.trim() : ""
 
-  if (jd.length === 0 || resumeText.length === 0) {
+  const hasPrepPayload = jd.length > 0 && resumeText.length > 0 && prepOutput != null
+  const hasStreakPayload = streakStartedAt.length > 0
+
+  if (!hasPrepPayload && !hasStreakPayload) {
     return NextResponse.json(
-      { error: "Missing jd or resumeText" },
+      { error: "Provide either { jd, resumeText, prepOutput } or { streakStartedAt }" },
       { status: 400 }
     )
   }
   if (jd.length > JD_MAX || resumeText.length > RESUME_MAX) {
     return NextResponse.json({ error: "Input too long" }, { status: 400 })
   }
-  if (typeof prepOutput !== "object" || prepOutput === null) {
+  if (hasPrepPayload && (typeof prepOutput !== "object" || prepOutput === null)) {
     return NextResponse.json({ error: "Missing prepOutput" }, { status: 400 })
   }
+  if (hasStreakPayload && Number.isNaN(Date.parse(streakStartedAt))) {
+    return NextResponse.json({ error: "streakStartedAt is not a valid timestamp" }, { status: 400 })
+  }
+
+  const fields: Record<string, unknown> = {}
+  if (hasPrepPayload) {
+    fields.jd_text = jd
+    fields.resume_text = resumeText
+    fields.prep_output = prepOutput
+  }
+  if (hasStreakPayload) fields.streak_started_at = streakStartedAt
 
   try {
     const supabase = adminClient()
+
+    // Merge onto an existing row (the other payload arriving second) rather
+    // than minting a competing uuid. Falls through to insert if the id is
+    // missing, unknown, or already consumed, same as a fresh visitor.
+    if (id) {
+      const { data: updated, error: updateError } = await supabase
+        .from("unauth_handoffs")
+        .update(fields)
+        .eq("id", id)
+        .select("id")
+        .maybeSingle()
+      if (updated && !updateError) {
+        return NextResponse.json({ id: updated.id })
+      }
+    }
+
     const { data, error } = await supabase
       .from("unauth_handoffs")
-      .insert({ jd_text: jd, resume_text: resumeText, prep_output: prepOutput })
+      .insert(fields)
       .select("id")
       .single()
     if (error || !data) {

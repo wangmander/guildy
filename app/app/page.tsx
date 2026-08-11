@@ -21,6 +21,7 @@ import {
   type JobQuest,
 } from "@/lib/quests/quests"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
+import { deriveAndUpdateStreak } from "@/lib/streak"
 import type { JobCompensation } from "@/types"
 
 // Patch 5.4: Vercel server actions inherit maxDuration from the invoking
@@ -70,7 +71,7 @@ export default async function AppPage({
     supabase
       .from("user_profiles")
       .select(
-        "resume_text, subscription_status, current_period_end, stripe_customer_id, comp_priorities"
+        "resume_text, subscription_status, current_period_end, stripe_customer_id, comp_priorities, streak_started_at, streak_current_day, streak_last_active_date, streak_broken_at"
       )
       .eq("id", user.id)
       .maybeSingle(),
@@ -106,6 +107,15 @@ export default async function AppPage({
   ])
 
   const hasResume = !!profile?.resume_text && profile.resume_text.trim().length > 0
+
+  const streak = profile
+    ? await deriveAndUpdateStreak(supabase, user.id, {
+        streak_started_at: profile.streak_started_at,
+        streak_current_day: profile.streak_current_day,
+        streak_last_active_date: profile.streak_last_active_date,
+        streak_broken_at: profile.streak_broken_at,
+      })
+    : { active: false, day: null, broken: false }
 
   // Latest-wins: rows are already sorted desc, so the first row per job_id wins.
   const interviewerByJobId: Record<string, InterviewerInfo> = {}
@@ -325,6 +335,7 @@ export default async function AppPage({
             milestone={milestone}
             onboarding={onboarding}
             setup={setup}
+            streak={streak}
           />
           <div className="min-w-0 flex-1">
             <Board

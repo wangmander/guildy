@@ -61,6 +61,12 @@ export type SetupChecklist = {
   mostRecentJobId: string | null
 }
 
+export type StreakState = {
+  active: boolean
+  day: number | null
+  broken: boolean
+}
+
 type Props = {
   advisor: Advisor
   today: TodayItem[]
@@ -68,6 +74,7 @@ type Props = {
   milestone: Milestone | null
   onboarding: OnboardingMoment | null
   setup: SetupChecklist | null
+  streak?: StreakState
 }
 
 const APPLY_TARGET = 15
@@ -722,6 +729,36 @@ function SetupCard({ setup }: { setup: SetupChecklist }) {
   )
 }
 
+// 5-day streak (S-20260811-01). Deliberately not a Gem surface: it needs
+// no new pose/asset, and the streak reads fine as plain state: which day,
+// out of five, filled dots for what's done. Broken streaks render nothing
+// (a dead streak nagging from the rail is worse than it just going quiet).
+function StreakBadge({ streak }: { streak: StreakState }) {
+  if (!streak.active || !streak.day) return null
+  return (
+    <Panel className="px-5 py-4">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
+        5-day streak
+      </p>
+      <p className="mt-1 text-[15px] font-semibold text-[var(--text-primary)]">
+        Day {streak.day} of 5
+      </p>
+      <div className="mt-2 flex gap-[5px]">
+        {[1, 2, 3, 4, 5].map((d) => (
+          <span
+            key={d}
+            className="h-[6px] flex-1 rounded-full"
+            style={{
+              background:
+                d <= (streak.day ?? 0) ? "var(--accent)" : "var(--border)",
+            }}
+          />
+        ))}
+      </div>
+    </Panel>
+  )
+}
+
 export function CommandRail({
   advisor,
   today,
@@ -729,6 +766,7 @@ export function CommandRail({
   milestone,
   onboarding,
   setup,
+  streak,
 }: Props) {
   const [mounted, setMounted] = useState(false)
   const [dismissed, setDismissed] = useState(false)
@@ -771,6 +809,7 @@ export function CommandRail({
     <aside className="w-full shrink-0 px-4 lg:w-[300px] lg:px-8 lg:pr-0">
       <div className="flex flex-col gap-[18px]">
         {setup ? <SetupCard setup={setup} /> : null}
+        {streak ? <StreakBadge streak={streak} /> : null}
         {milestoneVisible && milestone ? (
           <MilestoneCard milestone={milestone} onDismiss={dismissMilestone} />
         ) : null}
