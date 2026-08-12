@@ -136,3 +136,24 @@ export async function trackStreakBroken(
 ): Promise<void> {
   await captureServer("streak_broken", userId, { day_reached: dayReached })
 }
+
+export async function trackStreakEmailSent(
+  userId: string,
+  day: number
+): Promise<void> {
+  await captureServer("streak_email_sent", userId, { day })
+}
+
+export async function trackStreakEmailOpened(
+  userId: string,
+  day: number
+): Promise<void> {
+  await captureServer("streak_email_opened", userId, { day })
+}
+
+export async function trackStreakEmailClicked(
+  userId: string,
+  day: number
+): Promise<void> {
+  await captureServer("streak_email_clicked", userId, { day })
+}

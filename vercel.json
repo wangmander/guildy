@@ -3,6 +3,10 @@
     {
       "path": "/api/health",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/streak-emails",
+      "schedule": "0 14 * * *"
     }
   ]
 }
