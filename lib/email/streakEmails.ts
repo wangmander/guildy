@@ -126,10 +126,75 @@ const CONTENT: Record<1 | 2 | 3 | 4 | 5, { subject: string; headline: string; bo
   },
 }
 
+// Lapsed wording, days 2 to 5.
+//
+// The cadence is calendar-driven, so these reach someone who signed up and
+// never came back. Every line of CONTENT above asserts something about that
+// user that is not true of them: "One job in", "Four days in", "You've got jobs
+// tracked". Sending those to someone who did none of it is the same class of
+// lie as a toast that reports work it did not do.
+//
+// The subject is swapped too, not just the body. "Day 2. Run your first prep."
+// presumes a job that a lapsed user never added, and the subject line is the
+// part most recipients actually read. Michael's default asked for one subject
+// per day with a swapped paragraph; this deviates for the four days where the
+// shared subject would itself be the untrue part, and it is flagged in the
+// receipt rather than done quietly.
+//
+// No guilt, no streak-shaming, no "you're missing out". They owe Guildy
+// nothing. Each one names the single next thing and gets out of the way.
+const LAPSED: Record<2 | 3 | 4 | 5, { subject: string; headline: string; body: string; ctaLabel: string }> = {
+  2: {
+    subject: "Still no job in Guildy",
+    headline: "You signed up, then life happened.",
+    body:
+      "No judgement, it takes two minutes and you have not had two minutes.<br><br>" +
+      "When you do: paste one job description. Guildy turns it into company research and interview prep you can actually use. That is the whole first step.",
+    ctaLabel: "Add your first job",
+  },
+  3: {
+    subject: "One job description is all it takes",
+    headline: "One job description is all it takes.",
+    body:
+      "Guildy does nothing until it has something to work with, so right now it is an empty account with your name on it.<br><br>" +
+      "Paste a job you are actually considering. You will see the prep it builds before you decide whether this is worth your time.",
+    ctaLabel: "Try it with one job",
+  },
+  4: {
+    subject: "Worth keeping, or should we stop?",
+    headline: "Worth keeping, or should we stop?",
+    body:
+      "You have not been back since signing up, which is a fair verdict on its own.<br><br>" +
+      "If the job hunt is still on, one job description is the whole ask. If it is not, the unsubscribe link below stops these for good, no hard feelings.",
+    ctaLabel: "Add a job",
+  },
+  5: {
+    subject: "Last one from us",
+    headline: "Last one from us.",
+    body:
+      "This is the end of the sequence either way, so nothing else is coming.<br><br>" +
+      "Your account stays where it is. If the search picks back up, Guildy is there and it starts with a single job description.",
+    ctaLabel: "Open Guildy",
+  },
+}
+
+/** Which wording a send uses. Mirrors Variant in lib/email/streakSchedule.ts,
+ * duplicated as a string union rather than imported so this module keeps no
+ * dependencies and stays renderable in isolation. */
+export type EmailVariant = "welcome" | "returned" | "lapsed"
+
 /** Builds one day's email. Pass ctx to wire open/click tracking (a real
- * send); omit it for a bare preview render with plain, untracked links. */
-export function buildStreakEmail(day: 1 | 2 | 3 | 4 | 5, ctx?: TrackingContext): StreakEmail {
-  const c = CONTENT[day]
+ * send); omit it for a bare preview render with plain, untracked links.
+ *
+ * variant picks the wording. Day 1 is always "welcome": at that point nobody
+ * has had the chance to return or lapse. Days 2 to 5 read "returned" out of
+ * CONTENT and "lapsed" out of LAPSED. */
+export function buildStreakEmail(
+  day: 1 | 2 | 3 | 4 | 5,
+  ctx?: TrackingContext,
+  variant: EmailVariant = "returned",
+): StreakEmail {
+  const c = variant === "lapsed" && day !== 1 ? LAPSED[day as 2 | 3 | 4 | 5] : CONTENT[day]
   return {
     day,
     subject: c.subject,
