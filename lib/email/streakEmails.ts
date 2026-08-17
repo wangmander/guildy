@@ -25,6 +25,14 @@ function trackingBase(ctx?: TrackingContext): string {
   return ctx ? `${APP_URL}/api/email` : ""
 }
 
+/** Exported so the send path can put the same URL in the List-Unsubscribe
+ * header. Gmail and Outlook show their own unsubscribe button off that header,
+ * and a recipient who uses it instead of the body link must land in the same
+ * place. */
+export function unsubscribeUrl(uid: string): string {
+  return `${APP_URL}/api/email/unsubscribe?uid=${encodeURIComponent(uid)}`
+}
+
 function wrap(
   headline: string,
   body: string,
@@ -36,6 +44,12 @@ function wrap(
   const trackedHref = ctx
     ? `${base}/click?uid=${encodeURIComponent(ctx.uid)}&day=${ctx.day}&to=${encodeURIComponent(ctaHref)}`
     : ctaHref
+  // Every commercial email needs a working way out, in the body and not only
+  // in a header. Without ctx there is no recipient to unsubscribe (the preview
+  // path), so it degrades to plain text rather than a link that would 404.
+  const unsubLink = ctx
+    ? `<a href="${unsubscribeUrl(ctx.uid)}" style="color:#a39cc0;text-decoration:underline;">Unsubscribe from these emails</a>`
+    : "Unsubscribe link appears here in a real send."
   const pixel = ctx
     ? `<img src="${base}/open?uid=${encodeURIComponent(ctx.uid)}&day=${ctx.day}" width="1" height="1" alt="" style="display:block;border:0;" />`
     : ""
@@ -59,6 +73,7 @@ function wrap(
         </td></tr>
         <tr><td style="padding:20px 32px;border-top:1px solid #f0ecf8;">
           <p style="margin:0;font-size:12px;color:#a39cc0;">Guildy, the job-hunt command center.</p>
+          <p style="margin:8px 0 0;font-size:12px;color:#a39cc0;">${unsubLink}</p>
         </td></tr>
       </table>
     </td></tr>

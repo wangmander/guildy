@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { sendEmail } from "@/lib/email/resend"
-import { buildStreakEmail } from "@/lib/email/streakEmails"
+import { buildStreakEmail, unsubscribeUrl } from "@/lib/email/streakEmails"
 import { trackStreakEmailSent } from "@/lib/analytics"
 
 // Real production path for the 5-day streak drip. Runs daily (see
@@ -37,6 +37,10 @@ export async function GET(req: Request) {
     .select("id, email, streak_current_day, streak_last_emailed_day")
     .not("streak_current_day", "is", null)
     .is("streak_broken_at", null)
+    // An unsubscribe that the sender ignores is worse than no unsubscribe at
+    // all: it is a promise the product breaks the next morning. Filtered here,
+    // in the query, so no code path downstream can send to them by accident.
+    .is("streak_emails_unsubscribed_at", null)
     .gte("streak_current_day", 1)
     .lte("streak_current_day", 5)
 
@@ -58,7 +62,12 @@ export async function GET(req: Request) {
     }
     try {
       const email = buildStreakEmail(day, { uid: row.id, day })
-      await sendEmail({ to: row.email as string, subject: email.subject, html: email.html })
+      await sendEmail({
+        to: row.email as string,
+        subject: email.subject,
+        html: email.html,
+        unsubscribeUrl: unsubscribeUrl(row.id as string),
+      })
       await admin.from("user_profiles").update({ streak_last_emailed_day: day }).eq("id", row.id)
       await trackStreakEmailSent(row.id, day)
       results.push({ userId: row.id, day, sent: true })
