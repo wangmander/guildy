@@ -20,6 +20,7 @@ import {
   LockedPreviewFooter,
   LockedPreviewModule,
 } from "./locked-preview-module"
+import { GenerateButton } from "./generate-button"
 import { ProgressLoader } from "./progress-loader"
 import { QuestionsTheyAsk, QuestionsYouAsk } from "./questions-widget"
 import {
@@ -460,9 +461,21 @@ function CanvasBody({
       </div>
     )
   }
+  // The generating branch renders the same EmptyState card, with its button
+  // held in the loading state, rather than swapping the whole body out. The
+  // button the user pressed stays where they pressed it and reports on itself,
+  // which is the only honest place for that report to live.
   if (isGenerating) {
     return (
       <div className="px-6 md:px-7">
+        <EmptyState
+          hasResume={hasResume}
+          hasJd={hasJd}
+          tier={tier}
+          isGenerating
+          onGenerate={onGenerate}
+          onAddJd={onAddJd}
+        />
         <ProgressLoader tier={tier} />
       </div>
     )
@@ -481,6 +494,7 @@ function CanvasBody({
           hasResume={hasResume}
           hasJd={hasJd}
           tier={tier}
+          isGenerating={false}
           onGenerate={onGenerate}
           onAddJd={onAddJd}
         />
@@ -543,12 +557,14 @@ function EmptyState({
   hasResume,
   hasJd,
   tier,
+  isGenerating,
   onGenerate,
   onAddJd,
 }: {
   hasResume: boolean
   hasJd: boolean
   tier: PrepTier
+  isGenerating: boolean
   onGenerate: () => void
   onAddJd: () => void
 }) {
@@ -557,7 +573,11 @@ function EmptyState({
     tier === "deep"
       ? "Sonnet 4.6 with research-grade depth. Takes a few seconds."
       : "Pulls in your resume, the JD, and any context you've added. Takes about a second."
-  const showJdWarning = tier === "deep" && hasJd === false && hasResume
+  // Hidden mid-generation: its Generate anyway button is a second way to fire
+  // the same call, and the answer to "should I add the JD first" is already
+  // decided by the time the request is in flight.
+  const showJdWarning =
+    tier === "deep" && hasJd === false && hasResume && !isGenerating
 
   return (
     <div className="mt-8 space-y-4">
@@ -571,27 +591,27 @@ function EmptyState({
         </h2>
         <p className="mx-auto mt-2 max-w-sm text-sm text-[var(--text-muted)]">
           {!hasResume
-            ? "Add your resume in onboarding before running prep."
+            ? "Add your resume before running prep."
             : subhead}
         </p>
-        <button
-          type="button"
+        <GenerateButton
+          loading={isGenerating}
           onClick={onGenerate}
+          label={`Generate ${tierLabel}`}
+          loadingLabel={`Generating ${tierLabel}...`}
           disabled={!hasResume}
+          icon={<Sparkles className="size-4" />}
           title={
             !hasResume
-              ? "Add your resume in onboarding before running prep."
+              ? "Add your resume before running prep."
               : undefined
           }
           className={cn(
-            "mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-[11px] px-5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none",
+            "mt-5 h-10 rounded-[11px] px-5 text-sm font-semibold",
             TIER_CTA_COLOR[tier],
             TIER_CTA_SHADOW[tier]
           )}
-        >
-          <Sparkles className="size-4" />
-          Generate {tierLabel}
-        </button>
+        />
       </div>
     </div>
   )

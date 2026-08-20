@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils"
 import type { JobCompensation } from "@/types"
 
 import { CompEditModal } from "./comp-edit-modal"
+import { GenerateButton } from "./generate-button"
 import { ProgressLoader } from "./progress-loader"
 
 // Structurally a TcColumn; defined locally to avoid a circular import.
@@ -304,6 +305,9 @@ export function NegotiationPanel({ job, onOpenChange }: Props) {
     // No required field: empty selections fall back to a sensible default plan
     // server-side (base + package levers).
     if (!job) return
+    // Before the await, so the button is disabled by the time the click
+    // handler yields. Opus is the most expensive call in the product; a
+    // second click here is a second one of those.
     setGenerating(true)
     setError(null)
     const res = await generateNegotiationAction({
@@ -435,14 +439,13 @@ export function NegotiationPanel({ job, onOpenChange }: Props) {
               </div>
 
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={generate}
-                  disabled={generating}
-                  className="inline-flex h-9 items-center justify-center rounded-[10px] bg-[var(--accent)] px-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-deep)] disabled:opacity-60"
-                >
-                  {row ? "Rebuild my plan" : "Build my plan"}
-                </button>
+                <GenerateButton
+                  loading={generating}
+                  onClick={() => void generate()}
+                  label={row ? "Rebuild my plan" : "Build my plan"}
+                  loadingLabel="Building your plan..."
+                  className="h-9 rounded-[10px] bg-[var(--accent)] px-3 text-sm font-semibold text-white hover:bg-[var(--accent-deep)]"
+                />
                 {loadingCache ? (
                   <span className="text-xs text-[var(--text-faint)]">
                     Loading...
