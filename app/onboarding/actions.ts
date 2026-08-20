@@ -16,6 +16,7 @@ import { QUICK_PREP_MODEL } from "@/lib/ai/models"
 import { isShareId } from "@/lib/share/shareId"
 import { recordReferral } from "@/lib/share/store"
 import { stageKeyToPrepStage } from "@/lib/ai/prep-types"
+import { readResumeGate } from "@/lib/resume/gate"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 type ActionResult = {
@@ -40,13 +41,27 @@ export async function saveResumeTextAction(formData: FormData): Promise<ActionRe
     return { ok: false, reason: "input", message: "Add some text before saving." }
   }
 
-  const { error } = await supabase
+  // .select() so the write reports how many rows it actually touched.
+  // Without it a zero-row update (missing profile row, or an RLS UPDATE
+  // denial) returns error: null and this action reports success while
+  // nothing was written, sending the user back to a form that claims it
+  // saved. Confirm the row rather than trusting the absent error.
+  const { data, error } = await supabase
     .from("user_profiles")
     .update({ resume_text: text })
     .eq("id", user.id)
+    .select("id")
 
   if (error) {
     return { ok: false, reason: "db", message: `Save failed: ${error.message}` }
+  }
+
+  if (!data || data.length === 0) {
+    return {
+      ok: false,
+      reason: "db",
+      message: "Could not save to your profile. Refresh and try again.",
+    }
   }
 
   return { ok: true }
@@ -294,19 +309,20 @@ export async function completeOnboardingAction(
   const effectiveHandoff =
     handoffId && handoffId.length > 0 ? handoffId : cookieHandoff
 
-  const { data: profile } = await supabase
-    .from("user_profiles")
-    .select("resume_text")
-    .eq("id", user.id)
-    .maybeSingle()
+  const gate = await readResumeGate(supabase, user.id)
 
-  const resumeText =
-    typeof profile?.resume_text === "string" ? profile.resume_text : ""
-  const hasResume = resumeText.trim().length > 0
+  if (gate.status === "unknown") {
+    return {
+      ok: false as const,
+      message: "Could not read your profile just now. Refresh and try again.",
+    }
+  }
 
-  if (!hasResume) {
+  if (gate.status === "absent") {
     return { ok: false as const, message: "Add your resume or background before continuing." }
   }
+
+  const resumeText = gate.resumeText
 
   // Phase 6.5: signup_completed fires once the user has the minimum data
   // for the product to be useful (resume on file). Awaited so the capture

@@ -1,6 +1,8 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
+import { blocksPrep, readResumeGate } from "@/lib/resume/gate"
+
 type CookieSet = { name: string; value: string; options?: CookieOptions }
 
 // Prompt 21: /signup is the unauth Quick Prep funnel's capture route and
@@ -93,16 +95,14 @@ export async function updateSession(request: NextRequest) {
     !pathname.startsWith("/auth/") &&
     !isPublicPath(pathname)
   ) {
-    const { data: profile } = await supabase
-      .from("user_profiles")
-      .select("resume_text")
-      .eq("id", user.id)
-      .maybeSingle()
+    // Same shared gate the board and the generate action use, so the three
+    // can never disagree about whether a user has a resume. Critically, a
+    // failed read is "unknown" and does NOT redirect: bouncing someone to
+    // /onboarding on a broken profile read strands them in a loop where the
+    // page they are sent to cannot save anything either.
+    const gate = await readResumeGate(supabase, user.id)
 
-    const hasResume =
-      typeof profile?.resume_text === "string" && profile.resume_text.trim().length > 0
-
-    if (!hasResume) {
+    if (blocksPrep(gate)) {
       const url = request.nextUrl.clone()
       url.pathname = "/onboarding"
       return NextResponse.redirect(url)

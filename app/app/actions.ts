@@ -49,6 +49,7 @@ import { generateBoardMap } from "@/lib/jobSourceAdvisor/aiFallback"
 import type { BoardRating } from "@/lib/jobSourceAdvisor/boardRatings"
 import type { StageKey } from "@/lib/stages"
 import { getStripe } from "@/lib/stripe"
+import { blocksPrep, readResumeGate } from "@/lib/resume/gate"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 export async function signOutAction() {
@@ -1192,7 +1193,12 @@ const generatePrepSchema = z.object({
 export type GeneratePrepInput = z.input<typeof generatePrepSchema>
 export type GeneratePrepResult =
   | { ok: true; prep: PrepOutput }
-  | { ok: false; error: string; requiresUpgrade?: boolean }
+  | {
+      ok: false
+      error: string
+      requiresUpgrade?: boolean
+      requiresResume?: boolean
+    }
 
 function modelForTier(tier: PrepTier): string {
   return tier === "deep" ? DEEP_PREP_MODEL : QUICK_PREP_MODEL
@@ -1253,7 +1259,7 @@ export async function generatePrepAction(
     }
   }
 
-  const [{ data: job, error: jobError }, { data: profile }] = await Promise.all([
+  const [{ data: job, error: jobError }, resumeGate] = await Promise.all([
     supabase
       .from("jobs")
       .select(
@@ -1262,14 +1268,24 @@ export async function generatePrepAction(
       .eq("id", parsed.data.job_id)
       .eq("user_id", user.id)
       .maybeSingle(),
-    supabase
-      .from("user_profiles")
-      .select("resume_text")
-      .eq("id", user.id)
-      .maybeSingle(),
+    readResumeGate(supabase, user.id),
   ])
   if (jobError) return { ok: false, error: jobError.message }
   if (!job) return { ok: false, error: "Job not found" }
+
+  // The resume gate is enforced here, server-side, not only by the disabled
+  // button in the canvas. Before this the client boolean was the only thing
+  // in the way, so any bug that miscomputed it either blocked a user who had
+  // a resume (the 2026-08-19 incident) or would have let a resume-less one
+  // through to a prep with nothing to ground it. Only a confirmed-absent
+  // resume blocks; an unreadable profile degrades rather than stonewalls.
+  if (blocksPrep(resumeGate)) {
+    return {
+      ok: false,
+      error: "Add your resume in onboarding before running prep.",
+      requiresResume: true,
+    }
+  }
 
   const prepStage = stageKeyToPrepStage(job.stage as StageKey)
   const tier = parsed.data.tier
@@ -1327,7 +1343,7 @@ export async function generatePrepAction(
 
 
   const basePrepInput: PrepInput = {
-    resume_text: profile?.resume_text ?? null,
+    resume_text: resumeGate.resumeText,
     jd_text: job.jd_text,
     latest_message: job.latest_message,
     company_name: job.company_name,
@@ -1421,7 +1437,7 @@ export async function generatePrepAction(
   const contextHash = buildContextHash({
     tier,
     stage: prepStage,
-    resume_text: profile?.resume_text ?? null,
+    resume_text: resumeGate.resumeText,
     jd_text: job.jd_text,
     latest_message: job.latest_message,
     interviewer_name: interviewerName,
