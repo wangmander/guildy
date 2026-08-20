@@ -69,6 +69,11 @@ type Props = {
   selectedRole: PrepSessionRole
   onSelectRole: (role: PrepSessionRole) => void
   error: string | null
+  // Set when the server refused to generate because the resume on file is
+  // absent or under the 200 character minimum. Separate from `error` because
+  // the fix is a replace, not a retry.
+  resumeBlock: { message: string; stored: string | null } | null
+  onReplaceResume: () => void
   hasResume: boolean
   hasJd: boolean
   tier: PrepTier
@@ -115,6 +120,8 @@ export function PrepCanvas({
   selectedRole,
   onSelectRole,
   error,
+  resumeBlock,
+  onReplaceResume,
   hasResume,
   hasJd,
   tier,
@@ -278,6 +285,8 @@ export function PrepCanvas({
             currentOutput={currentOutput}
             isGenerating={isGenerating}
             error={error}
+            resumeBlock={resumeBlock}
+            onReplaceResume={onReplaceResume}
             hasResume={hasResume}
             hasJd={hasJd}
             tier={tier}
@@ -398,6 +407,8 @@ function CanvasBody({
   currentOutput,
   isGenerating,
   error,
+  resumeBlock,
+  onReplaceResume,
   hasResume,
   hasJd,
   tier,
@@ -416,6 +427,8 @@ function CanvasBody({
   currentOutput: PrepOutput | null
   isGenerating: boolean
   error: string | null
+  resumeBlock: { message: string; stored: string | null } | null
+  onReplaceResume: () => void
   hasResume: boolean
   hasJd: boolean
   tier: PrepTier
@@ -427,6 +440,19 @@ function CanvasBody({
   // Alternate states keep their own padded box (item 7 leaves them as-is); the
   // flat module has no root padding, so they get a px wrapper. PrepView renders
   // full-bleed divided sections directly.
+  // Ahead of `error`: a resume the model cannot work with is not a failed
+  // call, and offering Try again would send the user round the same loop.
+  if (resumeBlock) {
+    return (
+      <div className="px-6 md:px-7">
+        <ResumeBlockState
+          message={resumeBlock.message}
+          stored={resumeBlock.stored}
+          onReplace={onReplaceResume}
+        />
+      </div>
+    )
+  }
   if (error) {
     return (
       <div className="px-6 md:px-7">
@@ -600,6 +626,52 @@ function JdMissingWarning({
           Generate anyway
         </button>
       </div>
+    </div>
+  )
+}
+
+// What the user sees when the resume on file is too short to generate on.
+// Three things, in this order, because each answers the question the last one
+// raises: what is wrong, what is actually stored, and where to fix it. The
+// stored text is shown rather than described. Someone told "your resume is
+// too short" while looking at a box they believe holds their resume will
+// assume the product is broken, which is exactly the mistake the 2026-08-19
+// incident taught. Nothing here deletes anything.
+function ResumeBlockState({
+  message,
+  stored,
+  onReplace,
+}: {
+  message: string
+  stored: string | null
+  onReplace: () => void
+}) {
+  const preview = stored?.trim() ?? ""
+  return (
+    <div className="mt-8 rounded-[14px] border border-amber-200 bg-amber-50 p-6">
+      <h2 className="font-bricolage text-base font-semibold text-amber-900">
+        Your resume is too short to prep on
+      </h2>
+      <p className="mt-2 text-sm leading-relaxed text-amber-900">{message}</p>
+
+      {preview.length > 0 ? (
+        <div className="mt-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+            What is on file right now
+          </p>
+          <pre className="mt-1.5 max-h-32 overflow-auto whitespace-pre-wrap rounded-[10px] border border-amber-200 bg-white px-3 py-2 font-mono text-xs text-amber-900">
+            {preview}
+          </pre>
+        </div>
+      ) : null}
+
+      <button
+        type="button"
+        onClick={onReplace}
+        className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-[10px] bg-[var(--accent)] px-4 text-xs font-semibold text-white transition-colors hover:bg-[var(--accent-deep)]"
+      >
+        Replace your resume
+      </button>
     </div>
   )
 }
