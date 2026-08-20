@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import { RESUME_MIN_CHARS, tooShortMessage } from "./ingest"
+// From limits, not ingest: this file runs inside middleware on the Edge
+// runtime, and ingest reaches the PDF and DOCX parsers.
+import { RESUME_MIN_CHARS, tooShortMessage } from "./limits"
 
 // Single source of truth for "does this user have a resume on file".
 //

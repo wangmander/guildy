@@ -1,12 +1,13 @@
 "use client"
 
-import { useEffect, useState, useTransition } from "react"
+import { useCallback, useEffect, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
   saveResumeTextAction,
   completeOnboardingAction,
   getHandoffResumeAction,
 } from "./actions"
+import { ResumeDropzone } from "@/components/resume-dropzone"
 
 export function OnboardingForm({ initialText }: { initialText: string }) {
   const router = useRouter()
@@ -14,6 +15,11 @@ export function OnboardingForm({ initialText }: { initialText: string }) {
   const [savedText, setSavedText] = useState(initialText)
   const [status, setStatus] = useState<{ tone: "info" | "success" | "error"; text: string } | null>(null)
   const [pending, startTransition] = useTransition()
+  // True while the box holds the text the unauth funnel pasted on the
+  // marketing site and the user has not touched it. Door 4 of the four, and
+  // the only reason it is tracked is so the resumes row records which door
+  // this came through.
+  const [fromHandoff, setFromHandoff] = useState(false)
 
   // Phase 8.5: pre-fill the box with the resume the visitor pasted on the
   // marketing site, so a handoff user clicks through with no manual paste.
@@ -30,12 +36,23 @@ export function OnboardingForm({ initialText }: { initialText: string }) {
     let cancelled = false
     getHandoffResumeAction(uuid).then((resume) => {
       if (cancelled || !resume) return
+      setFromHandoff(true)
       setText((cur) => (cur.trim().length === 0 ? resume : cur))
     })
     return () => {
       cancelled = true
     }
   }, [initialText])
+
+  // The upload action already wrote the resume, so the box is filled with
+  // what was parsed and marked saved. Same destination as the paste: one row,
+  // one parsed_text, one gate.
+  const onFileIngested = useCallback((parsed: string, message: string) => {
+    setText(parsed)
+    setSavedText(parsed)
+    setFromHandoff(false)
+    setStatus({ tone: "success", text: message })
+  }, [])
 
   function handleContinue() {
     const trimmed = text.trim()
@@ -45,6 +62,7 @@ export function OnboardingForm({ initialText }: { initialText: string }) {
       if (trimmed.length > 0 && text !== savedText) {
         const fd = new FormData()
         fd.append("resume_text", text)
+        fd.append("source", fromHandoff ? "handoff" : "paste")
         setStatus({ tone: "info", text: "Saving..." })
         const saveResult = await saveResumeTextAction(fd)
         if (!saveResult.ok) {
@@ -87,11 +105,22 @@ export function OnboardingForm({ initialText }: { initialText: string }) {
     <div className="space-y-8">
       <div className="bg-white border border-[#E5E7EB] rounded-2xl p-6 space-y-4">
         <div>
-          <h2 className="text-xl font-semibold text-[#482C4C]">Paste resume or intro</h2>
+          <h2 className="text-xl font-semibold text-[#482C4C]">Upload or paste your resume</h2>
+        </div>
+
+        <ResumeDropzone onIngested={onFileIngested} disabled={pending} />
+
+        <div className="flex items-center gap-3">
+          <div className="h-px flex-1 bg-[#E5E7EB]" />
+          <span className="text-xs uppercase tracking-wide text-gray-400">or paste</span>
+          <div className="h-px flex-1 bg-[#E5E7EB]" />
         </div>
         <textarea
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setFromHandoff(false)
+            setText(e.target.value)
+          }}
           rows={14}
           placeholder="Paste resume text or a short intro/cover-letter-style summary..."
           className="w-full p-4 rounded-xl border border-[#E5E7EB] text-sm text-gray-900 focus:outline-none focus:border-[#482C4C] focus:ring-2 focus:ring-[#482C4C]/20 font-mono"

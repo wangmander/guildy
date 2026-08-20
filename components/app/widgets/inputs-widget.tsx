@@ -29,6 +29,7 @@ import {
   upsertNoteAction,
 } from "@/app/app/actions"
 import type { InputsExpansionSection } from "@/components/app/prep-overlay"
+import { ResumeDropzone } from "@/components/resume-dropzone"
 
 type Props = {
   jobId: string
@@ -459,6 +460,7 @@ function BackgroundForm({
   const router = useRouter()
   const [value, setValue] = useState(initial)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
 
   useEffect(() => setValue(initial), [initial])
@@ -478,6 +480,19 @@ function BackgroundForm({
     })
   }, [value, router, onSaved])
 
+  // Replace by file. The upload action writes the resume itself, so there is
+  // nothing left to Save afterwards: fill the box with what was parsed, tell
+  // the user what came out, and refresh so every gate on the page sees it.
+  const onFileIngested = useCallback(
+    (parsed: string, message: string) => {
+      setValue(parsed)
+      setError(null)
+      setNotice(message)
+      router.refresh()
+    },
+    [router]
+  )
+
   // Background is required for prep generation across every job, so a Clear
   // affordance would break the system. FormShell hides Clear when
   // hasExisting is false; the no-op onClear is only there to satisfy the
@@ -494,9 +509,20 @@ function BackgroundForm({
       pending={pending}
       error={error}
     >
+      <ResumeDropzone
+        onIngested={onFileIngested}
+        disabled={pending}
+        className="mb-3"
+      />
+      {notice ? (
+        <p className="mb-3 text-xs text-[var(--text-muted)]">{notice}</p>
+      ) : null}
       <textarea
         value={value}
-        onChange={(e) => setValue(e.target.value)}
+        onChange={(e) => {
+          setNotice(null)
+          setValue(e.target.value)
+        }}
         placeholder="Resume text, LinkedIn summary, or any background that frames your work…"
         rows={12}
         className="w-full resize-y rounded-[10px] border border-[var(--border-card)] bg-[var(--surface)] px-3 py-2.5 text-sm leading-relaxed text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/15"

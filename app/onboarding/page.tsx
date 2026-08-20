@@ -26,8 +26,9 @@ export default async function OnboardingPage() {
             Add your intro
           </h1>
           <p className="text-lg text-[#1C1E21] leading-relaxed">
-            Guildy uses your intro on every prep generation. Paste your resume text, LinkedIn
-            About + Experience, or a short cover-letter-style summary. You can update it later in settings.
+            Guildy uses your intro on every prep generation. Upload a PDF, DOCX or TXT, or paste
+            your resume text, LinkedIn About + Experience, or a short cover-letter-style summary.
+            You can replace it any time from the Intro/Cover Letter row on your board.
           </p>
         </div>
 

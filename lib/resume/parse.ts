@@ -1,23 +1,11 @@
 import { formatBytes, resumeFailure, type ResumeFailure } from "./errors"
+import { RESUME_ACCEPTED_EXTS, RESUME_MAX_BYTES } from "./limits"
 import type { ResumeFileExt } from "@/types"
 
 // Server-side file to text. PDF via unpdf, DOCX via mammoth, TXT decoded
 // directly. RTF is deliberately absent: it is a markup format that needs its
 // own parser to avoid handing the model a wall of control words, and paste
 // already covers it.
-
-export const RESUME_MAX_BYTES = 10 * 1024 * 1024
-
-export const RESUME_ACCEPTED_EXTS: ReadonlyArray<ResumeFileExt> = [
-  "pdf",
-  "docx",
-  "txt",
-]
-
-// The accept attribute for the file input. Kept next to the parser so the
-// picker and the parser can never drift on what is allowed.
-export const RESUME_ACCEPT_ATTR =
-  ".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
 
 export type ParseSuccess = {
   ok: true

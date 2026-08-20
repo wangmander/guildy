@@ -30,6 +30,10 @@ type ActionResult = {
   // is what the user reads.
   code?: ResumeErrorCode
   charCount?: number
+  // The parsed text, on a successful file ingest, so the form can show the
+  // user what was actually read out of their document instead of asking them
+  // to trust that something happened.
+  text?: string
 }
 
 // Which of the four doors a paste came through. The onboarding form marks
@@ -114,7 +118,11 @@ export async function uploadResumeFileAction(
     }
   }
 
-  return { ok: true, message: `Read ${result.charCount} characters from ${file.name}.` }
+  return {
+    ok: true,
+    message: `Read ${result.charCount} characters from ${file.name}.`,
+    text: result.text,
+  }
 }
 
 // Prompt 21: unauth Quick Prep handoff consumption ------------------------

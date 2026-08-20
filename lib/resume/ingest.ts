@@ -1,8 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 import { resumeFailure, type ResumeFailure } from "./errors"
+import { RESUME_MAX_CHARS, RESUME_MIN_CHARS, tooShortMessage } from "./limits"
 import { normalizeResumeText, parseResumeFile } from "./parse"
 import type { ResumeFileExt, ResumeSource } from "@/types"
+
+export { RESUME_MAX_CHARS, RESUME_MIN_CHARS, tooShortMessage }
 
 // The one place a resume becomes a resume.
 //
@@ -12,15 +15,6 @@ import type { ResumeFileExt, ResumeSource } from "@/types"
 // same rollback. After it returns there is nothing left to tell them apart
 // except a `source` string kept for diagnostics.
 
-// 200 characters. Below this it is not a resume, it is a placeholder, and
-// generating prep on it produces confident nonsense that the user quite
-// reasonably blames on the product rather than on their own two-character
-// entry. Three production profiles hold resumes of 1 and 2 characters,
-// written by paths that never counted.
-export const RESUME_MIN_CHARS = 200
-
-export const RESUME_MAX_CHARS = 50000
-
 export type IngestSuccess = {
   ok: true
   text: string
@@ -28,11 +22,6 @@ export type IngestSuccess = {
 }
 
 export type IngestResult = IngestSuccess | ResumeFailure
-
-export function tooShortMessage(charCount: number): string {
-  const unit = charCount === 1 ? "character" : "characters"
-  return `That is only ${charCount} ${unit}. Guildy needs at least ${RESUME_MIN_CHARS} to write prep worth reading, so add more of your background and try again.`
-}
 
 type FileProvenance = {
   fileName: string
