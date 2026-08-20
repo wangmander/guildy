@@ -20,6 +20,26 @@ export type PrepTier = "quick" | "deep"
 
 export type JobContextType = "jd" | "latest_message" | "interviewer" | "note" | "other"
 
+// Which of the four resume input paths a stored resume came through. Kept
+// for diagnostics; nothing downstream branches on it.
+export type ResumeSource = "upload_drop" | "upload_browse" | "paste" | "handoff"
+
+export type ResumeFileExt = "pdf" | "docx" | "txt"
+
+// Write side of the resume. user_profiles.resume_text stays the read path;
+// every ingest writes both in one call. See lib/resume/ingest.ts.
+export interface Resume {
+  user_id: string
+  source: ResumeSource
+  file_name: string | null
+  file_ext: ResumeFileExt | null
+  byte_size: number | null
+  parsed_text: string
+  char_count: number
+  created_at: string
+  updated_at: string
+}
+
 export interface UserProfile {
   id: string
   email: string
