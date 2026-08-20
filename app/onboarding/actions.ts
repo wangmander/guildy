@@ -16,13 +16,27 @@ import { QUICK_PREP_MODEL } from "@/lib/ai/models"
 import { isShareId } from "@/lib/share/shareId"
 import { recordReferral } from "@/lib/share/store"
 import { stageKeyToPrepStage } from "@/lib/ai/prep-types"
-import { readResumeGate } from "@/lib/resume/gate"
+import { prepBlockMessage, readResumeGate } from "@/lib/resume/gate"
+import type { ResumeErrorCode } from "@/lib/resume/errors"
+import { ingestResumeFile, ingestResumeText } from "@/lib/resume/ingest"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 type ActionResult = {
   ok: boolean
   message?: string
   reason?: "auth" | "input" | "db"
+  // Which of the named resume failures this was, when it was one. The form
+  // uses it only to decide whether to keep the file picker open; the message
+  // is what the user reads.
+  code?: ResumeErrorCode
+  charCount?: number
+}
+
+// Which of the four doors a paste came through. The onboarding form marks
+// text it pre-filled from the unauth handoff so that path stays labelled
+// through to the resumes row. Nothing downstream branches on it.
+function pasteSource(formData: FormData): "paste" | "handoff" {
+  return formData.get("source") === "handoff" ? "handoff" : "paste"
 }
 
 export async function saveResumeTextAction(formData: FormData): Promise<ActionResult> {
@@ -36,35 +50,71 @@ export async function saveResumeTextAction(formData: FormData): Promise<ActionRe
     return { ok: false, reason: "auth", message: "Not signed in." }
   }
 
-  const text = String(formData.get("resume_text") ?? "").trim()
-  if (text.length === 0) {
+  const text = String(formData.get("resume_text") ?? "")
+  if (text.trim().length === 0) {
     return { ok: false, reason: "input", message: "Add some text before saving." }
   }
 
-  // .select() so the write reports how many rows it actually touched.
-  // Without it a zero-row update (missing profile row, or an RLS UPDATE
-  // denial) returns error: null and this action reports success while
-  // nothing was written, sending the user back to a form that claims it
-  // saved. Confirm the row rather than trusting the absent error.
-  const { data, error } = await supabase
-    .from("user_profiles")
-    .update({ resume_text: text })
-    .eq("id", user.id)
-    .select("id")
+  // Everything below the surface lives in ingestResumeText: normalization,
+  // the 200 character minimum, the resumes row, the write-through to
+  // user_profiles.resume_text, and the confirmation that the update touched
+  // a row rather than silently matching none. The dropped file, the browsed
+  // file and this paste all go through it, so they cannot drift.
+  const result = await ingestResumeText(supabase, user.id, {
+    text,
+    source: pasteSource(formData),
+  })
 
-  if (error) {
-    return { ok: false, reason: "db", message: `Save failed: ${error.message}` }
-  }
-
-  if (!data || data.length === 0) {
+  if (!result.ok) {
     return {
       ok: false,
-      reason: "db",
-      message: "Could not save to your profile. Refresh and try again.",
+      reason: result.code === "too_short" ? "input" : "db",
+      message: result.message,
+      code: result.code,
+      charCount: result.charCount,
     }
   }
 
   return { ok: true }
+}
+
+// Door 1 and 2: a file, dropped or browsed. Same destination as the paste,
+// with a parse in front of it. A parse failure returns before anything is
+// written, so a bad upload never costs the user the resume already on file.
+export async function uploadResumeFileAction(
+  formData: FormData
+): Promise<ActionResult> {
+  const supabase = await createSupabaseServerClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { ok: false, reason: "auth", message: "Not signed in." }
+  }
+
+  const file = formData.get("file")
+  if (!(file instanceof File)) {
+    return { ok: false, reason: "input", message: "No file received. Try again." }
+  }
+
+  const source =
+    formData.get("source") === "upload_drop" ? "upload_drop" : "upload_browse"
+
+  const result = await ingestResumeFile(supabase, user.id, file, source)
+
+  if (!result.ok) {
+    return {
+      ok: false,
+      reason: result.code === "write_failed" ? "db" : "input",
+      message: result.message,
+      code: result.code,
+      charCount: result.charCount,
+    }
+  }
+
+  return { ok: true, message: `Read ${result.charCount} characters from ${file.name}.` }
 }
 
 // Prompt 21: unauth Quick Prep handoff consumption ------------------------
@@ -320,6 +370,17 @@ export async function completeOnboardingAction(
 
   if (gate.status === "absent") {
     return { ok: false as const, message: "Add your resume or background before continuing." }
+  }
+
+  // A legacy profile under the minimum reaches onboarding with text already
+  // in the box. Say what is wrong with it and let them add to it; do not wipe
+  // it on their behalf.
+  if (gate.status === "too_short") {
+    return {
+      ok: false as const,
+      message:
+        prepBlockMessage(gate) ?? "Add more of your background before continuing.",
+    }
   }
 
   const resumeText = gate.resumeText

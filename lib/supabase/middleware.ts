@@ -1,7 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
-import { blocksPrep, readResumeGate } from "@/lib/resume/gate"
+import { readResumeGate, requiresOnboarding } from "@/lib/resume/gate"
 
 type CookieSet = { name: string; value: string; options?: CookieOptions }
 
@@ -100,9 +100,13 @@ export async function updateSession(request: NextRequest) {
     // failed read is "unknown" and does NOT redirect: bouncing someone to
     // /onboarding on a broken profile read strands them in a loop where the
     // page they are sent to cannot save anything either.
+    //
+    // requiresOnboarding, not blocksPrep: a resume that is too short to
+    // generate on is still a resume the user typed. They keep their board and
+    // get told the actual character count at the point they try to generate.
     const gate = await readResumeGate(supabase, user.id)
 
-    if (blocksPrep(gate)) {
+    if (requiresOnboarding(gate)) {
       const url = request.nextUrl.clone()
       url.pathname = "/onboarding"
       return NextResponse.redirect(url)

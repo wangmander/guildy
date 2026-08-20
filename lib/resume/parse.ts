@@ -75,8 +75,7 @@ async function parsePdf(bytes: Uint8Array): Promise<string | ResumeFailure> {
     const { extractText } = await import("unpdf")
     const result = await extractText(bytes, { mergePages: true })
     totalPages = result.totalPages
-    text =
-      typeof result.text === "string" ? result.text : result.text.join("\n")
+    text = result.text
   } catch (err) {
     if (looksPasswordProtected(err)) {
       return resumeFailure(
