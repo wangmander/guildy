@@ -344,6 +344,7 @@ export default async function AppPage({
           (profile?.subscription_status as string | null) ?? "free"
         }
         hasStripeCustomer={!!profile?.stripe_customer_id}
+        resumeText={resumeGate.resumeText ?? ""}
       />
       <main className="mx-auto w-full max-w-[1440px] pt-6 pb-24">
         <div className="flex flex-col gap-4 lg:flex-row lg:gap-0">

@@ -88,3 +88,99 @@
 - Blocked: Nothing visible. HANDOFF reads "ready for Phase 5" and matches code state.
 - Next: Phase 5, Gemini 2.5 research for Deep Prep, ~5-7h, with company cache 7d TTL and per-(interviewer, company) cache no expiry.
 - Signal strength: strong
+
+---
+
+## 2026-05-16
+
+### Interview pulse
+- What happened today: [TBD — Michael to fill in]
+- User problem this surfaced: [TBD — Michael to fill in]
+- Drove Guildy work today: [TBD — Michael to fill in]
+
+### Engineering pulse
+- Decided: TBD. No spec or doc changes in window.
+- Shipped: Quiet day. No commits since b9f1f15 on 2026-05-14 (refactor copy: rename Background field to Intro/Cover Letter across UI).
+- Blocked: Nothing visible in window. Devlog gap since 2026-05-07 means no carry-forward blocker; HANDOFF lists no open blockers.
+- Next: Phase 7 production deploy per HANDOFF: guildy.ai DNS + SSL via Vercel, prod env vars (Anthropic, Supabase, Stripe live, PostHog), banned-copy final pass, smoke 3 jobs in prod. ~2h.
+- Signal strength: weak
+
+---
+
+## 2026-05-17
+
+### Interview pulse
+- What happened today: [TBD — Michael to fill in]
+- User problem this surfaced: [TBD — Michael to fill in]
+- Drove Guildy work today: [TBD — Michael to fill in]
+
+### Engineering pulse
+- Decided: Unauthenticated Quick Prep funnel for the guildy.ai hero. Stateless POST endpoint, no rate limit at launch (finite $7 Anthropic credit self-bounds abuse), input caps mirror authenticated schemas (JD 20000, resume 50000), and a separate unauth_handoffs table will carry { jd, resume, prep } across the signup boundary as an ephemeral capability-token row (service-role only, no RLS policies, expire on read).
+- Shipped: bd5117d added POST /api/generate-quick-prep-unauth (app/api/generate-quick-prep-unauth/route.ts, +79). Reuses stateless generatePrep() with tier="quick", company/role passed as "(not provided)", stage defaults to "screen". maxDuration 60s, opaque 503 on Anthropic failure.
+- Blocked: Nothing visible. WIP for the consume side (app/signup/, app/api/unauth-handoff/create/, supabase/migrations/20260517000001_unauth_handoffs.sql, lib/ai/context-hash.ts, edits to onboarding actions + form and middleware) is uncommitted.
+- Next: Land Prompt 21 — unauth_handoffs migration, create endpoint, signup page, and onboarding consume path that materializes the cached prep_versions row and deletes the handoff. Then return to Phase 7 production deploy.
+- Signal strength: medium
+
+---
+
+## 2026-05-18
+
+### Interview pulse
+- What happened today: [TBD — Michael to fill in]
+- User problem this surfaced: [TBD — Michael to fill in]
+- Drove Guildy work today: [TBD — Michael to fill in]
+
+### Engineering pulse
+- Decided: Unauth Quick Prep crosses the signup boundary via a service-role-only `unauth_handoffs` table (no RLS policies, uuid is the capability token, 1h TTL, dropped on read), and `buildContextHash` is extracted to lib/ai/context-hash.ts so the unauth Quick hash and the later authed regen hash byte-identically and the stale banner does not false-fire.
+- Shipped: 5cc7c7a closed the consume side that yesterday's entry queued. POST /api/unauth-handoff/create takes { jd, resumeText, prepOutput } and returns { id }. /signup stashes ?handoff= in localStorage (the only store that survives the magic-link round trip) and forwards to /login. completeOnboardingAction grew an optional handoffId arg that creates an Applied job from the JD, writes the prep as a Quick prep_versions row, deletes the handoff, and redirects to /app?job={id}. Migration: supabase/migrations/20260517000001_unauth_handoffs.sql, RLS-enabled with no policies so only service-role touches it. Consume path is best-effort and never blocks signup.
+- Blocked: Nothing visible. .guildhall/quests.json still pins current_phase to phase-4-prep-overlay (longstanding doc lag noted in earlier entries, no code impact).
+- Next: Phase 7 production deploy per HANDOFF: guildy.ai DNS + SSL via Vercel, prod env vars (Anthropic, Supabase, Stripe live, PostHog, Termly), banned-copy final pass, smoke on 3 prod jobs. ~2h.
+- Signal strength: medium
+
+---
+
+## 2026-05-20
+
+### Interview pulse
+- What happened today: [TBD — Michael to fill in]
+- User problem this surfaced: [TBD — Michael to fill in]
+- Drove Guildy work today: [TBD — Michael to fill in]
+
+### Engineering pulse
+- Decided: TBD. No spec or doc changes in window.
+- Shipped: Quiet day. No commits since 5cc7c7a on 2026-05-17 (feat(api): signup handoff for unauth Quick Prep flow). Three-day gap on v2-pivot.
+- Blocked: Nothing visible. No carry-forward blocker from the 2026-05-18 entry; HANDOFF still reads "ready for Phase 7" with no open blockers.
+- Next: Phase 7 production deploy per HANDOFF carry-forward: guildy.ai DNS + SSL via Vercel, prod env vars (Anthropic, Supabase, Stripe live, PostHog, Termly), banned-copy final pass, smoke on 3 prod jobs. ~2h.
+- Signal strength: weak
+
+---
+
+## 2026-05-21
+
+### Interview pulse
+- What happened today: [TBD — Michael to fill in]
+- User problem this surfaced: [TBD — Michael to fill in]
+- Drove Guildy work today: [TBD — Michael to fill in]
+
+### Engineering pulse
+- Decided: TBD. No spec or doc changes in window; HANDOFF unchanged since d19c6a2 on 2026-05-09.
+- Shipped: Quiet day. No commits since 5cc7c7a on 2026-05-17 (feat(api): signup handoff for unauth Quick Prep flow). Four-day gap on v2-pivot. Working tree clean apart from this devlog and an untracked blitz-queue.md.
+- Blocked: Nothing visible. No carry-forward blocker from the 2026-05-20 entry; HANDOFF still reads "ready for Phase 7" with no open blockers.
+- Next: Phase 7 production deploy per HANDOFF carry-forward: guildy.ai DNS + SSL via Vercel, prod env vars (Anthropic, Supabase, Stripe live, PostHog, Termly), banned-copy final pass, smoke on 3 prod jobs. ~2h.
+- Signal strength: weak
+
+---
+
+## 2026-06-02
+
+### Interview pulse
+- What happened today: [TBD — Michael to fill in]
+- User problem this surfaced: [TBD — Michael to fill in]
+- Drove Guildy work today: [TBD — Michael to fill in]
+
+### Engineering pulse
+- Decided: TBD. No spec or doc changes in the 26h window. Standing direction unchanged: Guildy 2.1 command center rail (backlog doc 68bac98, 2026-05-31).
+- Shipped: Quiet day. No commits in window. Devlog gap note: the most recent real work is the 2.1 command center rail, landed 2026-05-31 across 322cf50 (left rail StatsPanel + Job Source Advisor, lib/jobSourceAdvisor/boardRatings.ts + aiFallback.ts), cc0f7f9 (Today panel: prep-due / quick-prep-gap / source-nudge, capped 3), and 5466306 (collapse advisor by default, persistent Apply goal meter loggedThisWeek/15 with applyBenchmarks.ts role ballpark). These never appeared in earlier entries (last logged commit was 5cc7c7a on 2026-05-17).
+- Blocked: Nothing visible. .guildhall/quests.json still pins phase-4-prep-overlay (longstanding doc lag, no code impact). Untracked: .claude/ and blitz-queue.md.
+- Next: HANDOFF line 73 reads Feature 3 (TC Comparison matrix); Phase 7 production deploy (guildy.ai DNS/SSL, prod env vars, smoke) still flagged NEXT and unshipped.
+- Signal strength: weak

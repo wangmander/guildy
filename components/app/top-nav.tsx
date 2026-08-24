@@ -11,6 +11,7 @@ type Props = {
   email: string
   subscriptionStatus: string
   hasStripeCustomer: boolean
+  resumeText: string
 }
 
 const URL_DEBOUNCE_MS = 200
@@ -19,6 +20,7 @@ export function TopNav({
   email,
   subscriptionStatus,
   hasStripeCustomer,
+  resumeText,
 }: Props) {
   const router = useRouter()
   const pathname = usePathname()
@@ -113,6 +115,7 @@ export function TopNav({
           email={email}
           subscriptionStatus={subscriptionStatus}
           hasStripeCustomer={hasStripeCustomer}
+          resumeText={resumeText}
         />
         </div>
       </div>
