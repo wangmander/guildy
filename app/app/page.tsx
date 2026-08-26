@@ -21,6 +21,7 @@ import {
   type JobQuest,
 } from "@/lib/quests/quests"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
+import { blocksPrep, readResumeGate } from "@/lib/resume/gate"
 import { deriveAndUpdateStreak } from "@/lib/streak"
 import type { JobCompensation } from "@/types"
 
@@ -49,7 +50,7 @@ export default async function AppPage({
 
   const [
     { data: jobs },
-    { data: profile },
+    { data: profile, error: profileError },
     { data: interviewerRows },
     { data: noteRows },
     { data: prepRows },
@@ -106,7 +107,21 @@ export default async function AppPage({
       .order("created_at", { ascending: false }),
   ])
 
-  const hasResume = !!profile?.resume_text && profile.resume_text.trim().length > 0
+  // Surfaced, not swallowed. A 42703 here means a migration is unapplied on
+  // this database; everything derived from `profile` below silently degrades
+  // to defaults, so the log is the only signal that it happened.
+  if (profileError) {
+    // eslint-disable-next-line no-console
+    console.error("[app/page] user_profiles read failed:", profileError.message)
+  }
+
+  // Read the resume gate on its own narrow select rather than off `profile`.
+  // The wide select above carries columns from later migrations, and if any
+  // one of them is missing on the deployed database PostgREST fails the
+  // whole request and `profile` lands here as null. That is what disabled
+  // every generate button on 2026-08-19. The gate must not share that fate.
+  const resumeGate = await readResumeGate(supabase, user.id)
+  const hasResume = !blocksPrep(resumeGate)
 
   const streak = profile
     ? await deriveAndUpdateStreak(supabase, user.id, {
