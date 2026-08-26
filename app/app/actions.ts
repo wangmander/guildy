@@ -49,7 +49,9 @@ import { generateBoardMap } from "@/lib/jobSourceAdvisor/aiFallback"
 import type { BoardRating } from "@/lib/jobSourceAdvisor/boardRatings"
 import type { StageKey } from "@/lib/stages"
 import { getStripe } from "@/lib/stripe"
-import { blocksPrep, readResumeGate } from "@/lib/resume/gate"
+import { blocksPrep, prepBlockMessage, readResumeGate } from "@/lib/resume/gate"
+import { ingestResumeText, removeResume } from "@/lib/resume/ingest"
+import type { ResumeErrorCode } from "@/lib/resume/errors"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 export async function signOutAction() {
@@ -997,7 +999,7 @@ const updateUserResumeSchema = z.object({
 export type UpdateUserResumeInput = z.input<typeof updateUserResumeSchema>
 export type UpdateUserResumeResult =
   | { ok: true }
-  | { ok: false; error: string }
+  | { ok: false; error: string; code?: ResumeErrorCode }
 
 // Edits user_profiles.resume_text from the InputsWidget's Background row.
 // Onboarding writes resume_text via its own action; this is the in-app
@@ -1021,11 +1023,37 @@ export async function updateUserResumeAction(
   } = await supabase.auth.getUser()
   if (!user) return { ok: false, error: "Not signed in" }
 
-  const { error } = await supabase
-    .from("user_profiles")
-    .update({ resume_text: parsed.data.resume_text })
-    .eq("id", user.id)
-  if (error) return { ok: false, error: error.message }
+  // Through the shared ingest, same as the onboarding paste, the dropped
+  // file and the browsed file. That is what enforces the 200 character
+  // minimum here, writes the resumes row alongside resume_text, and confirms
+  // the update actually touched a row instead of trusting a null error.
+  const result = await ingestResumeText(supabase, user.id, {
+    text: parsed.data.resume_text,
+    source: "paste",
+  })
+  if (!result.ok) return { ok: false, error: result.message, code: result.code }
+
+  revalidatePath("/app")
+  return { ok: true }
+}
+
+// Takes the resume back off the account: text, row and stored file.
+//
+// This deliberately re-raises the gate. Every prep call reads
+// user_profiles.resume_text, so removing it means the next Generate click is
+// blocked until something replaces it, and the middleware onboarding check
+// applies again on the next navigation. That is the honest consequence of
+// the user saying "this is not my resume", and it is why the confirm step
+// lives in the UI rather than here.
+export async function removeUserResumeAction(): Promise<UpdateUserResumeResult> {
+  const supabase = await createSupabaseServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: "Not signed in" }
+
+  const result = await removeResume(supabase, user.id)
+  if (!result.ok) return { ok: false, error: result.message, code: result.code }
 
   revalidatePath("/app")
   return { ok: true }
@@ -1198,6 +1226,9 @@ export type GeneratePrepResult =
       error: string
       requiresUpgrade?: boolean
       requiresResume?: boolean
+      // What is actually stored, when the block is "too short". The user is
+      // shown it rather than asked to take our word for it.
+      storedResumeText?: string | null
     }
 
 function modelForTier(tier: PrepTier): string {
@@ -1277,13 +1308,16 @@ export async function generatePrepAction(
   // button in the canvas. Before this the client boolean was the only thing
   // in the way, so any bug that miscomputed it either blocked a user who had
   // a resume (the 2026-08-19 incident) or would have let a resume-less one
-  // through to a prep with nothing to ground it. Only a confirmed-absent
-  // resume blocks; an unreadable profile degrades rather than stonewalls.
+  // through to a prep with nothing to ground it. An absent resume blocks, and
+  // so does one under the 200 character minimum; an unreadable profile
+  // degrades rather than stonewalls.
   if (blocksPrep(resumeGate)) {
     return {
       ok: false,
-      error: "Add your resume in onboarding before running prep.",
+      error:
+        prepBlockMessage(resumeGate) ?? "Add your resume before running prep.",
       requiresResume: true,
+      storedResumeText: resumeGate.resumeText,
     }
   }
 

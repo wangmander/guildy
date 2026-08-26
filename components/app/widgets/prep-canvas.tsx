@@ -20,6 +20,7 @@ import {
   LockedPreviewFooter,
   LockedPreviewModule,
 } from "./locked-preview-module"
+import { GenerateButton } from "./generate-button"
 import { ProgressLoader } from "./progress-loader"
 import { QuestionsTheyAsk, QuestionsYouAsk } from "./questions-widget"
 import {
@@ -69,6 +70,11 @@ type Props = {
   selectedRole: PrepSessionRole
   onSelectRole: (role: PrepSessionRole) => void
   error: string | null
+  // Set when the server refused to generate because the resume on file is
+  // absent or under the 200 character minimum. Separate from `error` because
+  // the fix is a replace, not a retry.
+  resumeBlock: { message: string; stored: string | null } | null
+  onReplaceResume: () => void
   hasResume: boolean
   hasJd: boolean
   tier: PrepTier
@@ -115,6 +121,8 @@ export function PrepCanvas({
   selectedRole,
   onSelectRole,
   error,
+  resumeBlock,
+  onReplaceResume,
   hasResume,
   hasJd,
   tier,
@@ -278,6 +286,8 @@ export function PrepCanvas({
             currentOutput={currentOutput}
             isGenerating={isGenerating}
             error={error}
+            resumeBlock={resumeBlock}
+            onReplaceResume={onReplaceResume}
             hasResume={hasResume}
             hasJd={hasJd}
             tier={tier}
@@ -398,6 +408,8 @@ function CanvasBody({
   currentOutput,
   isGenerating,
   error,
+  resumeBlock,
+  onReplaceResume,
   hasResume,
   hasJd,
   tier,
@@ -416,6 +428,8 @@ function CanvasBody({
   currentOutput: PrepOutput | null
   isGenerating: boolean
   error: string | null
+  resumeBlock: { message: string; stored: string | null } | null
+  onReplaceResume: () => void
   hasResume: boolean
   hasJd: boolean
   tier: PrepTier
@@ -427,6 +441,19 @@ function CanvasBody({
   // Alternate states keep their own padded box (item 7 leaves them as-is); the
   // flat module has no root padding, so they get a px wrapper. PrepView renders
   // full-bleed divided sections directly.
+  // Ahead of `error`: a resume the model cannot work with is not a failed
+  // call, and offering Try again would send the user round the same loop.
+  if (resumeBlock) {
+    return (
+      <div className="px-6 md:px-7">
+        <ResumeBlockState
+          message={resumeBlock.message}
+          stored={resumeBlock.stored}
+          onReplace={onReplaceResume}
+        />
+      </div>
+    )
+  }
   if (error) {
     return (
       <div className="px-6 md:px-7">
@@ -434,9 +461,21 @@ function CanvasBody({
       </div>
     )
   }
+  // The generating branch renders the same EmptyState card, with its button
+  // held in the loading state, rather than swapping the whole body out. The
+  // button the user pressed stays where they pressed it and reports on itself,
+  // which is the only honest place for that report to live.
   if (isGenerating) {
     return (
       <div className="px-6 md:px-7">
+        <EmptyState
+          hasResume={hasResume}
+          hasJd={hasJd}
+          tier={tier}
+          isGenerating
+          onGenerate={onGenerate}
+          onAddJd={onAddJd}
+        />
         <ProgressLoader tier={tier} />
       </div>
     )
@@ -455,6 +494,7 @@ function CanvasBody({
           hasResume={hasResume}
           hasJd={hasJd}
           tier={tier}
+          isGenerating={false}
           onGenerate={onGenerate}
           onAddJd={onAddJd}
         />
@@ -517,12 +557,14 @@ function EmptyState({
   hasResume,
   hasJd,
   tier,
+  isGenerating,
   onGenerate,
   onAddJd,
 }: {
   hasResume: boolean
   hasJd: boolean
   tier: PrepTier
+  isGenerating: boolean
   onGenerate: () => void
   onAddJd: () => void
 }) {
@@ -531,7 +573,11 @@ function EmptyState({
     tier === "deep"
       ? "Sonnet 4.6 with research-grade depth. Takes a few seconds."
       : "Pulls in your resume, the JD, and any context you've added. Takes about a second."
-  const showJdWarning = tier === "deep" && hasJd === false && hasResume
+  // Hidden mid-generation: its Generate anyway button is a second way to fire
+  // the same call, and the answer to "should I add the JD first" is already
+  // decided by the time the request is in flight.
+  const showJdWarning =
+    tier === "deep" && hasJd === false && hasResume && !isGenerating
 
   return (
     <div className="mt-8 space-y-4">
@@ -545,27 +591,27 @@ function EmptyState({
         </h2>
         <p className="mx-auto mt-2 max-w-sm text-sm text-[var(--text-muted)]">
           {!hasResume
-            ? "Add your resume in onboarding before running prep."
+            ? "Add your resume before running prep."
             : subhead}
         </p>
-        <button
-          type="button"
+        <GenerateButton
+          loading={isGenerating}
           onClick={onGenerate}
+          label={`Generate ${tierLabel}`}
+          loadingLabel={`Generating ${tierLabel}...`}
           disabled={!hasResume}
+          icon={<Sparkles className="size-4" />}
           title={
             !hasResume
-              ? "Add your resume in onboarding before running prep."
+              ? "Add your resume before running prep."
               : undefined
           }
           className={cn(
-            "mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-[11px] px-5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none",
+            "mt-5 h-10 rounded-[11px] px-5 text-sm font-semibold",
             TIER_CTA_COLOR[tier],
             TIER_CTA_SHADOW[tier]
           )}
-        >
-          <Sparkles className="size-4" />
-          Generate {tierLabel}
-        </button>
+        />
       </div>
     </div>
   )
@@ -600,6 +646,52 @@ function JdMissingWarning({
           Generate anyway
         </button>
       </div>
+    </div>
+  )
+}
+
+// What the user sees when the resume on file is too short to generate on.
+// Three things, in this order, because each answers the question the last one
+// raises: what is wrong, what is actually stored, and where to fix it. The
+// stored text is shown rather than described. Someone told "your resume is
+// too short" while looking at a box they believe holds their resume will
+// assume the product is broken, which is exactly the mistake the 2026-08-19
+// incident taught. Nothing here deletes anything.
+function ResumeBlockState({
+  message,
+  stored,
+  onReplace,
+}: {
+  message: string
+  stored: string | null
+  onReplace: () => void
+}) {
+  const preview = stored?.trim() ?? ""
+  return (
+    <div className="mt-8 rounded-[14px] border border-amber-200 bg-amber-50 p-6">
+      <h2 className="font-bricolage text-base font-semibold text-amber-900">
+        Your resume is too short to prep on
+      </h2>
+      <p className="mt-2 text-sm leading-relaxed text-amber-900">{message}</p>
+
+      {preview.length > 0 ? (
+        <div className="mt-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">
+            What is on file right now
+          </p>
+          <pre className="mt-1.5 max-h-32 overflow-auto whitespace-pre-wrap rounded-[10px] border border-amber-200 bg-white px-3 py-2 font-mono text-xs text-amber-900">
+            {preview}
+          </pre>
+        </div>
+      ) : null}
+
+      <button
+        type="button"
+        onClick={onReplace}
+        className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-[10px] bg-[var(--accent)] px-4 text-xs font-semibold text-white transition-colors hover:bg-[var(--accent-deep)]"
+      >
+        Replace your resume
+      </button>
     </div>
   )
 }

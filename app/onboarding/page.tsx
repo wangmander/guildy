@@ -23,11 +23,12 @@ export default async function OnboardingPage() {
       <div className="w-full max-w-[720px] mx-auto space-y-8 pb-32">
         <div className="space-y-3">
           <h1 className="text-4xl md:text-5xl font-bold text-[#482C4C] tracking-tight">
-            Add your intro
+            Add your resume
           </h1>
           <p className="text-lg text-[#1C1E21] leading-relaxed">
-            Guildy uses your intro on every prep generation. Paste your resume text, LinkedIn
-            About + Experience, or a short cover-letter-style summary. You can update it later in settings.
+            Guildy uses it on every prep generation. Drop in a PDF, DOCX or TXT, or paste the text
+            instead: resume, LinkedIn About + Experience, or a short cover-letter-style intro. You
+            can replace it any time from Intro/Cover Letter in the settings menu.
           </p>
         </div>
 

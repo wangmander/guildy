@@ -149,6 +149,14 @@ export function PrepOverlay({
   const [selectedRole, setSelectedRole] =
     useState<PrepSessionRole>("hiring_manager")
   const [error, setError] = useState<string | null>(null)
+  // The resume block is its own state, not another error string. It has a
+  // different shape (what is stored, and a way to replace it) and a different
+  // fix, and folding it into `error` would put a Try again button under a
+  // message that says trying again will not help.
+  const [resumeBlock, setResumeBlock] = useState<{
+    message: string
+    stored: string | null
+  } | null>(null)
   // Prompt 15: paid users default to Deep on every overlay open. Free
   // and canceled users keep the legacy Quick default.
   const [tier, setTier] = useState<PrepTier>(() =>
@@ -319,6 +327,7 @@ export function PrepOverlay({
         return next
       })
       setError(null)
+      setResumeBlock(null)
       startTransition(async () => {
         const res = await generatePrepAction({
           job_id: job.id,
@@ -332,6 +341,13 @@ export function PrepOverlay({
           return next
         })
         if (!res.ok) {
+          if (res.requiresResume) {
+            setResumeBlock({
+              message: res.error,
+              stored: res.storedResumeText ?? null,
+            })
+            return
+          }
           setError(res.error)
           return
         }
@@ -580,6 +596,10 @@ export function PrepOverlay({
                     selectedRole={selectedRole}
                     onSelectRole={setSelectedRole}
                     error={error}
+                    resumeBlock={resumeBlock}
+                    onReplaceResume={() =>
+                      expandInputsSection("background", { pulse: true })
+                    }
                     hasResume={hasResume}
                     hasJd={!!job.jd_text && job.jd_text.trim().length > 0}
                     tier={tier}

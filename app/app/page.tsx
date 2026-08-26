@@ -21,7 +21,7 @@ import {
   type JobQuest,
 } from "@/lib/quests/quests"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
-import { blocksPrep, readResumeGate } from "@/lib/resume/gate"
+import { readResumeGate, requiresOnboarding } from "@/lib/resume/gate"
 import { deriveAndUpdateStreak } from "@/lib/streak"
 import type { JobCompensation } from "@/types"
 
@@ -121,7 +121,11 @@ export default async function AppPage({
   // whole request and `profile` lands here as null. That is what disabled
   // every generate button on 2026-08-19. The gate must not share that fate.
   const resumeGate = await readResumeGate(supabase, user.id)
-  const hasResume = !blocksPrep(resumeGate)
+  // requiresOnboarding, not blocksPrep. A too-short resume leaves the generate
+  // buttons live on purpose: the server answers that click with the actual
+  // character count and a replace affordance, which is a better answer than a
+  // disabled button telling someone to add the resume they can see on screen.
+  const hasResume = !requiresOnboarding(resumeGate)
 
   const streak = profile
     ? await deriveAndUpdateStreak(supabase, user.id, {
@@ -340,6 +344,7 @@ export default async function AppPage({
           (profile?.subscription_status as string | null) ?? "free"
         }
         hasStripeCustomer={!!profile?.stripe_customer_id}
+        resumeText={resumeGate.resumeText ?? ""}
       />
       <main className="mx-auto w-full max-w-[1440px] pt-6 pb-24">
         <div className="flex flex-col gap-4 lg:flex-row lg:gap-0">
