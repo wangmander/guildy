@@ -30,6 +30,7 @@ import {
 } from "@/app/app/actions"
 import type { InputsExpansionSection } from "@/components/app/prep-overlay"
 import { ResumeDropzone } from "@/components/resume-dropzone"
+import { ResumeRemove } from "@/components/resume-remove"
 
 type Props = {
   jobId: string
@@ -493,11 +494,16 @@ function BackgroundForm({
     [router]
   )
 
-  // Background is required for prep generation across every job, so a Clear
-  // affordance would break the system. FormShell hides Clear when
-  // hasExisting is false; the no-op onClear is only there to satisfy the
-  // shared shell's prop type.
+  // FormShell's Clear is the wrong shape for this row. Clearing a JD blanks
+  // one field on one job; clearing the resume re-raises the prep gate on
+  // every job and deletes the stored file, which needs a confirmation step
+  // and a sentence explaining it. ResumeRemove is that, and it is shared with
+  // the settings modal so the two cannot disagree about what Remove does.
+  // hasExisting stays false here to keep FormShell's Clear hidden.
   const noopClear = useCallback(() => {}, [])
+
+  // The stored resume, not the draft in the box.
+  const hasExisting = initial.trim().length > 0
 
   return (
     <FormShell
@@ -511,6 +517,7 @@ function BackgroundForm({
     >
       <ResumeDropzone
         onIngested={onFileIngested}
+        hasExisting={hasExisting}
         disabled={pending}
         className="mb-3"
       />
@@ -527,6 +534,18 @@ function BackgroundForm({
         rows={12}
         className="w-full resize-y rounded-[10px] border border-[var(--border-card)] bg-[var(--surface)] px-3 py-2.5 text-sm leading-relaxed text-[var(--text-primary)] placeholder:text-[var(--text-faint)] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/15"
       />
+      {hasExisting ? (
+        <div className="mt-3">
+          <ResumeRemove
+            onRemoved={() => {
+              setValue("")
+              setNotice(null)
+              onSaved()
+            }}
+            disabled={pending}
+          />
+        </div>
+      ) : null}
     </FormShell>
   )
 }

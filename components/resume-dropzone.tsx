@@ -18,11 +18,20 @@ type Props = {
   // in user_profiles.resume_text, so the caller can show it immediately
   // without a round trip.
   onIngested: (text: string, message: string) => void
+  // Changes the wording only. A user with a resume already on file is not
+  // adding one, they are replacing one, and a drop here overwrites what they
+  // have. Saying "Drop your resume here" to that user hides the consequence.
+  hasExisting?: boolean
   disabled?: boolean
   className?: string
 }
 
-export function ResumeDropzone({ onIngested, disabled, className }: Props) {
+export function ResumeDropzone({
+  onIngested,
+  hasExisting,
+  disabled,
+  className,
+}: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [dragging, setDragging] = useState(false)
   const [pending, setPending] = useState(false)
@@ -118,10 +127,17 @@ export function ResumeDropzone({ onIngested, disabled, className }: Props) {
           <Upload className="size-5 text-[var(--text-faint)]" />
         )}
         <p className="mt-2 text-sm font-medium text-[var(--text-primary)]">
-          {pending ? "Reading your file..." : "Drop your resume here, or click to browse"}
+          {pending
+            ? "Reading your file..."
+            : hasExisting
+              ? "Drop a new file to replace it, or click to browse"
+              : "Drop your resume here, or click to browse"}
         </p>
         <p className="mt-1 text-xs text-[var(--text-muted)]">
-          PDF, DOCX or TXT, up to 10MB. Or paste the text below.
+          PDF, DOCX or TXT, up to 10MB.{" "}
+          {hasExisting
+            ? "This overwrites the resume on file."
+            : "Or paste the text below."}
         </p>
       </div>
 

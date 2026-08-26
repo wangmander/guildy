@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 
 import { updateUserResumeAction } from "@/app/app/actions"
 import { ResumeDropzone } from "@/components/resume-dropzone"
+import { ResumeRemove } from "@/components/resume-remove"
 import {
   Dialog,
   DialogContent,
@@ -37,6 +38,11 @@ export function ResumeModal({ open, onOpenChange, initialText }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+
+  // What is on file, not what is in the box. The textarea holds an unsaved
+  // draft the moment the user types into it, and Replace and Remove are both
+  // statements about the stored resume.
+  const hasExisting = initialText.trim().length > 0
 
   // Re-seed on open, not on every render: a refresh after a save hands down
   // new initialText, and reopening should show what is actually stored
@@ -91,7 +97,11 @@ export function ResumeModal({ open, onOpenChange, initialText }: Props) {
         </DialogHeader>
 
         <div className="mt-4 flex flex-col gap-3">
-          <ResumeDropzone onIngested={onFileIngested} disabled={pending} />
+          <ResumeDropzone
+            onIngested={onFileIngested}
+            hasExisting={hasExisting}
+            disabled={pending}
+          />
 
           {notice ? (
             <p className="text-xs text-[var(--text-muted)]">{notice}</p>
@@ -118,6 +128,19 @@ export function ResumeModal({ open, onOpenChange, initialText }: Props) {
           />
 
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
+
+          {/* Its own row: the confirm state expands into a block, and a
+              block that grows inside the footer shoves Save around. */}
+          {hasExisting ? (
+            <ResumeRemove
+              onRemoved={() => {
+                setValue("")
+                setNotice(null)
+                onOpenChange(false)
+              }}
+              disabled={pending}
+            />
+          ) : null}
 
           <div className="flex justify-end gap-2">
             <button

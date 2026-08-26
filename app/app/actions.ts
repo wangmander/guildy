@@ -50,7 +50,7 @@ import type { BoardRating } from "@/lib/jobSourceAdvisor/boardRatings"
 import type { StageKey } from "@/lib/stages"
 import { getStripe } from "@/lib/stripe"
 import { blocksPrep, prepBlockMessage, readResumeGate } from "@/lib/resume/gate"
-import { ingestResumeText } from "@/lib/resume/ingest"
+import { ingestResumeText, removeResume } from "@/lib/resume/ingest"
 import type { ResumeErrorCode } from "@/lib/resume/errors"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
@@ -1031,6 +1031,28 @@ export async function updateUserResumeAction(
     text: parsed.data.resume_text,
     source: "paste",
   })
+  if (!result.ok) return { ok: false, error: result.message, code: result.code }
+
+  revalidatePath("/app")
+  return { ok: true }
+}
+
+// Takes the resume back off the account: text, row and stored file.
+//
+// This deliberately re-raises the gate. Every prep call reads
+// user_profiles.resume_text, so removing it means the next Generate click is
+// blocked until something replaces it, and the middleware onboarding check
+// applies again on the next navigation. That is the honest consequence of
+// the user saying "this is not my resume", and it is why the confirm step
+// lives in the UI rather than here.
+export async function removeUserResumeAction(): Promise<UpdateUserResumeResult> {
+  const supabase = await createSupabaseServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: "Not signed in" }
+
+  const result = await removeResume(supabase, user.id)
   if (!result.ok) return { ok: false, error: result.message, code: result.code }
 
   revalidatePath("/app")
