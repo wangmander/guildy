@@ -33,6 +33,7 @@ export function SettingsMenu({
   hasStripeCustomer,
   resumeText,
 }: Props) {
+  const [menuOpen, setMenuOpen] = useState(false)
   const [resumeOpen, setResumeOpen] = useState(false)
   const [portalPending, setPortalPending] = useState(false)
   const [portalError, setPortalError] = useState<string | null>(null)
@@ -61,7 +62,7 @@ export function SettingsMenu({
 
   return (
     <>
-    <DropdownMenu.Root>
+    <DropdownMenu.Root open={menuOpen} onOpenChange={setMenuOpen}>
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
@@ -83,9 +84,14 @@ export function SettingsMenu({
           <DropdownMenu.Separator className="my-1 h-px bg-black/5" />
           <DropdownMenu.Item
             onSelect={(e) => {
-              // Radix unmounts the menu on select, which would tear down the
-              // dialog with it if the dialog opened in the same tick.
+              // Radix unmounts the menu on select, which would tear the
+              // dialog down with it if the dialog opened in the same tick.
+              // So the auto-close is suppressed and the menu is closed by
+              // hand instead. Suppressing it alone leaves the menu sitting
+              // open behind the dialog, which is what it did until this was
+              // put in front of a browser and looked at.
               e.preventDefault()
+              setMenuOpen(false)
               setResumeOpen(true)
             }}
             className="flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm text-[#1C1E21] outline-none hover:bg-gray-50"

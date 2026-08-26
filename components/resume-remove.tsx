@@ -53,7 +53,11 @@ export function ResumeRemove({ onRemoved, disabled }: Props) {
         type="button"
         onClick={() => setConfirming(true)}
         disabled={disabled || pending}
-        className="rounded-full px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-sunken)] hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+        // w-fit because both parents are flex columns with the default
+        // stretch: without it the button spans the dialog and its label
+        // lands dead centre, reading as a primary action rather than the
+        // quiet one it is.
+        className="w-fit rounded-full px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-sunken)] hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
       >
         Remove
       </button>
