@@ -34,6 +34,10 @@ export interface Resume {
   file_name: string | null
   file_ext: ResumeFileExt | null
   byte_size: number | null
+  // Object key in the private resumes bucket, always <user_id>/<uuid>.<ext>.
+  // Null for paste and handoff, which have no file behind them.
+  storage_path: string | null
+  mime_type: string | null
   parsed_text: string
   char_count: number
   created_at: string
