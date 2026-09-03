@@ -25,11 +25,24 @@ function adminClient() {
 }
 
 export async function GET(req: Request) {
-  // Vercel crons send this header; guards against the route being hit by
-  // anything else and accidentally emailing real users off-schedule.
-  const isVercelCron = req.headers.get("x-vercel-cron") !== null
-  if (!isVercelCron && process.env.NODE_ENV === "production") {
-    return NextResponse.json({ error: "Not found" }, { status: 404 })
+  // 2026-09-02: this route is now outside the middleware session gate (see
+  // lib/supabase/middleware.ts), which previously 307ed the daily run to
+  // /login before the handler ever ran. It therefore has to authenticate
+  // itself, and it does so on CRON_SECRET, which Vercel attaches to every
+  // registered cron invocation as an Authorization bearer token.
+  //
+  // Replaces the previous x-vercel-cron header check. A header is a claim
+  // anyone reaching the route can make; a shared secret is not. Keeping both
+  // would also have made the route impossible to trigger by hand even with
+  // the correct secret, which is exactly what is needed to prove the drip
+  // works before STREAK_EMAILS_LIVE is ever flipped.
+  //
+  // Fails closed. An unset CRON_SECRET returns 401 rather than falling open,
+  // so the window between this deploying and the secret being added in Vercel
+  // is a window where nothing runs, not one where anything can run it.
+  const secret = process.env.CRON_SECRET
+  if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   const live = process.env.STREAK_EMAILS_LIVE === "true"

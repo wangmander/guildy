@@ -20,11 +20,26 @@ const PUBLIC_PATHS = new Set([
   "/terms",
   "/security",
 ])
+// 2026-09-02: the streak drip's two unauthenticated surfaces. /api/cron/ is
+// hit by Vercel's scheduler, which carries no session cookie, so the gate was
+// 307ing the daily run to /login and the handler never executed. /api/email/
+// is hit from mail clients (open pixel, click redirect, one-click
+// unsubscribe), which likewise have no session: an unsubscribe link that
+// lands on a login page is a promise the product breaks in front of the
+// person least inclined to forgive it.
+//
+// Bypassing the session gate is not the same as being unprotected. The cron
+// route authenticates itself on the CRON_SECRET bearer token (see
+// app/api/cron/streak-emails/route.ts). The email routes are deliberately
+// open: they are addressed by uuid and must work on first click from any
+// client, and gating them would defeat their only purpose.
 const PUBLIC_PREFIXES = [
   "/auth/",
   "/api/health",
   "/api/generate-quick-prep-unauth",
   "/api/unauth-handoff/",
+  "/api/cron/",
+  "/api/email/",
   "/_next/",
   "/static/",
 ]
