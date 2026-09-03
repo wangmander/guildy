@@ -4,6 +4,12 @@ import { useEffect } from "react"
 import posthog from "posthog-js"
 import { createBrowserClient } from "@supabase/ssr"
 
+import {
+  isInternalEmail,
+  resolveEnvironment,
+  setIdentifiedEmail,
+} from "@/lib/analytics-client"
+
 // Phase 6.5 + funnel patch: client-side PostHog initialization plus the
 // identify() bridge that links the anonymous distinct_id minted on the
 // marketing site (guildy.ai) to the Supabase user once they reach
@@ -40,12 +46,19 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
       if (identified) return
       identified = true
       const handoff = window.localStorage.getItem("guildy_handoff")
+      // Stash the email so lib/analytics-client capture() calls anywhere in
+      // the tree can resolve `internal` without threading it through props.
+      setIdentifiedEmail(user.email ?? null)
       posthog.identify(
         user.id,
         {
           email: user.email ?? undefined,
           has_handoff: !!handoff,
           handoff_id: handoff,
+          // Person-level twins of the per-event flags, so a test account can
+          // be filtered out by person as well as by event.
+          environment: resolveEnvironment(),
+          internal: isInternalEmail(user.email),
         },
         {
           // $set_once: only the first identify writes signup_date so
@@ -66,6 +79,7 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
         identifyFromUser(session.user)
       } else if (event === "SIGNED_OUT") {
         identified = false
+        setIdentifiedEmail(null)
         posthog.reset()
       }
     })

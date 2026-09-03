@@ -8,6 +8,7 @@ import {
   type SetupChecklist,
   type TodayItem,
 } from "@/components/app/command-rail"
+import { FirstJobTakeover } from "@/components/app/first-job-takeover"
 import { TcMatrixSheet } from "@/components/app/tc-matrix-sheet"
 import { type TcColumn } from "@/components/app/tc-matrix"
 import { TopNav } from "@/components/app/top-nav"
@@ -336,6 +337,13 @@ export default async function AppPage({
         mostRecentJobId: jobRows[0]?.id ?? null,
       }
 
+  // First-job takeover: with no jobs at all, the board is empty chrome that
+  // tells a new user nothing, and the number that matters is jobs added. At
+  // zero the main column becomes the paste takeover and the rail drops to the
+  // setup checklist alone. The moment one job exists this is false and every
+  // surface below renders exactly as it did before.
+  const isFirstJob = totalJobCount === 0
+
   return (
     <div className="min-h-screen bg-[var(--page-bg)]">
       <TopNav
@@ -356,9 +364,10 @@ export default async function AppPage({
             onboarding={onboarding}
             setup={setup}
             streak={streak}
+            checklistOnly={isFirstJob}
           />
           <div className="min-w-0 flex-1">
-            <Board
+            {isFirstJob ? <FirstJobTakeover /> : <Board
               jobs={jobRows}
               archivedJobs={archivedJobRows}
               hasResume={hasResume}
@@ -374,9 +383,10 @@ export default async function AppPage({
               questByJobId={questByJobId}
               initialOpenJobId={initialOpenJobId}
               initialNewJobId={initialNewJobId}
-            />
+            />}
           </div>
         </div>
+        {isFirstJob ? null : (
         <TcMatrixSheet
           columns={tcColumns}
           subscriptionStatus={
@@ -389,6 +399,7 @@ export default async function AppPage({
             (profile?.comp_priorities as CompPrioritiesRaw) ?? null
           }
         />
+        )}
       </main>
     </div>
   )

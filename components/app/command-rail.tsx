@@ -75,6 +75,10 @@ type Props = {
   onboarding: OnboardingMoment | null
   setup: SetupChecklist | null
   streak?: StreakState
+  // First-job takeover: at zero jobs the rail shows the setup checklist and
+  // nothing else. Every other panel is derived from cards the user does not
+  // have yet, so they read as empty chrome next to the takeover.
+  checklistOnly?: boolean
 }
 
 const APPLY_TARGET = 15
@@ -767,6 +771,7 @@ export function CommandRail({
   onboarding,
   setup,
   streak,
+  checklistOnly = false,
 }: Props) {
   const [mounted, setMounted] = useState(false)
   const [dismissed, setDismissed] = useState(false)
@@ -804,6 +809,16 @@ export function CommandRail({
   // Today. The FTUE setup checklist supersedes the onboarding gem card while
   // shown, so a pre-activation user sees one onboarding surface, not two.
   const primary = onboarding && !setup ? <OnboardingCard moment={onboarding} /> : null
+
+  if (checklistOnly) {
+    return (
+      <aside className="w-full shrink-0 px-4 lg:w-[300px] lg:px-8 lg:pr-0">
+        <div className="flex flex-col gap-[18px]">
+          {setup ? <SetupCard setup={setup} /> : null}
+        </div>
+      </aside>
+    )
+  }
 
   return (
     <aside className="w-full shrink-0 px-4 lg:w-[300px] lg:px-8 lg:pr-0">
