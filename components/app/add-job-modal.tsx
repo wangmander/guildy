@@ -1,9 +1,9 @@
 "use client"
 
 import { useRef, useState, useTransition } from "react"
-import posthog from "posthog-js"
 
 import { createJobAction } from "@/app/app/actions"
+import { capture } from "@/lib/analytics-client"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -27,6 +27,10 @@ type Props = {
   // applied/passive behavior (preserved for the Applied column trigger if
   // it doesn't pass this prop, plus any other callers).
   defaultStage?: WriteStage
+  // Which surface opened this modal, for kanban_job_created's entry_point.
+  // Defaults to "column" because every pre-existing caller is a board column
+  // or the setup checklist; the first-job takeover passes "hero".
+  entryPoint?: "hero" | "column"
 }
 
 type ExtractResponse = {
@@ -39,7 +43,12 @@ type ExtractResponse = {
 
 const DEBOUNCE_MS = 500
 
-export function AddJobModal({ open, onOpenChange, defaultStage }: Props) {
+export function AddJobModal({
+  open,
+  onOpenChange,
+  defaultStage,
+  entryPoint = "column",
+}: Props) {
   const [tab, setTab] = useState<"manual" | "jd">("jd")
   const [company, setCompany] = useState("")
   const [role, setRole] = useState("")
@@ -170,7 +179,10 @@ export function AddJobModal({ open, onOpenChange, defaultStage }: Props) {
         setError(result.error)
         return
       }
-      posthog.capture("kanban_job_created", { source: "manual" })
+      capture("kanban_job_created", {
+        source: "manual",
+        entry_point: entryPoint,
+      })
       handleOpenChange(false)
     })
   }
